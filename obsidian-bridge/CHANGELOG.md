@@ -15,6 +15,7 @@ Pure polish pass. No API change, no schema change, no command surface change. In
   - Skill version bumped to `0.2.0`.
 - **`skills/vault-standards/SKILL.md`** — 495 → 373 lines (25% reduction). Extracted:
   - `references/CONTENT_STYLE.md` (141 lines) — voice/tense/structure/callouts/cuts/acceptance-test rules + reference body shapes. Style is judgment, not validation; loads on demand.
+  - Skill version bumped to `0.2.0`.
 - **`notes/`** — moved the three `2026-05-04-command-surface-redesign-*` docs to `notes/archive/`. They describe a redesign that's already shipped (v1.1.0); kept as historical record. `mermaid-house-style.md` stays in place.
 
 ### Unchanged

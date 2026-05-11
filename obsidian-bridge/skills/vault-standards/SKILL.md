@@ -2,7 +2,7 @@
 name: vault-standards
 description: Use when writing or editing YAML frontmatter in an `obsidian-bridge` vault, or when the user references vault schema, `#ob/` tags, naming conventions, or wikilink rules.
 allowed-tools: Read, Glob, Grep
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Vault Standards
