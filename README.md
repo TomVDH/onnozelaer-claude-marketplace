@@ -8,7 +8,7 @@ Personal collection of Claude Code plugins by Onnozelaer.
 |--------|---------|-------------|
 | [cabinet-of-imd](./cabinet-of-imd) | 2.2.0 | The Cabinet of IMD Agents — an 8-classmate crew of specialized web dev agents. Vault-required (Obsidian or any markdown folder) for chatter, decisions, sessions, and memories. Gated handoffs, lazy character loading, hooks-driven UI flair, and `/dream` vault analysis. |
 | [iteration-shelf](./iteration-shelf) | 0.1.0 | Terminal-aesthetic review boards for in-browser design iteration — curated shelves and monster indexes with on-demand iframe loading, sidebar outliner, and browser-safety guards. Explicit invocation only. |
-| [bash-tui-toolkit](./bash-tui-toolkit) | 0.1.0 | Build polished, interactive bash CLI tools with rich terminal UI — menus, tables, loading bars, spinners, splash screens, transitions, and animated effects. Makes shell scripts look crafted, not cobbled. |
+| [cli-wrapper-helper](./cli-wrapper-helper) | 1.0.0 | Build polished CLI tools — interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two skills: `bash-tui` and `python-helper`. |
 | [gemin-eye](./gemin-eye) | 0.1.0 | Invoke Gemini as a review and coding partner from inside Claude Code. Vault-aware, context-disciplined, contained outputs — Gemini reviews land under `gemin-eye/` subfolders, never scattered across the codebase. |
 
 ### Iteration Shelf — Skill & Suggested Command
@@ -19,11 +19,20 @@ Personal collection of Claude Code plugins by Onnozelaer.
 
 **Layering**: the shelf chrome has its own hard-coded terminal aesthetic. The iterations it indexes are unconstrained — use any aesthetic freely on those.
 
-### Bash TUI Toolkit — Skill
+### CLI Wrapper Helper — Skills & Commands
 
 | Skill | Trigger | What it does |
 |-------|---------|-------------|
-| `bash-tui-toolkit` | Building bash scripts, shell tools, CLI launchers, terminal utilities; mentions of "TUI", "CLI menu", "progress bar", "spinner", "splash screen", or polishing shell-script aesthetics | Pattern library for crafted-looking bash CLIs. Mandatory checklist (strict mode, cleanup, consistent palette/spacing/motion), copy-paste component implementations (menus, tables, loaders, spinners, splash screens, transitions), and architecture guidance for multi-file projects. |
+| `bash-tui` | bash script, shell tool, TUI, CLI menu, progress bar, spinner, splash screen, terminal polish | Pattern library for crafted bash CLIs. Mandatory checklist (strict mode, cleanup, semantic palette), copy-paste components (menus, tables, spinners, splash, transitions), multi-file architecture guide. |
+| `python-helper` | python helper, read local data, query sqlite, python CLI, sqlite reader, csv reader, data reporter | Stdlib-only Python read-and-report scripts. `die()`, `section()`, `cell()` helpers, argparse, sqlite3, JSON/CSV patterns. Clean emoji-led output, `--json` mode for piping. |
+
+| Command | What it scaffolds |
+|---------|------------------|
+| `/bash-new` | Full bash TUI script — palette, cleanup trap, splash, menu or linear flow |
+| `/bash-component` | Single component — menu, spinner, loading bar, table, splash, or transition |
+| `/py-new` | Python helper script — argparse, die/section/cell helpers, data source of choice |
+| `/py-sqlite` | Python sqlite reader — named columns, truncated table, emoji readout |
+| `/py-csv` | Python CSV reader — DictReader, filtering, optional aggregation |
 
 ### GeminEye — Skill
 
@@ -55,10 +64,12 @@ Personal collection of Claude Code plugins by Onnozelaer.
 │   ├── examples/           # Sample iteration-shelf.json
 │   ├── CHANGELOG.md
 │   └── README.md
-├── bash-tui-toolkit/       # Plugin: Bash TUI Toolkit (v0.1.0, 1 skill)
+├── cli-wrapper-helper/     # Plugin: CLI Wrapper Helper (v1.0.0, 2 skills, 5 commands)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)
-│   ├── skills/bash-tui-toolkit/SKILL.md
-│   ├── references/         # components.md, palette.md, architecture.md
+│   ├── skills/bash-tui/    # Bash TUI skill — interactive terminal tools
+│   ├── skills/python-helper/ # Python helper skill — read-and-report scripts
+│   ├── commands/           # /bash-new, /bash-component, /py-new, /py-sqlite, /py-csv
+│   ├── references/         # components.md, palette.md, architecture.md, python-helpers.md
 │   └── evals/              # Skill evaluation cases
 ├── gemin-eye/              # Plugin: GeminEye (v0.1.0, 1 skill)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)

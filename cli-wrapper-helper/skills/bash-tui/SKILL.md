@@ -1,40 +1,33 @@
 ---
-name: bash-tui-toolkit
+name: bash-tui
 description: >
-  Build polished, interactive bash CLI tools with rich terminal UI — menus,
-  tables, loading bars, spinners, splash screens, transitions, and animated
-  effects. Use this skill whenever a user asks to create a bash script,
-  shell tool, terminal utility, CLI launcher, or any interactive command-line
-  application. Also use when the user mentions "terminal UI", "TUI", "CLI
-  menu", "progress bar", "spinner", "splash screen", or wants to add visual
-  polish to shell scripts. If someone says "make it look nice in the terminal"
-  or wants a retro/hacker/polished CLI aesthetic, this is the skill to reach for.
+  This skill should be used when the user asks to create a bash script, shell
+  tool, terminal utility, CLI launcher, or any interactive command-line
+  application. Trigger phrases: "terminal UI", "TUI", "CLI menu", "progress bar",
+  "spinner", "splash screen", "make it look nice in the terminal", "polished CLI",
+  "bash script", "shell tool". For Python helper scripts use the python-helper skill instead.
 ---
 
 # Bash TUI Toolkit
 
-A pattern library for building professional, interactive bash CLI tools that
-feel crafted — not cobbled together. Every script you generate with this
-toolkit should look like it came from the same hand: consistent colors,
-consistent spacing, consistent motion.
+A pattern library for building professional, interactive bash CLI tools — menus,
+spinners, animations, splash screens, tables. Every script produced with this
+skill should look like it came from the same hand: consistent colors, consistent
+spacing, consistent motion.
 
-## How to use this skill
+## References
 
-1. Read this SKILL.md first — it contains the mandatory checklist and all
-   the patterns you need for most scripts.
-2. Read `${CLAUDE_PLUGIN_ROOT}/references/components.md` — it has the
-   **complete, copy-paste ready** implementations of every UI component.
-   Do not improvise your own versions; use the reference implementations.
-3. Read `${CLAUDE_PLUGIN_ROOT}/references/palette.md` if you need the full
-   extended color palette.
-4. Read `${CLAUDE_PLUGIN_ROOT}/references/architecture.md` if scaffolding a
-   multi-file project.
+Load these as needed — do not improvise implementations:
+
+- `${CLAUDE_PLUGIN_ROOT}/references/components.md` — complete copy-paste bash UI components
+- `${CLAUDE_PLUGIN_ROOT}/references/palette.md` — full extended ANSI color palette
+- `${CLAUDE_PLUGIN_ROOT}/references/architecture.md` — multi-file bash project patterns
 
 ---
 
-## Mandatory Checklist
+## Bash TUI — Mandatory Checklist
 
-Every script you generate must include these elements. This is what separates
+Every bash script must include these elements. This is what separates
 a toolkit script from a generic bash script.
 
 ### 1. Strict mode and cleanup (every script, no exceptions)
@@ -395,9 +388,10 @@ tool scripts. See `${CLAUDE_PLUGIN_ROOT}/references/architecture.md` for the ful
 
 ---
 
-## Dependencies
+## Bash Dependencies
 
 - bash 3.2+ (macOS default is fine)
 - curl (for API calls, optional)
 - python3 (for JSON parsing, optional)
 - No ncurses, no tput for colors, no external TUI frameworks
+

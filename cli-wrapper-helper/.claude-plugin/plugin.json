@@ -1,0 +1,5 @@
+{
+  "name": "cli-wrapper-helper",
+  "version": "1.0.0",
+  "description": "Build polished CLI tools — interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two separate skills, one consistent visual language."
+}

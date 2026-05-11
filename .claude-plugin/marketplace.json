@@ -19,10 +19,10 @@
       "description": "Terminal-aesthetic review boards for in-browser design iteration. Generates a curated shelf and a monster index from a JSON manifest \u2014 self-contained HTML, zero build step, on-demand iframe loading, sidebar outliner, and a warn-gate that keeps the browser from stalling on 100+ iterations. Explicit invocation only. Integrates with Superpowers and the Cabinet plugin."
     },
     {
-      "name": "bash-tui-toolkit",
-      "version": "0.1.0",
-      "source": "./bash-tui-toolkit",
-      "description": "Build polished, interactive bash CLI tools with rich terminal UI \u2014 menus, tables, loading bars, spinners, splash screens, transitions, and animated effects. Makes shell scripts look crafted, not cobbled."
+      "name": "cli-wrapper-helper",
+      "version": "1.0.0",
+      "source": "./cli-wrapper-helper",
+      "description": "Build polished CLI tools \u2014 interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two separate skills, one consistent visual language."
     },
     {
       "name": "gemin-eye",
