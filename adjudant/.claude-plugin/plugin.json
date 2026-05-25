@@ -1,0 +1,10 @@
+{
+  "name": "adjudant",
+  "version": "0.1.0",
+  "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant), rigid project provisioning, vault standards enforcement. Pairs with hookify for universal drift-defense hooks.",
+  "author": { "name": "Onnozelaer" },
+  "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/adjudant",
+  "repository": "https://github.com/TomVDH/onnozelaer-claude-marketplace",
+  "license": "MIT",
+  "keywords": ["obsidian", "vault", "knowledge-management", "markdown", "frontmatter", "wikilinks", "adjudant"]
+}
