@@ -56,6 +56,20 @@ pre-commit run --all-files
 python3 adjudant/scripts/validate.py
 ```
 
+## Universal drift defense (via hookify)
+
+Cross-machine, cross-project drift defense rules live in iCloud, NOT in this repo. Hookify reads them from each project's `.claude/` via symlinks.
+
+| | |
+|---|---|
+| Canonical rules | `~/Library/Mobile Documents/com~apple~CloudDocs/Projects/IDE/claude/hookify/` |
+| Install script | `~/Library/Mobile Documents/com~apple~CloudDocs/Projects/IDE/claude/install-hookify-rules.sh` |
+| Install into a project | `cd /path/to/project && "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Projects/IDE/claude/install-hookify-rules.sh"` |
+
+Current rules: `git-safety`, `destructive-bash`, `tom-voice`, `secret-scan`, `no-deprecated-tags`, `icloud-eviction-paths`, `path-quote`. Idempotent install; rules sync across machines via iCloud.
+
+Hooks that need logic (not regex) — symlink-integrity, plan-age, version-drift, AGENTS/CLAUDE presence — are not in hookify; they'd need custom shell hooks, currently deferred.
+
 ## Cross-machine setup
 
 This repo is mirrored across two machines. The OneDrive folder syncs the working tree; the `.git` store lives **inside** OneDrive (small enough that packfile-deadlock issues haven't surfaced — monitor and move out-of-tree if they do).
