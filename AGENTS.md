@@ -14,7 +14,6 @@
 ├── cli-wrapper-helper/      # v1.0.0 — Bash TUI + Python helper script patterns
 ├── gemin-eye/               # v0.2.0 — Gemini as sandboxed review partner
 ├── iteration-shelf/         # v0.1.0 — Terminal-aesthetic in-browser design review boards
-├── bash-tui-toolkit/        # (legacy — superseded by cli-wrapper-helper)
 ├── docs/                    # cross-plugin documentation
 ├── .pre-commit-config.yaml  # validators that fail the build on drift
 ├── README.md
