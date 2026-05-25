@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: adjudant-validate
+        name: Adjudant — validate vault standards & template coherence
+        entry: python3 adjudant/scripts/validate.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
