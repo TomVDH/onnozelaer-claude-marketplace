@@ -384,5 +384,44 @@ class TestCreateBackup(unittest.TestCase):
             self.assertFalse((backup_dir / "CLAUDE.md.legacy").exists())
 
 
+from port import apply_preview
+
+
+class TestApplyPreview(unittest.TestCase):
+    def test_apply_writes_proposed_to_live_positions(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text("vault: " + vault + "\nslug: p\n")
+            (root / "AGENTS.md").write_text("# Old\n\n## Stack\n\nGo\n")
+            (root / "CLAUDE.md").write_text("# Old claude\n")
+
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
+            (Path(vault) / "projects" / "p").mkdir(parents=True)
+
+            apply_preview(root)
+
+            self.assertIn("Go", (root / "AGENTS.md").read_text())
+            self.assertTrue((root / ".claude" / "adjudant").is_file())
+            self.assertFalse((root / ".claude" / "obsidian-bridge").exists())
+            self.assertFalse((root / ".adjudant-port-preview").exists())
+            backups = list((root / ".adjudant-port-backup").iterdir())
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / "AGENTS.md.legacy").is_file())
+            self.assertTrue((backups[0] / "obsidian-bridge.legacy").is_file())
+
+    def test_apply_adds_gitignore_entries(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text("# T\n")
+            generate_preview_x(root, vault_path=Path(vault), slug="t", project_type="coding", project_name="T")
+            (Path(vault) / "projects" / "t").mkdir(parents=True)
+            apply_preview(root)
+            ignore = (root / ".gitignore").read_text()
+            self.assertIn(".adjudant-port-preview/", ignore)
+            self.assertIn(".adjudant-port-backup/", ignore)
+            self.assertIn(".claude/adjudant", ignore)
+
+
 if __name__ == "__main__":
     unittest.main()

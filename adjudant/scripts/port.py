@@ -514,6 +514,109 @@ def generate_preview_z_scaffold(
     (preview_dir / "summary.md").write_text(summary)
 
 
+def apply_preview(project_root: Path) -> None:
+    """Phase 2: apply the .adjudant-port-preview/ to the live project."""
+    preview = project_root / ".adjudant-port-preview"
+    if not preview.is_dir():
+        raise RuntimeError(f"No preview at {preview}. Run preview phase first.")
+
+    files_to_backup = [
+        Path("AGENTS.md"),
+        Path("CLAUDE.md"),
+        Path(".claude/obsidian-bridge"),
+        Path(".claude/adjudant"),
+    ]
+    create_backup(project_root, files_to_backup)
+
+    proposed_agents = preview / "AGENTS.md.proposed"
+    proposed_claude = preview / "CLAUDE.md.proposed"
+    proposed_breadcrumb = preview / "breadcrumb.proposed"
+
+    if proposed_agents.is_file():
+        (project_root / "AGENTS.md").write_text(proposed_agents.read_text())
+    if proposed_claude.is_file():
+        (project_root / "CLAUDE.md").write_text(proposed_claude.read_text())
+    if proposed_breadcrumb.is_file():
+        claude_dir = project_root / ".claude"
+        claude_dir.mkdir(exist_ok=True)
+        (claude_dir / "adjudant").write_text(proposed_breadcrumb.read_text())
+
+    ob = project_root / ".claude" / "obsidian-bridge"
+    if ob.exists():
+        ob.unlink()
+
+    vault_changes_file = preview / "vault-changes.txt"
+    if vault_changes_file.is_file():
+        for line in vault_changes_file.read_text().splitlines():
+            line = line.strip()
+            if line:
+                _apply_vault_change(line)
+
+    _ensure_gitignore_entries(
+        project_root,
+        [".adjudant-port-preview/", ".adjudant-port-backup/", ".claude/adjudant"],
+    )
+
+    shutil.rmtree(preview)
+
+
+def _apply_vault_change(line: str) -> None:
+    """Apply a single vault-changes.txt line. Format: ACTION:path[:path2[:extra]]."""
+    parts = line.split(":", 3)
+    action = parts[0]
+    if action == "CREATE":
+        Path(parts[1]).mkdir(parents=True, exist_ok=True)
+    elif action == "RENAME":
+        src, dst = Path(parts[1]), Path(parts[2])
+        if src.is_dir():
+            src.rename(dst)
+    elif action == "ARCHIVE":
+        src, dst = Path(parts[1]), Path(parts[2])
+        if src.is_dir():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            src.rename(dst)
+    elif action == "REPLACE":
+        pass
+    elif action == "REGEN":
+        target = Path(parts[1])
+        if not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f"# Index\n\n(Regenerate manually or via `/adjudant:adjudant ramasse`)\n")
+    elif action == "UPDATE-ROW":
+        idx_path = Path(parts[1])
+        slug = parts[2]
+        _upsert_project_index_row(idx_path, slug)
+
+
+def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
+    """Add or update a row for `slug` in the vault's projects/_index.md."""
+    idx_path.parent.mkdir(parents=True, exist_ok=True)
+    if not idx_path.is_file():
+        idx_path.write_text(f"# Projects\n\n| Slug | Brief |\n|---|---|\n| {slug} | [[projects/{slug}/brief]] |\n")
+        return
+    text = idx_path.read_text()
+    row = f"| {slug} | [[projects/{slug}/brief]] |"
+    if row in text:
+        return
+    if "| Slug |" not in text:
+        idx_path.write_text(text.rstrip() + f"\n\n| Slug | Brief |\n|---|---|\n{row}\n")
+        return
+    idx_path.write_text(text.rstrip() + f"\n{row}\n")
+
+
+def _ensure_gitignore_entries(project_root: Path, entries: list[str]) -> None:
+    """Append entries to .gitignore if missing. Create file if needed."""
+    gi = project_root / ".gitignore"
+    if not gi.is_file():
+        gi.write_text("\n".join(entries) + "\n")
+        return
+    existing = set(line.strip() for line in gi.read_text().splitlines())
+    to_add = [e for e in entries if e not in existing]
+    if to_add:
+        with gi.open("a") as f:
+            f.write("\n" + "\n".join(to_add) + "\n")
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
