@@ -423,5 +423,22 @@ class TestApplyPreview(unittest.TestCase):
             self.assertIn(".claude/adjudant", ignore)
 
 
+import subprocess
+import sys
+
+
+class TestCLI(unittest.TestCase):
+    def test_help_runs(self):
+        """`port.py --help` exits 0 with usage."""
+        script = Path(__file__).parent / "port.py"
+        result = subprocess.run(
+            [sys.executable, str(script), "--help"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("preview", result.stdout)
+        self.assertIn("apply", result.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

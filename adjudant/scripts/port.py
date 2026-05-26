@@ -6,9 +6,11 @@ Detects project flavor (X/Y/Z) or port phase (preview/applied) and
 dispatches accordingly. See docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md.
 """
 
+import argparse
 import os
 import re
 import shutil
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -640,3 +642,61 @@ def _is_adjudant_compliant(project_root: Path) -> bool:
     if (project_root / ".claude" / "obsidian-bridge").exists():
         return False
     return True
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="port.py",
+        description="Adjudant port verb — migrate legacy projects to adjudant compliance.",
+    )
+    parser.add_argument("phase", choices=["preview", "apply", "detect"], help="Phase to run")
+    parser.add_argument("--project-root", default=".", help="Project root path (default: cwd)")
+    parser.add_argument("--vault-path", help="Vault path (overrides env/breadcrumb resolution)")
+    parser.add_argument("--slug", help="Project slug (auto-derived if omitted)")
+    parser.add_argument("--project-type", choices=["coding", "knowledge", "plugin", "tinkerage"], help="Project type")
+    parser.add_argument("--project-name", help="Human-readable project name")
+    args = parser.parse_args(argv)
+
+    root = Path(args.project_root).resolve()
+
+    if args.phase == "detect":
+        print(detect_flavor(root))
+        return 0
+
+    if args.phase == "apply":
+        try:
+            apply_preview(root)
+            print(f"[port] Applied. Originals backed up to {root}/.adjudant-port-backup/")
+            print("[port] Run /adjudant:adjudant check to verify.")
+            return 0
+        except RuntimeError as e:
+            print(f"[port] ERROR: {e}", file=sys.stderr)
+            return 1
+
+    vault_path = Path(args.vault_path) if args.vault_path else resolve_vault_path(root)
+    if vault_path is None:
+        print("[port] ERROR: Vault path unresolvable. Pass --vault-path or set OB_VAULT env var.", file=sys.stderr)
+        return 1
+
+    slug = args.slug or root.name
+    project_type = args.project_type or "coding"
+    project_name = args.project_name or slug.replace("-", " ").title()
+
+    flavor = detect_flavor(root)
+    if flavor == "Y":
+        generate_preview_y(root, vault_path=vault_path, project_type=project_type, project_name=project_name)
+    elif flavor == "Z":
+        generate_preview_z_scaffold(root, vault_path=vault_path, slug=slug, project_type=project_type, project_name=project_name)
+    elif flavor == "X":
+        generate_preview_x(root, vault_path=vault_path, slug=slug, project_type=project_type, project_name=project_name)
+    else:
+        print(f"[port] Unexpected flavor for preview phase: {flavor}", file=sys.stderr)
+        return 1
+
+    print(f"[port] Preview written to {root}/.adjudant-port-preview/")
+    print("[port] Review the .proposed files. Re-run /adjudant:adjudant port to apply.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
