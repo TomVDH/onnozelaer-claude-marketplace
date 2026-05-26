@@ -446,6 +446,55 @@ def _project_type_subfolders(project_type: str) -> list[str]:
     return base.get(project_type, ["sessions"])
 
 
+def generate_preview_z_scaffold(
+    project_root: Path,
+    vault_path: Path,
+    slug: str,
+    project_type: str,
+    project_name: str,
+) -> None:
+    """For Flavor Z: scaffold the preview dir but leave AGENTS.md.proposed
+    and CLAUDE.md.proposed as TODO placeholders. Claude fills them in via
+    the AI classifier instructions in reference/port.md.
+
+    Also copies legacy AGENTS.md and CLAUDE.md into the preview dir as
+    legacy-AGENTS.md / legacy-CLAUDE.md for Claude's reference.
+    """
+    preview_dir = project_root / ".adjudant-port-preview"
+    preview_dir.mkdir(exist_ok=True)
+    vault_name = vault_path.name
+
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        src = project_root / name
+        if src.is_file():
+            (preview_dir / f"legacy-{name}").write_text(src.read_text())
+
+    placeholder = "TODO: Claude AI classifier fills this. See reference/port.md for instructions.\n"
+    (preview_dir / "AGENTS.md.proposed").write_text(placeholder)
+    (preview_dir / "CLAUDE.md.proposed").write_text(placeholder)
+
+    breadcrumb_out = render_breadcrumb(vault_path=vault_path, vault_name=vault_name, slug=slug, mode="project")
+    (preview_dir / "breadcrumb.proposed").write_text(breadcrumb_out)
+
+    proj = vault_path / "projects" / slug
+    subfolders = _project_type_subfolders(project_type)
+    vault_changes = [f"CREATE:{proj / sub}" for sub in subfolders]
+    if not (proj / "brief.md").is_file():
+        vault_changes.append(f"CREATE:{proj / 'brief.md'}")
+    vault_changes.append(f"REGEN:{proj / '_index.md'}")
+    vault_changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
+    (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
+
+    summary = _render_summary(
+        flavor="Z",
+        vault_path=vault_path,
+        slug=slug,
+        decisions="(AI classifier decisions appended by Claude during preview phase)\n",
+        vault_changes=vault_changes,
+    )
+    (preview_dir / "summary.md").write_text(summary)
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists

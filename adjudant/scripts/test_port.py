@@ -263,6 +263,33 @@ class TestGeneratePreviewY(unittest.TestCase):
             self.assertIn("DROPPED", summary)
 
 
+from port import generate_preview_z_scaffold
+
+
+class TestGeneratePreviewZ(unittest.TestCase):
+    def test_z_scaffold_creates_dir_and_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text("# Custom\n\n## Stack\n\nGo\n")
+            generate_preview_z_scaffold(
+                root,
+                vault_path=Path(vault),
+                slug="hand-proj",
+                project_type="coding",
+                project_name="Hand Project",
+            )
+            preview = root / ".adjudant-port-preview"
+            self.assertTrue(preview.is_dir())
+            self.assertTrue((preview / "breadcrumb.proposed").is_file())
+            self.assertTrue((preview / "vault-changes.txt").is_file())
+            self.assertTrue((preview / "summary.md").is_file())
+            agents_proposed = (preview / "AGENTS.md.proposed")
+            self.assertTrue(agents_proposed.is_file())
+            self.assertIn("TODO: Claude AI classifier fills this", agents_proposed.read_text())
+            self.assertTrue((preview / "legacy-AGENTS.md").is_file())
+            self.assertIn("Go", (preview / "legacy-AGENTS.md").read_text())
+
+
 from port import generate_preview_x
 
 
