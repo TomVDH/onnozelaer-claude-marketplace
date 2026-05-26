@@ -1,6 +1,6 @@
 {
   "name": "onnozelaer-claude-marketplace",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Personally created Claude Code plugins by Onnozelaer.",
   "owner": {
     "name": "Onnozelaer"
@@ -32,7 +32,7 @@
     },
     {
       "name": "adjudant",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "source": "./adjudant",
       "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with six verbs (connect, sync, check, ramasse, dream, draw). Rigid project provisioning, locked tag schema, AGENTS.md + CLAUDE.md auto-provisioning, drift-defense via pre-commit validators. Successor to obsidian-bridge."
     }
