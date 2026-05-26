@@ -38,6 +38,25 @@ class TestDetectFlavor(unittest.TestCase):
             (root / ".claude" / "obsidian-bridge").write_text("vault: /tmp/v\nslug: legacy-proj\n")
             self.assertEqual(detect_flavor(root), "Y")
 
+    def test_hand_authored_agents_md_returns_z(self):
+        """AGENTS.md with non-template content (no .claude/obsidian-bridge) is Z."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text(
+                "# My Custom Project\n\n## Stack\n- Node 22, pnpm\n\n## Conventions\n- Tabs not spaces\n"
+            )
+            self.assertEqual(detect_flavor(root), "Z")
+
+    def test_template_shaped_agents_md_returns_x(self):
+        """An AGENTS.md whose content matches the template (placeholders intact) is NOT Z; falls through to X."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # Mirror first line of templates/AGENTS.md
+            (root / "AGENTS.md").write_text(
+                "# {Project Name}\n\n`{slug}` · type: `{coding|knowledge|plugin|tinkerage}` · vault: [[projects/{slug}/brief|{slug}]]\n\n> One-line purpose of this project.\n"
+            )
+            self.assertEqual(detect_flavor(root), "X")
+
 
 if __name__ == "__main__":
     unittest.main()

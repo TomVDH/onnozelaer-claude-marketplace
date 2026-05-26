@@ -9,6 +9,22 @@ dispatches accordingly. See docs/superpowers/specs/2026-05-26-adjudant-port-verb
 from pathlib import Path
 
 
+_TEMPLATE_SENTINEL_LINES = (
+    "# {Project Name}",
+    "`{slug}` · type: `{coding|knowledge|plugin|tinkerage}` · vault: [[projects/{slug}/brief|{slug}]]",
+)
+
+
+def _looks_like_template(path: Path) -> bool:
+    """Return True if the file's first 5 non-empty lines match the AGENTS.md
+    template sentinels (placeholders intact). Used to distinguish a project
+    that has just been scaffolded by `connect` from one that's been authored."""
+    if not path.is_file():
+        return False
+    lines = [ln.strip() for ln in path.read_text().splitlines() if ln.strip()][:5]
+    return all(sentinel in lines for sentinel in _TEMPLATE_SENTINEL_LINES)
+
+
 def detect_flavor(project_root: Path) -> str:
     """Detect the legacy flavor or port phase of a project.
 
@@ -23,6 +39,14 @@ def detect_flavor(project_root: Path) -> str:
 
     if (project_root / ".claude" / "obsidian-bridge").is_file():
         return "Y"
+
+    agents = project_root / "AGENTS.md"
+    claude = project_root / "CLAUDE.md"
+    if agents.is_file() and not _looks_like_template(agents):
+        return "Z"
+    if claude.is_file() and claude.read_text().strip() and \
+            next((ln.strip() for ln in claude.read_text().splitlines() if ln.strip()), "") != "@AGENTS.md":
+        return "Z"
 
     return "X"
 
