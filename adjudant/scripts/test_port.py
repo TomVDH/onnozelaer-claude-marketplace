@@ -226,5 +226,21 @@ class TestRenderAgentsMd(unittest.TestCase):
         self.assertIn("| Working tree | (this folder) |", result)
 
 
+from port import render_claude_md
+
+
+class TestRenderClaudeMd(unittest.TestCase):
+    def test_minimal_render_just_template(self):
+        result = render_claude_md(claude_specific_body="")
+        self.assertTrue(result.startswith("@AGENTS.md"))
+        self.assertIn("Claude-specific overrides", result)
+
+    def test_with_body_inserts_after_template(self):
+        result = render_claude_md(claude_specific_body="## Bash allowlist\n\n- npm, pnpm\n")
+        self.assertTrue(result.startswith("@AGENTS.md"))
+        self.assertIn("## Bash allowlist", result)
+        self.assertIn("- npm, pnpm", result)
+
+
 if __name__ == "__main__":
     unittest.main()

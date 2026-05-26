@@ -240,6 +240,24 @@ Live in `CLAUDE.md` next to this file. CLAUDE.md `@`-imports this file.
     return body
 
 
+def render_claude_md(claude_specific_body: str) -> str:
+    """Render CLAUDE.md from the template + optional claude-specific body."""
+    extra = f"\n{claude_specific_body.rstrip()}\n" if claude_specific_body.strip() else ""
+    return f"""@AGENTS.md
+
+# Claude-specific overrides
+
+Project context, conventions, vault references, and working-files index live in `AGENTS.md` (imported above). Any agent — Claude, Gemini, Codex, Cursor — reads from there.
+
+This file is for **Claude Code-specific overrides only**:
+- Slash-command behavior hints
+- Plugin/skill invocation preferences
+- Claude-only tool guidance (e.g., specific `Bash` allowlists)
+
+**If you're about to add generic project context here, move it to `AGENTS.md` instead.**
+{extra}"""
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
