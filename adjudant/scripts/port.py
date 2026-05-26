@@ -8,8 +8,27 @@ dispatches accordingly. See docs/superpowers/specs/2026-05-26-adjudant-port-verb
 
 import os
 import re
+import shutil
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+
+def create_backup(project_root: Path, files_to_backup: list[Path]) -> Path:
+    """Create .adjudant-port-backup/{ISO-8601-basic-Z-timestamp}/ and copy
+    each existing file into it with `.legacy` suffix. Returns the backup dir."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = project_root / ".adjudant-port-backup" / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    for rel in files_to_backup:
+        src = project_root / rel
+        if not src.is_file():
+            continue
+        dst_name = src.name + ".legacy"
+        shutil.copy2(src, backup_dir / dst_name)
+
+    return backup_dir
 
 
 _TEMPLATE_SENTINEL_LINES = (

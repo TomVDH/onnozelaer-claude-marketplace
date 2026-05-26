@@ -348,5 +348,41 @@ class TestRenderClaudeMd(unittest.TestCase):
         self.assertIn("- npm, pnpm", result)
 
 
+from port import create_backup
+
+
+class TestCreateBackup(unittest.TestCase):
+    def test_backup_copies_originals_with_timestamp(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text("legacy agents")
+            (root / "CLAUDE.md").write_text("legacy claude")
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text("legacy ob")
+
+            backup_dir = create_backup(root, files_to_backup=[
+                Path("AGENTS.md"),
+                Path("CLAUDE.md"),
+                Path(".claude/obsidian-bridge"),
+            ])
+
+            self.assertTrue(backup_dir.is_dir())
+            self.assertTrue(backup_dir.name.startswith("20") and backup_dir.name.endswith("Z"))
+            self.assertEqual((backup_dir / "AGENTS.md.legacy").read_text(), "legacy agents")
+            self.assertEqual((backup_dir / "CLAUDE.md.legacy").read_text(), "legacy claude")
+            self.assertEqual((backup_dir / "obsidian-bridge.legacy").read_text(), "legacy ob")
+
+    def test_backup_skips_missing_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "AGENTS.md").write_text("agents only")
+            backup_dir = create_backup(root, files_to_backup=[
+                Path("AGENTS.md"),
+                Path("CLAUDE.md"),  # doesn't exist
+            ])
+            self.assertTrue((backup_dir / "AGENTS.md.legacy").is_file())
+            self.assertFalse((backup_dir / "CLAUDE.md.legacy").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
