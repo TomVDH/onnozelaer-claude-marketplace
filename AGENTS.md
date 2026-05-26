@@ -8,8 +8,7 @@
 .
 ├── .claude-plugin/
 │   └── marketplace.json     # Marketplace manifest — lists every plugin with version + description
-├── adjudant/                # v0.1.0 — Vault editor/writer + project initializer (successor to obsidian-bridge)
-├── obsidian-bridge/         # v1.2.2 — SUPERSEDED by adjudant; pending removal
+├── adjudant/                # v0.1.0 — Vault editor/writer + project initializer (successor to the retired obsidian-bridge)
 ├── cabinet-of-imd/          # v3.0.0 — Crew/persona flavor layer (functionality sunset; character-only)
 ├── cli-wrapper-helper/      # v1.0.0 — Bash TUI + Python helper script patterns
 ├── gemin-eye/               # v0.2.0 — Gemini as sandboxed review partner

@@ -1,6 +1,6 @@
 {
   "name": "onnozelaer-claude-marketplace",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Personally created Claude Code plugins by Onnozelaer.",
   "owner": {
     "name": "Onnozelaer"
@@ -10,7 +10,7 @@
       "name": "cabinet-of-imd",
       "version": "3.0.0",
       "source": "./cabinet-of-imd",
-      "description": "The Cabinet of IMD Agents \u2014 a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, disciplines, and pairings serve as specialised web-development agents. v3.0.0 sunsets all functionality (vault writes, session anchors, gate enforcement, state hooks) and keeps only character, voice, and working disciplines. Persistence is delegated to the obsidian-bridge plugin when active."
+      "description": "The Cabinet of IMD Agents \u2014 a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, disciplines, and pairings serve as specialised web-development agents. v3.0.0 sunsets all functionality (vault writes, session anchors, gate enforcement, state hooks) and keeps only character, voice, and working disciplines. Persistence is delegated to the adjudant plugin when active."
     },
     {
       "name": "iteration-shelf",
@@ -28,13 +28,7 @@
       "name": "gemin-eye",
       "version": "0.2.0",
       "source": "./gemin-eye",
-      "description": "Invoke Gemini as a sandboxed review partner from inside Claude Code. Action-shaped subcommands (review, megareview, wip, sanity, name, compare, save). Every prompt follows a rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT template. Gemini reviews only \u2014 proposed edits return as elaborate code blocks; Claude applies them. Default model `gemini-3.5-flash`; `megareview` uses `gemini-3.5-pro`. Vault-aware (pairs with obsidian-bridge)."
-    },
-    {
-      "name": "obsidian-bridge",
-      "version": "1.2.2",
-      "source": "./obsidian-bridge",
-      "description": "Operate an Obsidian vault from Claude — opinionated layout, frontmatter schema, content know-how (canvas, bases, mermaid), and cleanup workflows. SUPERSEDED by adjudant — pending removal."
+      "description": "Invoke Gemini as a sandboxed review partner from inside Claude Code. Action-shaped subcommands (review, megareview, wip, sanity, name, compare, save). Every prompt follows a rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT template. Gemini reviews only \u2014 proposed edits return as elaborate code blocks; Claude applies them. Default model `gemini-3.5-flash`; `megareview` uses `gemini-3.5-pro`. Vault-aware (pairs with adjudant)."
     },
     {
       "name": "adjudant",
