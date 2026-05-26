@@ -227,9 +227,12 @@ def validate_port_backup_integrity(r: Result) -> None:
         return
     for subdir in backup_root.iterdir():
         if subdir.is_dir():
-            has_legacy = any(f.name.endswith(".legacy") for f in subdir.iterdir())
+            entries = list(subdir.iterdir())
+            if not entries:
+                continue  # empty backup dir (e.g. fresh X-flavor port) is fine
+            has_legacy = any(f.name.endswith(".legacy") for f in entries)
             if not has_legacy:
-                r.add_fail(name, f"backup dir {subdir.name} has no .legacy files")
+                r.add_fail(name, f"backup dir {subdir.name} has non-.legacy files but no .legacy: {[f.name for f in entries]}")
                 return
     r.add_pass(name)
 

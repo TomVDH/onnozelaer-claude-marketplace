@@ -441,7 +441,7 @@ def generate_preview_x(
     proj = vault_path / "projects" / slug
     subfolders = _project_type_subfolders(project_type)
     vault_changes = [f"CREATE:{proj / sub}" for sub in subfolders]
-    vault_changes.append(f"CREATE:{proj / 'brief.md'}")
+    vault_changes.append(f"REGEN:{proj / 'brief.md'}")
     vault_changes.append(f"REGEN:{proj / '_index.md'}")
     vault_changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
     (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
@@ -501,7 +501,7 @@ def generate_preview_z_scaffold(
     subfolders = _project_type_subfolders(project_type)
     vault_changes = [f"CREATE:{proj / sub}" for sub in subfolders]
     if not (proj / "brief.md").is_file():
-        vault_changes.append(f"CREATE:{proj / 'brief.md'}")
+        vault_changes.append(f"REGEN:{proj / 'brief.md'}")
     vault_changes.append(f"REGEN:{proj / '_index.md'}")
     vault_changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
     (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
@@ -521,6 +521,26 @@ def apply_preview(project_root: Path) -> None:
     preview = project_root / ".adjudant-port-preview"
     if not preview.is_dir():
         raise RuntimeError(f"No preview at {preview}. Run preview phase first.")
+
+    # Validate preview integrity — all 5 required files must exist
+    required = ["AGENTS.md.proposed", "CLAUDE.md.proposed", "breadcrumb.proposed", "vault-changes.txt", "summary.md"]
+    missing = [f for f in required if not (preview / f).is_file()]
+    if missing:
+        raise RuntimeError(
+            f"Preview corrupt — missing files: {missing}. "
+            "Delete .adjudant-port-preview/ and re-run preview."
+        )
+
+    # Guard against unfilled TODO placeholders (Z workflow skipped AI classifier)
+    for proposed_name in ("AGENTS.md.proposed", "CLAUDE.md.proposed"):
+        content = (preview / proposed_name).read_text()
+        if content.lstrip().startswith("TODO:"):
+            raise RuntimeError(
+                f"{proposed_name} still contains the TODO placeholder. "
+                "The AI classifier step was not completed. "
+                "See reference/port.md AI classifier section, fill in the proposed files, "
+                "then re-run."
+            )
 
     files_to_backup = [
         Path("AGENTS.md"),
@@ -583,7 +603,13 @@ def _apply_vault_change(line: str) -> None:
         target = Path(parts[1])
         if not target.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(f"# Index\n\n(Regenerate manually or via `/adjudant:adjudant ramasse`)\n")
+            if target.name == "brief.md":
+                target.write_text(
+                    "---\ntype: project-brief\nstatus: active\nupdated: \n---\n\n"
+                    "# Brief\n\n(Brief content goes here. Edit and re-run `/adjudant:adjudant sync`.)\n"
+                )
+            else:
+                target.write_text(f"# Index\n\n(Regenerate manually or via `/adjudant:adjudant ramasse`)\n")
     elif action == "UPDATE-ROW":
         idx_path = Path(parts[1])
         slug = parts[2]

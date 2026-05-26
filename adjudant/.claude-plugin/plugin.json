@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Obsidian vault editor and project initializer. One command, /adjudant, with seven verbs: connect, port, sync, check, ramasse, dream, draw. Enforces vault standards; pairs with hookify and Gemineye.",
   "author": { "name": "Onnozelaer" },
   "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/adjudant",

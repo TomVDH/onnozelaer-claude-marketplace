@@ -315,6 +315,70 @@ class TestGeneratePreviewX(unittest.TestCase):
             self.assertIn("Flavor: X", summary)
 
 
+class TestGeneratePreviewXBriefIsFile(unittest.TestCase):
+    """Bug 1 regression: brief.md must be created as a FILE, not a directory."""
+
+    def test_brief_md_created_as_file_not_directory(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            generate_preview_x(
+                root,
+                vault_path=Path(vault),
+                slug="myproj",
+                project_type="coding",
+                project_name="My Project",
+            )
+            # Create the vault project dir so apply_preview has a parent to work in
+            (Path(vault) / "projects" / "myproj").mkdir(parents=True)
+            apply_preview(root)
+            brief = Path(vault) / "projects" / "myproj" / "brief.md"
+            self.assertTrue(brief.exists(), "brief.md should exist after apply_preview")
+            self.assertTrue(brief.is_file(), "brief.md must be a FILE, not a directory")
+            content = brief.read_text()
+            self.assertIn("type: project-brief", content)
+
+
+from port import apply_preview
+
+
+class TestApplyPreviewGuards(unittest.TestCase):
+    """Bug 2 regression: apply_preview must reject corrupt/unfilled previews."""
+
+    def _make_valid_preview(self, root: Path, vault: str) -> None:
+        """Write a complete, valid preview dir."""
+        generate_preview_x(
+            root,
+            vault_path=Path(vault),
+            slug="proj",
+            project_type="coding",
+            project_name="Proj",
+        )
+
+    def test_apply_raises_if_required_file_missing(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._make_valid_preview(root, vault)
+            # Remove one required file
+            (root / ".adjudant-port-preview" / "summary.md").unlink()
+            with self.assertRaises(RuntimeError) as ctx:
+                apply_preview(root)
+            self.assertIn("summary.md", str(ctx.exception))
+            self.assertIn("corrupt", str(ctx.exception))
+
+    def test_apply_raises_if_proposed_file_is_todo_placeholder(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._make_valid_preview(root, vault)
+            # Overwrite AGENTS.md.proposed with TODO placeholder (simulates skipped Z classifier)
+            (root / ".adjudant-port-preview" / "AGENTS.md.proposed").write_text(
+                "TODO: Claude AI classifier fills this. See reference/port.md for instructions.\n"
+            )
+            with self.assertRaises(RuntimeError) as ctx:
+                apply_preview(root)
+            self.assertIn("TODO", str(ctx.exception))
+            self.assertIn("AI classifier", str(ctx.exception))
+
+
 from port import render_breadcrumb
 
 
@@ -382,9 +446,6 @@ class TestCreateBackup(unittest.TestCase):
             ])
             self.assertTrue((backup_dir / "AGENTS.md.legacy").is_file())
             self.assertFalse((backup_dir / "CLAUDE.md.legacy").exists())
-
-
-from port import apply_preview
 
 
 class TestApplyPreview(unittest.TestCase):
