@@ -107,5 +107,31 @@ class TestResolveVaultPath(unittest.TestCase):
             self.assertIsNone(resolve_vault_path(Path(tmp)))
 
 
+from port import parse_markdown_sections
+
+
+class TestParseMarkdownSections(unittest.TestCase):
+    def test_simple_two_section_file(self):
+        text = "# Title\n\nIntro\n\n## Working tree\n\nThis folder\n\n## Stack\n\nNode 22\n"
+        sections = parse_markdown_sections(text)
+        self.assertEqual(set(sections.keys()), {"working tree", "stack"})
+        self.assertIn("This folder", sections["working tree"])
+        self.assertIn("Node 22", sections["stack"])
+
+    def test_headings_are_case_insensitive(self):
+        text = "## WORKING TREE\n\nfoo\n## stack\n\nbar\n"
+        sections = parse_markdown_sections(text)
+        self.assertEqual(set(sections.keys()), {"working tree", "stack"})
+
+    def test_h3_headings_also_captured(self):
+        text = "## Top\n\n### Subheading\n\ncontent\n"
+        sections = parse_markdown_sections(text)
+        self.assertIn("top", sections)
+        self.assertIn("subheading", sections)
+
+    def test_empty_text_returns_empty_dict(self):
+        self.assertEqual(parse_markdown_sections(""), {})
+
+
 if __name__ == "__main__":
     unittest.main()

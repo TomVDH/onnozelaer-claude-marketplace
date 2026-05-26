@@ -109,6 +109,35 @@ def _walk_up_for_vault_home(start: Path) -> Optional[Path]:
     return None
 
 
+def parse_markdown_sections(text: str) -> dict[str, str]:
+    """Parse a markdown file into a dict of {lowercased-heading-text: body}.
+
+    Captures ## and ### headings. Heading text is normalized: lowercased,
+    leading/trailing whitespace stripped. Body is everything until the next
+    heading at the same or higher level.
+
+    The # (h1) title is ignored. Content before any ## heading is discarded.
+    """
+    sections: dict[str, str] = {}
+    current_key: Optional[str] = None
+    current_body: list[str] = []
+
+    for line in text.splitlines():
+        heading_match = re.match(r"^(#{2,3})\s+(.+?)\s*$", line)
+        if heading_match:
+            if current_key is not None:
+                sections[current_key] = "\n".join(current_body).strip()
+            current_key = heading_match.group(2).strip().lower()
+            current_body = []
+        elif current_key is not None:
+            current_body.append(line)
+
+    if current_key is not None:
+        sections[current_key] = "\n".join(current_body).strip()
+
+    return sections
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
