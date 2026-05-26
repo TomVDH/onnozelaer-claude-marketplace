@@ -1,12 +1,18 @@
 {
   "name": "adjudant",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "verbs": [
     {
       "name": "connect",
       "description": "Onboard project to vault — rigid 5-step init (breadcrumb, AGENTS.md+CLAUDE.md, vault scaffold, session note, .gitignore). Idempotent.",
       "argumentHint": "(no args)",
       "reference": "reference/connect.md"
+    },
+    {
+      "name": "port",
+      "description": "Migrate any legacy project (raw repo, obsidian-bridge legacy, hand-authored) to adjudant compliance. Two-phase: first run writes a preview, second run applies it. Idempotent.",
+      "argumentHint": "(no args)",
+      "reference": "reference/port.md"
     },
     {
       "name": "sync",

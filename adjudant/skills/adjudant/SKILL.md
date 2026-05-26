@@ -1,21 +1,22 @@
 ---
 name: adjudant
-description: Use when the user wants to operate an Obsidian vault — connect a project, sync state, check status, tidy the vault, run diagnostics, or create visual artefacts. Handles vault layout, frontmatter schema, tag taxonomy, wikilink form, folder conventions, and template provisioning. Also use when working with project-level AGENTS.md/CLAUDE.md context files, when writing decisions/sessions/notes/docs into a vault, or whenever the user types `/adjudant {verb}`.
-version: 0.1.0
+description: Use when operating an Obsidian vault — connect a project, sync state, check status, tidy up (ramasse), run diagnostics (dream), or create canvases/diagrams (draw). Handles vault layout, frontmatter, tags, wikilinks, templates, and project AGENTS.md/CLAUDE.md files. Also when writing decisions, sessions, notes, or docs into a vault, or when the user types `/adjudant {verb}`.
+version: 0.1.2
 user-invocable: true
-argument-hint: "[connect|sync|check|ramasse|dream|draw] [args]"
+argument-hint: "[connect|port|sync|check|ramasse|dream|draw] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, six verbs. Pairs with hookify for universal drift-defense hooks.
+Vault editor/writer and project initializer. One skill, one command, six verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
 | Verb | Loads | Purpose |
 |---|---|---|
 | `connect` | `reference/connect.md` | Rigid project init — breadcrumb, AGENTS.md+CLAUDE.md, vault scaffold, session note, .gitignore |
+| `port` | `reference/port.md` | Migrate any legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance via two-phase preview → apply |
 | `sync` | `reference/sync.md` | Push brief + handoff to vault |
 | `check` | `reference/check.md` | Read-only project + vault summary |
 | `ramasse` | `reference/ramasse.md` | Rebuild indexes + normalize tags + fix wikilink form |
@@ -51,8 +52,8 @@ This plugin registers 5 hooks (vault-aware only):
 |---|---|---|
 | SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note |
 | UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords |
-| PostToolUse (Write\|Edit\|MultiEdit) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log |
-| PreCompact | `hooks/scripts/precompact.py` | Append `paused (compaction)` marker + run `/adjudant sync` |
-| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + run `/adjudant sync` |
+| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log |
+| PreCompact | `hooks/scripts/precompact.py` | Append `paused (compaction)` marker + sync handoff to vault |
+| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + sync handoff to vault |
 
 Universal drift-defense hooks (git safety, voice checks, etc.) live in hookify, not here.
