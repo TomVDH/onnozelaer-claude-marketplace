@@ -7,7 +7,7 @@ what they talk about, and the visual markers for notable events.
 cabinet is a flavour layer; nothing about its banter lives past the
 conversation. (Memorable moments may be captured via the memory
 discipline — see `memories-system.md` — and persisted by
-`obsidian-bridge` if active.)
+`adjudant` if active.)
 
 ---
 

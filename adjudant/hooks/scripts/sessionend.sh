@@ -27,9 +27,9 @@ main() {
     printf -- '- %s · session ended\n' "$ts" >> "$session_file"
   fi
 
-  # Run sync (best effort, never block)
+  # Run handoff sync only — no pause marker (best effort, never block)
   if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/hooks/scripts/precompact.py" ]; then
-    python3 "$CLAUDE_PLUGIN_ROOT/hooks/scripts/precompact.py" 2>/dev/null || true
+    python3 "$CLAUDE_PLUGIN_ROOT/hooks/scripts/precompact.py" --sync-only 2>/dev/null || true
   fi
 }
 

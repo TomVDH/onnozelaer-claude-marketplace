@@ -34,8 +34,8 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 
 ## Architecture
 
-- **Source of truth**: `source/skills/adjudant/`
-- **Harness copies**: `.claude/skills/adjudant/` and `.gemini/skills/adjudant/` are symlinks to source. Edit source, both harnesses see it instantly. No build step.
+- **Source of truth**: `skills/adjudant/` — the canonical skill directory.
+- **Harness copies**: `source/skills/adjudant/`, `.claude/skills/adjudant/`, and `.gemini/skills/adjudant/` are symlinks to the canonical. Edit the canonical, all harnesses see it instantly. No build step.
 - **Validators**: `scripts/validate.py` enforces schema coherence on pre-commit.
 
 ## Vault standards
@@ -45,6 +45,10 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 ## Hooks
 
 All five hooks are vault-aware. Universal drift-defense (git safety, voice checks, etc.) lives in `hookify`, not here.
+
+## Pairing
+
+Pairs with `gemineye` for Gemini-assisted review hand-off (see the Gemineye plugin).
 
 ## License
 

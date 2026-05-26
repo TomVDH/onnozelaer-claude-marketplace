@@ -1,15 +1,24 @@
-# GeminEye — Changelog
+# Gemineye — Changelog
 
-All notable changes to the `gemin-eye` plugin are documented here.
+All notable changes to the `gemineye` plugin are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- **Renamed** plugin slug `gemin-eye` → `gemineye` (command is now
+  `/gemineye`; persisted-output folders are now `gemineye/`). Breaking —
+  re-install from the marketplace to pick up the new command.
+- Vault pairing references updated from the retired `obsidian-bridge`
+  to its successor `adjudant` in the live skill docs.
 
 ## [0.2.0] — 2026-05-01
 
 Action-oriented restructure. Sandboxed by default. Rigid prompt template.
 
 ### Added
-- `/gemin-eye` command with seven action-shaped subcommands:
+- `/gemineye` command with seven action-shaped subcommands:
   `review`, `megareview`, `wip`, `sanity`, `name`, `compare`, `save`.
 - **Mandatory prompt template** — every Gemini call wraps the prompt
   in `ROLE / DO / DON'T / SCOPE — IN / SCOPE — OUT / OUTPUT / CONTEXT`.
@@ -56,15 +65,15 @@ Action-oriented restructure. Sandboxed by default. Rigid prompt template.
 Initial release.
 
 ### Added
-- `gemin-eye` skill — invoke Gemini as a review and coding partner from
+- `gemineye` skill — invoke Gemini as a review and coding partner from
   inside Claude Code, with strict context-sourcing and output-routing
   rules.
 - Three operating modes: in-line review (default), CLI review with file
   context, persisted review.
 - Context-sourcing protocol prioritising Claude-prepared bundles, project
   Markdown, and Obsidian vault context (when `vault-bridge` is active).
-- Output protocol routing all persisted Gemini reviews to `gemin-eye/`
-  subfolders (vault project folder or `docs/gemin-eye/`), never into
+- Output protocol routing all persisted Gemini reviews to `gemineye/`
+  subfolders (vault project folder or `docs/gemineye/`), never into
   source paths.
 - Override clauses for relaxing default containment when explicitly
   authorised.

@@ -2,6 +2,16 @@
 
 All notable changes to the Cabinet of IMD plugin.
 
+## [Unreleased]
+
+### Removed
+- Pruned the stale `vault-bridge` skill and `/dream` command that lingered on
+  disk after the v2.3.0 extraction to the vault plugin. The cabinet is
+  flavour-only; both now belong to `adjudant` (`/adjudant dream`).
+
+### Changed
+- Updated retired `obsidian-bridge` references to its successor `adjudant`.
+
 ## 3.0.0 — 2026-05-01
 
 **Flavour-only cut.** The cabinet sunsets all functionality and

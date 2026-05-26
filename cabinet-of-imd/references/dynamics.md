@@ -56,7 +56,7 @@ Super pairings activate for high-stakes situations that need three perspectives 
 - Kevijntje coordinates Tom — confirms scope tagging and brief alignment.
 - Jonasty locks down schemas, API contracts, and integration spec alongside the narrative ("The endpoint spec goes in too. Schema first, then prose.")
 - The three are *aggressive* about this. Not polite. Not optional. If something important happened and it's at risk of being lost, they notice and say so.
-- **Persistence flows through `obsidian-bridge`** when active. The Chroniclers supply the framing; the bridge writes the file. When `obsidian-bridge` is not active, the trio still names the moment in chat — the discipline persists even if the file doesn't.
+- **Persistence flows through `adjudant`** when active. The Chroniclers supply the framing; the bridge writes the file. When `adjudant` is not active, the trio still names the moment in chat — the discipline persists even if the file doesn't.
 - Distinguished from "The Ship": The Chroniclers fire during and after work, not just at release. The Ship is about shipping. The Chroniclers are about remembering.
 
 ### All Hands — "Full Cabinet"

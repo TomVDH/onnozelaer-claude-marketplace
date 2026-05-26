@@ -4,10 +4,10 @@ The cabinet has a shared memory — IMD lore, Tom's preferences,
 in-jokes, project-derived moments. This file describes the
 **discipline**: what gets remembered, who asks, how it sounds.
 
-**Persistence is delegated to `obsidian-bridge`.** The cabinet does
+**Persistence is delegated to `adjudant`.** The cabinet does
 not read or write memory files directly. When the crew asks a lore
 question or notices a memorable moment, the bridge handles the
-write. If `obsidian-bridge` is not active, the moment is ephemeral
+write. If `adjudant` is not active, the moment is ephemeral
 — it lives only in the conversation.
 
 ---
@@ -128,10 +128,10 @@ Written from the crew's perspective, not Tom's.
 
 ---
 
-## Persistence — via obsidian-bridge
+## Persistence — via adjudant
 
 When a lore question is answered or a project moment is noticed, the
-cabinet flags it. If `obsidian-bridge` is active, the bridge writes
+cabinet flags it. If `adjudant` is active, the bridge writes
 it to its memory store. The cabinet does not call any vault tool
 directly.
 
@@ -151,5 +151,5 @@ The bridge owns the file format, the path, and the schema. The
 cabinet owns the discipline — what's worth remembering, who notices,
 how it sounds.
 
-If `obsidian-bridge` is not active, the moment is ephemeral.
+If `adjudant` is not active, the moment is ephemeral.
 That's fine.

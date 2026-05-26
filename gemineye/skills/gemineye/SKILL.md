@@ -1,19 +1,16 @@
 ---
-name: gemin-eye
+name: gemineye
 description: >
-  Invoke Gemini as a sandboxed review partner from inside Claude Code.
-  Triggered by /gemin-eye and its subcommands (review, megareview, wip,
-  sanity, name, compare, save) or natural-language phrases like "ask
-  Gemini", "second opinion", "Gemini take". Every prompt sent to Gemini
-  follows a rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT template.
-  Gemini reviews only — never writes files. Proposed edits return as
-  elaborate code blocks; Claude applies them. Outputs route to gemin-eye/
-  subfolders only — never into source paths.
+  A sandboxed second opinion from Gemini. Use for the /gemineye
+  subcommands (review, megareview, wip, sanity, name, compare, save) or
+  phrases like "ask Gemini", "second opinion", "Gemini's take". Gemini
+  reviews only — it never writes files; it proposes edits as code blocks
+  and Claude applies them.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
 version: 0.2.0
 ---
 
-# GeminEye
+# Gemineye
 
 Gemini as a sandboxed review partner — invoked deliberately, fed
 structured prompts, contained to a tiny writable footprint.
@@ -28,13 +25,13 @@ reads what's prepared, writes notes, leaves. No drawings on the walls.
 
 | Command | Scope | Model |
 |---|---|---|
-| `/gemin-eye review <target>` | one artefact | flash |
-| `/gemin-eye megareview <scope>` | module / feature / plugin | **pro** |
-| `/gemin-eye wip` | uncommitted + current branch diff | flash |
-| `/gemin-eye sanity <topic>` | idea / plan / decision | flash |
-| `/gemin-eye name <thing(s)>` | one or many | flash |
-| `/gemin-eye compare <A> <B> [<C>...]` | 2+ options | flash |
-| `/gemin-eye save [topic]` | last review | — (file write) |
+| `/gemineye review <target>` | one artefact | flash |
+| `/gemineye megareview <scope>` | module / feature / plugin | **pro** |
+| `/gemineye wip` | uncommitted + current branch diff | flash |
+| `/gemineye sanity <topic>` | idea / plan / decision | flash |
+| `/gemineye name <thing(s)>` | one or many | flash |
+| `/gemineye compare <A> <B> [<C>...]` | 2+ options | flash |
+| `/gemineye save [topic]` | last review | — (file write) |
 
 Models: `gemini-3.5-flash` is default. Only `megareview` switches to
 `gemini-3.5-pro` — it's the one mode that needs the deeper pass.
@@ -62,7 +59,7 @@ For the filled-in prompt templates per subcommand, read
    No loose prose prompts. Ever.
 5. **Context-disciplined.** Bundle is prepared, not crawled. Focused
    500-token bundle outperforms 5,000-token dump nine times of ten.
-6. **Outputs are contained.** Persisted reviews go to `gemin-eye/`
+6. **Outputs are contained.** Persisted reviews go to `gemineye/`
    subfolders only. Never source paths.
 
 ---
@@ -135,12 +132,12 @@ Source in order:
    discussed. Primary feed.
 2. **Project Markdown** — `docs/`, `README.md`, `CHANGELOG.md`,
    architecture notes. Pass relevant excerpts only.
-3. **Vault context** (if `obsidian-bridge` active) — read from
+3. **Vault context** (if `adjudant` active) — read from
    `${VAULT}/projects/{slug}/`: `brief.md`, `decisions/`, `sessions/`,
-   `references/`, `gemin-eye/` (prior reviews).
+   `references/`, `gemineye/` (prior reviews).
 4. **Source code** — only when Tom names files or the review target
    *is* the source. No codebase crawls.
-5. **Cross-project** — `${VAULT}/gemin-eye/` if it exists at vault
+5. **Cross-project** — `${VAULT}/gemineye/` if it exists at vault
    root, for recurring critique patterns Tom has agreed with.
 
 ---
@@ -150,21 +147,21 @@ Source in order:
 | Mode | Destination |
 |------|-------------|
 | In-line review | Conversation only |
-| Persisted, vault available | `${VAULT}/projects/{slug}/gemin-eye/{YYYY-MM-DD}-{topic}.md` |
-| Persisted, no vault | `docs/gemin-eye/{YYYY-MM-DD}-{topic}.md` |
-| Cross-project pattern | `${VAULT}/gemin-eye/{topic}.md` (Tom's request only) |
+| Persisted, vault available | `${VAULT}/projects/{slug}/gemineye/{YYYY-MM-DD}-{topic}.md` |
+| Persisted, no vault | `docs/gemineye/{YYYY-MM-DD}-{topic}.md` |
+| Cross-project pattern | `${VAULT}/gemineye/{topic}.md` (Tom's request only) |
 
-`/gemin-eye save` is the explicit persist trigger. In-line stays
+`/gemineye save` is the explicit persist trigger. In-line stays
 in-line until that command runs.
 
 **Hard rule:** never write Gemini output into source folders. The
-one allowed scaffold is creating `docs/gemin-eye/`.
+one allowed scaffold is creating `docs/gemineye/`.
 
 ### Persisted file template
 
 ```markdown
 ---
-type: gemin-eye-review
+type: gemineye-review
 date: YYYY-MM-DD
 topic: <one-line topic>
 target: <file or area reviewed>
@@ -189,11 +186,11 @@ without Claude's filter on it.
 
 ---
 
-## What GeminEye is NOT
+## What Gemineye is NOT
 
 - Not a code generator. Gemini's output never lands in source files
   without Claude reviewing and applying.
-- Not a project scaffolder. Only `docs/gemin-eye/` is allowed.
+- Not a project scaffolder. Only `docs/gemineye/` is allowed.
 - Not a replacement for Claude. Disagreements surface to Tom; not
   silently resolved.
 - Not autonomous. Every call is initiated by Tom's request.
@@ -209,26 +206,26 @@ Default containment relaxes only when Tom explicitly says so:
 | "let Gemini scaffold X" | Output may create files inside `X` (Claude still routes) |
 | "Gemini full project review" | Read across the codebase, not just prepared context |
 | "have Gemini write the X file" | One source file may be written from Gemini's response (Claude reviews first) |
-| "skip the gemin-eye folder, just paste it" | In-line only, no persistence |
+| "skip the gemineye folder, just paste it" | In-line only, no persistence |
 | "drop the sandbox" | Run without `--sandbox` (asks for confirmation each time) |
 
 Log overrides in the persisted file's frontmatter (`override: <phrase>`).
 
 ---
 
-## Pairing with obsidian-bridge
+## Pairing with adjudant
 
-When `obsidian-bridge` is active:
+When `adjudant` is active:
 
 1. **Read** — pull project brief, recent decisions, last session note
    into the bundle automatically.
-2. **Write** — persisted reviews go to `${VAULT}/projects/{slug}/gemin-eye/`.
+2. **Write** — persisted reviews go to `${VAULT}/projects/{slug}/gemineye/`.
 3. **Cross-link** — append a line under `## Gemini reviews` in the
    current session note.
 4. **Bostrol** — if `cabinet-of-imd` is also active, treat persisted
    reviews as documentation artefacts under Bostrol's indexing.
 
-Standalone (no vault): persisted reviews go to `docs/gemin-eye/`.
+Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
 ---
 
@@ -249,5 +246,5 @@ Standalone (no vault): persisted reviews go to `docs/gemin-eye/`.
 ## Dependencies
 
 - `gemini` CLI on `PATH`, recent enough to support `--sandbox`.
-- Optional: `obsidian-bridge` (vault context auto-loading).
+- Optional: `adjudant` (vault context auto-loading).
 - Optional: `cabinet-of-imd` (Bostrol-mediated indexing).

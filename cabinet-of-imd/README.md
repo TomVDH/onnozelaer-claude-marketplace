@@ -14,7 +14,7 @@ working disciplines (handoffs, dissent, scope, version parity).
 - No state-tracking hooks
 
 What remains is the crew themselves and how they work. **Persistence
-is delegated to `obsidian-bridge`** when active. When it's not,
+is delegated to `adjudant`** when active. When it's not,
 moments stay in conversation.
 
 ## The Roster
@@ -62,7 +62,7 @@ and content rules in `references/chatter-system.md`.
 The crew has a shared memory — IMD lore, Tom's preferences,
 in-jokes, project-derived moments. The cabinet supplies the
 discipline (what to ask, who notices, how it sounds). Persistence
-is delegated to `obsidian-bridge` when active. See
+is delegated to `adjudant` when active. See
 `references/memories-system.md`.
 
 ### Code Conventions
@@ -74,7 +74,7 @@ file ownership, and knowledge drops.
 Two flavour hooks run quietly:
 - **SessionStart → `boot-flair.sh`** — surfaces a historical lore
   question, anniversary, or session counter (reads vault state via
-  the `obsidian-bridge` breadcrumb, never writes).
+  the `adjudant` breadcrumb, never writes).
 - **Notification → `crew-notify.sh`** — rewrites generic Claude
   Code notifications in crew voice.
 
@@ -94,7 +94,7 @@ Both fail silently — they never block.
 
 ## Pairs With
 
-- **`obsidian-bridge`** — persistence layer. When active, the
+- **`adjudant`** — persistence layer. When active, the
   cabinet's documentation discipline (Chroniclers trio, decision
   notes, session summaries, memory entries) flows through the
   bridge. When inactive, the discipline stays in voice; nothing is

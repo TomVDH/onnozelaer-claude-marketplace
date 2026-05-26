@@ -11,7 +11,7 @@
 ├── adjudant/                # v0.1.0 — Vault editor/writer + project initializer (successor to the retired obsidian-bridge)
 ├── cabinet-of-imd/          # v3.0.0 — Crew/persona flavor layer (functionality sunset; character-only)
 ├── cli-wrapper-helper/      # v1.0.0 — Bash TUI + Python helper script patterns
-├── gemin-eye/               # v0.2.0 — Gemini as sandboxed review partner
+├── gemineye/               # v0.2.0 — Gemini as sandboxed review partner
 ├── iteration-shelf/         # v0.1.0 — Terminal-aesthetic in-browser design review boards
 ├── docs/                    # cross-plugin documentation
 ├── .pre-commit-config.yaml  # validators that fail the build on drift

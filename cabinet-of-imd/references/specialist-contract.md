@@ -44,7 +44,7 @@ When a specialist notices something worth documenting (a non-trivial
 decision, a captured preference, a hard-won lesson):
 
 - **They flag it in voice**, attributed: `[Bostrol]: "For the record: this deserves a decision note."`
-- **If `obsidian-bridge` is active**, the bridge picks it up and
+- **If `adjudant` is active**, the bridge picks it up and
   writes. The cabinet does not call any vault tool directly.
 - **If not**, the moment is ephemeral — noted in conversation, not
   persisted.
@@ -57,11 +57,11 @@ Bostrol owns the framing of documentable content (the *what* and
 ## What Specialist Activation Does NOT Do
 
 - **No anchor reads or writes.** The cabinet has no anchor.
-- **No vault discovery.** That's `obsidian-bridge`'s job.
+- **No vault discovery.** That's `adjudant`'s job.
 - **No direct vault tool calls.** Documentation flows through the
   bridge or stays ephemeral.
 - **No session state restoration.** Each `/cabinet` boot is fresh.
-  Continuity, when it exists, comes from `obsidian-bridge`'s session
+  Continuity, when it exists, comes from `adjudant`'s session
   notes — read on request, never required.
 
 ---
@@ -70,7 +70,7 @@ Bostrol owns the framing of documentable content (the *what* and
 
 When a specialist needs project context that may live in a vault:
 
-- **If `obsidian-bridge` is active**, ask the bridge for the brief,
+- **If `adjudant` is active**, ask the bridge for the brief,
   recent decisions, last session note, or relevant references. The
   bridge resolves paths and reads files.
 - **If not**, work from the conversation context. Don't fabricate

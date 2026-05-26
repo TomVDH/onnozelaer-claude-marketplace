@@ -1,11 +1,11 @@
 {
-  "name": "gemin-eye",
+  "name": "gemineye",
   "version": "0.2.0",
-  "description": "Invoke Gemini as a sandboxed review partner from inside Claude Code. Action-shaped subcommands (review, megareview, wip, sanity, name, compare, save). Every prompt follows a rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT template. Gemini reviews only — proposed edits return as elaborate code blocks; Claude applies them. Default model `gemini-3.5-flash`; `megareview` uses `gemini-3.5-pro`. Vault-aware (pairs with obsidian-bridge). Outputs route to `gemin-eye/` subfolders only — never source paths.",
+  "description": "A sandboxed second opinion from Gemini — review-only. Seven subcommands: review, megareview, wip, sanity, name, compare, save. Gemini proposes edits as code blocks; Claude applies them. Pairs with adjudant for vault context.",
   "author": {
     "name": "Onnozelaer"
   },
-  "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/gemin-eye",
+  "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/gemineye",
   "repository": "https://github.com/TomVDH/onnozelaer-claude-marketplace",
   "license": "MIT",
   "keywords": [

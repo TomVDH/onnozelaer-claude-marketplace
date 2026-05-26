@@ -68,11 +68,16 @@ def main() -> int:
     today = datetime.now().strftime("%Y-%m-%d")
     ts = datetime.now().strftime("%H:%M")
 
-    # 1. Append pause marker
-    session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
-    if session_file.exists():
-        with session_file.open("a") as f:
-            f.write(f"- {ts} · paused (compaction)\n")
+    # SessionEnd reuses this script for the handoff sync only. With --sync-only
+    # we skip the pause marker — the session ended, it did not pause for compaction.
+    sync_only = "--sync-only" in sys.argv[1:]
+
+    # 1. Append pause marker (PreCompact only)
+    if not sync_only:
+        session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
+        if session_file.exists():
+            with session_file.open("a") as f:
+                f.write(f"- {ts} · paused (compaction)\n")
 
     # 2. Sync handoff
     sync_handoff(project_dir, vault, slug, today, ts)

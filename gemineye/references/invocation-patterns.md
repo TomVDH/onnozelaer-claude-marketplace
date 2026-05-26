@@ -1,4 +1,4 @@
-# Gemini CLI — invocation patterns for GeminEye
+# Gemini CLI — invocation patterns for Gemineye
 
 Filled-in prompt templates per subcommand, plus CLI usage and edit
 format. SKILL.md is enough for in-line work; come here when invoking
@@ -98,7 +98,7 @@ Claude's job to escalate to Tom.
 
 ## Subcommand templates
 
-### `/gemin-eye review <target>`
+### `/gemineye review <target>`
 
 Single artefact — code, doc, or prompt. Model: flash.
 
@@ -140,7 +140,7 @@ CONTEXT
 {supporting context}
 ```
 
-### `/gemin-eye megareview <scope>`
+### `/gemineye megareview <scope>`
 
 Module / feature / plugin sweep. Model: **pro**.
 
@@ -186,7 +186,7 @@ CONTEXT
 {supporting brief / decisions}
 ```
 
-### `/gemin-eye wip`
+### `/gemineye wip`
 
 Review uncommitted changes + current branch diff. Model: flash.
 
@@ -237,16 +237,16 @@ CONTEXT
 
 ```bash
 BASE="${BASE:-origin/main}"
-git diff "$BASE"...HEAD > /tmp/gemin-eye-wip.diff
-git diff >> /tmp/gemin-eye-wip.diff   # unstaged
-git diff --cached >> /tmp/gemin-eye-wip.diff   # staged
-git log --oneline "$BASE"..HEAD > /tmp/gemin-eye-wip.log
+git diff "$BASE"...HEAD > /tmp/gemineye-wip.diff
+git diff >> /tmp/gemineye-wip.diff   # unstaged
+git diff --cached >> /tmp/gemineye-wip.diff   # staged
+git log --oneline "$BASE"..HEAD > /tmp/gemineye-wip.log
 ```
 
 Pass both via `--file`. Default base is `origin/main` unless Tom
 specifies otherwise.
 
-### `/gemin-eye sanity <topic>`
+### `/gemineye sanity <topic>`
 
 Idea / plan / decision sanity check. Model: flash.
 
@@ -287,7 +287,7 @@ CONTEXT
 {relevant decisions / brief excerpts}
 ```
 
-### `/gemin-eye name <thing(s)>`
+### `/gemineye name <thing(s)>`
 
 One name or a related set. Model: flash.
 
@@ -339,7 +339,7 @@ CONTEXT
 {adjacent names}
 ```
 
-### `/gemin-eye compare <A> <B> [<C>...]`
+### `/gemineye compare <A> <B> [<C>...]`
 
 Head-to-head ranking, 2+ options. Model: flash.
 
@@ -407,7 +407,7 @@ the answer.
 
 ---
 
-## `/gemin-eye save` mechanics
+## `/gemineye save` mechanics
 
 `save` is a file write, not a Gemini call. It persists the LAST
 in-line review to disk.
@@ -417,9 +417,9 @@ TOPIC="${1:-$(date +%H%M)}"
 DATE=$(date +%Y-%m-%d)
 
 if [ -n "$VAULT_PROJECT_DIR" ]; then
-  OUT="${VAULT_PROJECT_DIR}/gemin-eye/${DATE}-${TOPIC}.md"
+  OUT="${VAULT_PROJECT_DIR}/gemineye/${DATE}-${TOPIC}.md"
 else
-  OUT="docs/gemin-eye/${DATE}-${TOPIC}.md"
+  OUT="docs/gemineye/${DATE}-${TOPIC}.md"
 fi
 
 mkdir -p "$(dirname "$OUT")"
@@ -448,4 +448,4 @@ Required: frontmatter (with `subcommand` and `model` fields), Prompt
 - **Don't** accept edit suggestions outside the elaborate-code-block
   format. Re-prompt if violated.
 - **Don't** write Gemini's response into a source file. Route via
-  `gemin-eye/`, then Claude decides.
+  `gemineye/`, then Claude decides.

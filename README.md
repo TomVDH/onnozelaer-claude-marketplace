@@ -6,10 +6,10 @@ Personal collection of Claude Code plugins by Onnozelaer.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [cabinet-of-imd](./cabinet-of-imd) | 2.2.0 | The Cabinet of IMD Agents — an 8-classmate crew of specialized web dev agents. Vault-required (Obsidian or any markdown folder) for chatter, decisions, sessions, and memories. Gated handoffs, lazy character loading, hooks-driven UI flair, and `/dream` vault analysis. |
+| [cabinet-of-imd](./cabinet-of-imd) | 3.0.0 | The Cabinet of IMD Agents — a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, and disciplines serve as specialised web-development agents. Flavour-only (characters, voices, pairings, working disciplines); persistence is delegated to `adjudant` when active. |
 | [iteration-shelf](./iteration-shelf) | 0.1.0 | Terminal-aesthetic review boards for in-browser design iteration — curated shelves and monster indexes with on-demand iframe loading, sidebar outliner, and browser-safety guards. Explicit invocation only. |
 | [cli-wrapper-helper](./cli-wrapper-helper) | 1.0.0 | Build polished CLI tools — interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two skills: `bash-tui` and `python-helper`. |
-| [gemin-eye](./gemin-eye) | 0.1.0 | Invoke Gemini as a review and coding partner from inside Claude Code. Vault-aware, context-disciplined, contained outputs — Gemini reviews land under `gemin-eye/` subfolders, never scattered across the codebase. |
+| [gemineye](./gemineye) | 0.2.0 | Invoke Gemini as a review and coding partner from inside Claude Code. Vault-aware, context-disciplined, contained outputs — Gemini reviews land under `gemineye/` subfolders, never scattered across the codebase. |
 
 ### Iteration Shelf — Skill & Suggested Command
 
@@ -34,23 +34,23 @@ Personal collection of Claude Code plugins by Onnozelaer.
 | `/py-sqlite` | Python sqlite reader — named columns, truncated table, emoji readout |
 | `/py-csv` | Python CSV reader — DictReader, filtering, optional aggregation |
 
-### GeminEye — Skill
+### Gemineye — Skill
 
 | Skill | Trigger | What it does |
 |-------|---------|-------------|
-| `gemin-eye` | `/gemin-eye`, "ask Gemini", "second opinion", "Gemini review", "Gemini's take" | Calls the `gemini` CLI with a deliberately bundled context (Claude-prepared, project Markdown, vault context when `vault-bridge` is active). Default mode is in-line; persistence routes Gemini outputs to `gemin-eye/` subfolders only — never into source. Override clauses unlock scaffolding, full-repo reviews, or direct file writes when Tom explicitly asks. |
+| `gemineye` | `/gemineye`, "ask Gemini", "second opinion", "Gemini review", "Gemini's take" | Calls the `gemini` CLI with a deliberately bundled context (Claude-prepared, project Markdown, vault context when `adjudant` is active). Default mode is in-line; persistence routes Gemini outputs to `gemineye/` subfolders only — never into source. Override clauses unlock scaffolding, full-repo reviews, or direct file writes when Tom explicitly asks. |
 
-**Layering**: GeminEye is a partner, not a successor — Claude remains the architect. Pairs with `vault-bridge` to auto-load project context and route outputs into the project's vault folder; pairs with `cabinet-of-imd` so Bostrol indexes Gemini reviews as documentation artefacts.
+**Layering**: Gemineye is a partner, not a successor — Claude remains the architect. Pairs with `adjudant` to auto-load project context and route outputs into the project's vault folder; pairs with `cabinet-of-imd` so Bostrol indexes Gemini reviews as documentation artefacts.
 
 ## Structure
 
 ```
 ├── .claude-plugin/
 │   └── marketplace.json    # Marketplace manifest — lists all plugins with versions
-├── cabinet-of-imd/         # Plugin: Cabinet of IMD Agents (v2.2.0)
+├── cabinet-of-imd/         # Plugin: Cabinet of IMD Agents (v3.0.0)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)
-│   ├── skills/             # 5 invocable skills (cabinet-resume, cabinet-status, cabinet-tune, crew-roster, vault-bridge)
-│   ├── commands/           # 4 slash commands (/cabinet, /invoke, /dream, /create-classmate)
+│   ├── skills/             # 1 invocable skill (crew-roster)
+│   ├── commands/           # 1 slash command (/cabinet)
 │   ├── hooks/              # SessionStart, PreCompact, UserPromptSubmit, Stop, SessionEnd, Notification
 │   ├── references/         # Character definitions, protocols, conventions, vault integration
 │   ├── examples/           # Templates and samples
@@ -71,9 +71,9 @@ Personal collection of Claude Code plugins by Onnozelaer.
 │   ├── commands/           # /bash-new, /bash-component, /py-new, /py-sqlite, /py-csv
 │   ├── references/         # components.md, palette.md, architecture.md, python-helpers.md
 │   └── evals/              # Skill evaluation cases
-├── gemin-eye/              # Plugin: GeminEye (v0.1.0, 1 skill)
+├── gemineye/              # Plugin: Gemineye (v0.2.0, 1 skill)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)
-│   ├── skills/gemin-eye/SKILL.md
+│   ├── skills/gemineye/SKILL.md
 │   ├── references/         # invocation-patterns.md (prompt scaffolds, CLI usage)
 │   ├── CHANGELOG.md
 │   └── README.md

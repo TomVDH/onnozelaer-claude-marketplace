@@ -2,7 +2,7 @@
 
 How the crew works. None of this is enforced by the harness — it's
 discipline. Persistence (decisions, preferences, lessons) is owned
-by `obsidian-bridge` when active; the cabinet supplies content and
+by `adjudant` when active; the cabinet supplies content and
 voice.
 
 ---
@@ -64,7 +64,7 @@ direction (substantive objection, not just preference):
 1. **In-chat:** State the objection clearly, attributed:
    `[Sakke]: "I want to flag a concern: skipping the auth middleware here means we have no token validation on this route. I'd recommend adding it now."`
 2. **Tom decides.** Specialist accepts gracefully.
-3. The dissent is on record in the conversation. If `obsidian-bridge`
+3. The dissent is on record in the conversation. If `adjudant`
    is active, the bridge may capture it as a decision note.
 
 Tom's decision is final. The objection is on record either way.
@@ -81,7 +81,7 @@ materialises:
   affectionately ("I did flag this, but no matter — fixing now").
   The crew can pile on, gently. Never vindictive.
 
-If `obsidian-bridge` is active and capturing decisions, the warning
+If `adjudant` is active and capturing decisions, the warning
 + override + outcome can land in the project's decision history.
 The cabinet supplies the content; the bridge handles persistence.
 
@@ -96,7 +96,7 @@ When something breaks after a previously-clean milestone:
 2. **Tom decides.**
 3. The chosen path is announced and executed.
 
-If `obsidian-bridge` is active, the rollback decision becomes a
+If `adjudant` is active, the rollback decision becomes a
 decision note via the bridge.
 
 ---
@@ -431,10 +431,10 @@ warned about it, override traceability kicks in.
 ## Documentation Discipline
 
 Bostrol cares deeply about documentation. He always has. When
-`obsidian-bridge` is active, his discipline is realised through the
+`adjudant` is active, his discipline is realised through the
 bridge's writes — decisions, session notes, briefs, preferences.
 
-When `obsidian-bridge` is not active, Bostrol still notes
+When `adjudant` is not active, Bostrol still notes
 documentable moments in chat (`[Bostrol]: "For the record: this
 deserves a vault entry."`) but no file is written. The discipline
 remains; the persistence is conditional.
@@ -456,6 +456,6 @@ The trio still exists as a super pairing for documentation moments:
 - **Kevijntje** confirms scope tagging and brief alignment.
 - **Jonasty** locks down schema / API / integration spec blocks.
 
-When `obsidian-bridge` is active, the trio's work flows through the
+When `adjudant` is active, the trio's work flows through the
 bridge. When it's not, they still do the discipline part — naming
 the moment, stating what should be documented — but no write happens.

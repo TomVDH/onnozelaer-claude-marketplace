@@ -1,5 +1,5 @@
 ---
-description: Wake up the Cabinet of IMD crew — flavour layer for sessions. Loads characters, dynamics, and protocols. No vault discovery, no anchor — persistence is delegated to obsidian-bridge.
+description: Wake up the Cabinet of IMD crew — flavour layer for sessions. Loads characters, dynamics, and protocols. No vault discovery, no anchor — persistence is delegated to adjudant.
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
@@ -7,7 +7,7 @@ Wake up the Cabinet of IMD crew. Loads the personalities and the
 working disciplines, then opens with a short burst of in-character
 chatter to set the room. The cabinet is a **flavour layer** — voice,
 pairings, disciplines. Any persistence (decisions, sessions, memories)
-is owned by the `obsidian-bridge` plugin.
+is owned by the `adjudant` plugin.
 
 ---
 
@@ -160,10 +160,10 @@ their domains come up.
 The cabinet does not write to a vault. It does not maintain a
 session anchor. It does not persist chatter. All persistence —
 project briefs, decisions, session notes, memory entries —
-is owned by `obsidian-bridge`.
+is owned by `adjudant`.
 
 When the crew identifies something documentable (a decision, a
-preference, a memory), they say so in voice. If `obsidian-bridge`
+preference, a memory), they say so in voice. If `adjudant`
 is active, the bridge picks it up. If not, it's ephemeral.
 
 ---
@@ -237,4 +237,4 @@ that's who they are.
 | Voice, in-chat formatting, when to chime in | `chatter-system.md` |
 | Code markers (`## CABINET @TODO`, `@SECTION`, `@KNOWLEDGE`) | `code-conventions.md` |
 | Header colours per member | `terminal-colours.md` |
-| Memory discipline (persistence via obsidian-bridge) | `memories-system.md` |
+| Memory discipline (persistence via adjudant) | `memories-system.md` |

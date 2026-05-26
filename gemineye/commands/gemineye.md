@@ -3,18 +3,18 @@ description: Sandboxed Gemini review partner — review, megareview, wip, sanity
 allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
-Gemini review and second-opinion partner. Dispatches to the `gemin-eye` skill.
+Gemini review and second-opinion partner. Dispatches to the `gemineye` skill.
 
 ## Subcommands
 
 ```
-/gemin-eye review <target>              Focused review of one artefact (code, doc, prompt) — flash
-/gemin-eye megareview <scope>           Broad sweep across module / feature / plugin — pro
-/gemin-eye wip                          Review uncommitted + current branch work in flight — flash
-/gemin-eye sanity <topic>               Steel-man + failure modes + alternative — flash
-/gemin-eye name <thing(s)>              Naming bikeshed (one or related set) — flash
-/gemin-eye compare <A> <B> [<C>...]     Head-to-head ranking of options — flash
-/gemin-eye save [topic]                 Persist last in-line review to gemin-eye/ folder
+/gemineye review <target>              Focused review of one artefact (code, doc, prompt) — flash
+/gemineye megareview <scope>           Broad sweep across module / feature / plugin — pro
+/gemineye wip                          Review uncommitted + current branch work in flight — flash
+/gemineye sanity <topic>               Steel-man + failure modes + alternative — flash
+/gemineye name <thing(s)>              Naming bikeshed (one or related set) — flash
+/gemineye compare <A> <B> [<C>...]     Head-to-head ranking of options — flash
+/gemineye save [topic]                 Persist last in-line review to gemineye/ folder
 ```
 
 **Defaults:** sandboxed (`--sandbox`), review-only (no `--yolo`),
@@ -26,4 +26,4 @@ SCOPE — IN / SCOPE — OUT / OUTPUT / CONTEXT template defined in
 return as elaborate code blocks; Claude applies them.
 
 Parse the user's subcommand and arguments, then invoke the
-`gemin-eye` skill with the appropriate action.
+`gemineye` skill with the appropriate action.
