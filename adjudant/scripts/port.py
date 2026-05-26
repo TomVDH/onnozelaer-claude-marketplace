@@ -21,6 +21,9 @@ def detect_flavor(project_root: Path) -> str:
     if (project_root / ".adjudant-port-backup").is_dir() and _is_adjudant_compliant(project_root):
         return "applied"
 
+    if (project_root / ".claude" / "obsidian-bridge").is_file():
+        return "Y"
+
     return "X"
 
 

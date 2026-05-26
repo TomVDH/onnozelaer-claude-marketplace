@@ -30,6 +30,14 @@ class TestDetectFlavor(unittest.TestCase):
             (root / "CLAUDE.md").write_text("@AGENTS.md\n\n# Claude-specific overrides\n")
             self.assertEqual(detect_flavor(root), "applied")
 
+    def test_obsidian_bridge_breadcrumb_returns_y(self):
+        """If .claude/obsidian-bridge breadcrumb exists, flavor is Y."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text("vault: /tmp/v\nslug: legacy-proj\n")
+            self.assertEqual(detect_flavor(root), "Y")
+
 
 if __name__ == "__main__":
     unittest.main()
