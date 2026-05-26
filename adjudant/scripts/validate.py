@@ -4,7 +4,7 @@
 Run from the plugin root (adjudant/). Exit 0 on pass, 1 on any failure.
 
 Validators:
-  1. harness-parity         — .claude/skills/adjudant and .gemini/skills/adjudant resolve to source/
+  1. harness-parity         — source/, .claude/, .gemini/ skill paths all resolve to skills/adjudant
   2. templates-tag-schema   — no deprecated tags (#ob/, #cabinet/) in any template
   3. claude-md-imports-agents — templates/CLAUDE.md starts with @AGENTS.md
   4. template-coverage      — every file-type in vault-standards has a matching template
@@ -18,10 +18,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "source" / "skills" / "adjudant"
-TEMPLATES = SOURCE / "templates"
-REFERENCE = SOURCE / "reference"
-HARNESS_DIRS = [ROOT / ".claude" / "skills" / "adjudant", ROOT / ".gemini" / "skills" / "adjudant"]
+CANONICAL = ROOT / "skills" / "adjudant"
+TEMPLATES = CANONICAL / "templates"
+REFERENCE = CANONICAL / "reference"
+HARNESS_DIRS = [
+    ROOT / "source" / "skills" / "adjudant",
+    ROOT / ".claude" / "skills" / "adjudant",
+    ROOT / ".gemini" / "skills" / "adjudant",
+]
 
 # File types that must have a matching template (per vault-standards List A)
 FILE_TYPES_REQUIRING_TEMPLATE = {
@@ -80,16 +84,19 @@ class Result:
 
 def validate_harness_parity(r: Result) -> None:
     name = "harness-parity"
+    if not CANONICAL.is_dir() or CANONICAL.is_symlink():
+        r.add_fail(name, f"skills/adjudant must be a real directory (the canonical skill location)")
+        return
     for h in HARNESS_DIRS:
         if not h.is_symlink():
             r.add_fail(name, f"{h.relative_to(ROOT)} is not a symlink")
             return
         try:
             resolved = h.resolve()
-            if resolved != SOURCE.resolve():
+            if resolved != CANONICAL.resolve():
                 r.add_fail(
                     name,
-                    f"{h.relative_to(ROOT)} resolves to {resolved}, expected {SOURCE.resolve()}",
+                    f"{h.relative_to(ROOT)} resolves to {resolved}, expected {CANONICAL.resolve()}",
                 )
                 return
         except OSError as e:
@@ -149,7 +156,7 @@ def validate_command_metadata_coherence(r: Result) -> None:
     if not meta_file.exists():
         # Try local-relative if running inside adjudant/
         meta_file = ROOT / "scripts" / "command-metadata.json"
-    skill_file = SOURCE / "SKILL.md"
+    skill_file = CANONICAL / "SKILL.md"
     if not meta_file.exists() or not skill_file.exists():
         r.add_fail(name, f"missing {meta_file} or {skill_file}")
         return
