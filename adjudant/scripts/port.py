@@ -268,6 +268,127 @@ This file is for **Claude Code-specific overrides only**:
 {extra}"""
 
 
+def generate_preview_y(
+    project_root: Path,
+    vault_path: Path,
+    project_type: str,
+    project_name: str,
+) -> None:
+    """For Flavor Y: parse legacy files, run OB mapping, write preview dir."""
+    preview_dir = project_root / ".adjudant-port-preview"
+    preview_dir.mkdir(exist_ok=True)
+
+    slug = _parse_breadcrumb_field(project_root / ".claude" / "obsidian-bridge", "slug") or project_root.name
+    vault_name = vault_path.name
+
+    agents_legacy = project_root / "AGENTS.md"
+    claude_legacy = project_root / "CLAUDE.md"
+
+    ob_sections = parse_markdown_sections(agents_legacy.read_text()) if agents_legacy.is_file() else {}
+    claude_sections = parse_markdown_sections(claude_legacy.read_text()) if claude_legacy.is_file() else {}
+
+    mapped = map_ob_sections(ob_sections)
+
+    claude_body = mapped["claude_md_body"]
+    for heading, body in claude_sections.items():
+        if claude_body:
+            claude_body += "\n\n"
+        claude_body += f"## {heading.title()}\n\n{body}"
+        mapped["decisions"] += f'- Legacy CLAUDE.md "## {heading}" → Kept in CLAUDE.md (legacy claude content)\n'
+
+    agents_out = render_agents_md(
+        project_name=project_name,
+        slug=slug,
+        project_type=project_type,
+        what_this_is=mapped["what_this_is"],
+        conventions=mapped["conventions"],
+        where_things_live_extra_rows=mapped["where_things_live_extra_rows"],
+        from_legacy=mapped["from_legacy"],
+    )
+    claude_out = render_claude_md(claude_specific_body=claude_body)
+    breadcrumb_out = render_breadcrumb(vault_path=vault_path, vault_name=vault_name, slug=slug, mode="project")
+
+    (preview_dir / "AGENTS.md.proposed").write_text(agents_out)
+    (preview_dir / "CLAUDE.md.proposed").write_text(claude_out)
+    (preview_dir / "breadcrumb.proposed").write_text(breadcrumb_out)
+
+    vault_changes = _y_vault_changes(vault_path, slug, project_type)
+    (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
+
+    summary = _render_summary(
+        flavor="Y",
+        vault_path=vault_path,
+        slug=slug,
+        decisions=mapped["decisions"],
+        vault_changes=vault_changes,
+    )
+    (preview_dir / "summary.md").write_text(summary)
+
+
+def _y_vault_changes(vault_path: Path, slug: str, project_type: str) -> list[str]:
+    """Return list of vault change operations as strings, one per line.
+    Format: "ACTION:path1[:path2]" where ACTION is RENAME, CREATE, ARCHIVE, REPLACE, REGEN, UPDATE-ROW."""
+    proj = vault_path / "projects" / slug
+    changes = []
+    refs = proj / "refs"
+    if refs.is_dir():
+        changes.append(f"RENAME:{refs}:{proj / 'references'}")
+    iterations = proj / "iterations"
+    if iterations.is_dir():
+        changes.append(f"ARCHIVE:{iterations}:{vault_path / 'legacy' / 'iterations' / slug}")
+    for sub in ("tasks", "images"):
+        if not (proj / sub).is_dir():
+            changes.append(f"CREATE:{proj / sub}")
+    if (proj / "brief.md").is_file():
+        changes.append(f"REPLACE:{proj / 'brief.md'}")
+    changes.append(f"REGEN:{proj / '_index.md'}")
+    changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
+    return changes
+
+
+def _capitalise_heading_in_decisions(decisions: str) -> str:
+    """Capitalise the first letter of heading names inside '## <name>' patterns in decisions log.
+    Leaves the rest of each word lowercase (e.g. 'vault rules' → 'Vault rules')."""
+    return re.sub(
+        r'"## ([^"]+)"',
+        lambda m: f'"## {m.group(1)[0].upper() + m.group(1)[1:]}"',
+        decisions,
+    )
+
+
+def _render_summary(flavor: str, vault_path: Path, slug: str, decisions: str, vault_changes: list[str]) -> str:
+    """Render the summary.md content for the preview dir."""
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+    vault_changes_table = "\n".join(f"| `{change}` |" for change in vault_changes)
+    decisions_display = _capitalise_heading_in_decisions(decisions)
+    return f"""# Port preview summary
+
+Generated: {timestamp} · Flavor: {flavor} ({"obsidian-bridge legacy" if flavor == "Y" else "see flavor"})
+Vault: {vault_path}/projects/{slug}
+
+## File changes (project side)
+| File | Action |
+|---|---|
+| AGENTS.md | Replace (merged) |
+| CLAUDE.md | Replace (merged) |
+{"| .claude/obsidian-bridge | Remove (migrated to .claude/adjudant) |" if flavor == "Y" else ""}
+| .claude/adjudant | Create |
+| .gitignore | Append (.adjudant-port-*) |
+
+## Vault changes
+| Operation |
+|---|
+{vault_changes_table}
+
+## Merge decisions
+{decisions_display or "(none)"}
+
+To apply: re-run `/adjudant:adjudant port`.
+To discard: delete `.adjudant-port-preview/` and start over.
+"""
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists

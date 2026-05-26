@@ -226,6 +226,43 @@ class TestRenderAgentsMd(unittest.TestCase):
         self.assertIn("| Working tree | (this folder) |", result)
 
 
+from port import generate_preview_y
+
+
+class TestGeneratePreviewY(unittest.TestCase):
+    def test_y_preview_writes_all_required_files(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(
+                f"vault: {vault}\nslug: legacy-proj\n"
+            )
+            (root / "AGENTS.md").write_text(
+                "# Legacy Project\n\n## Working tree\n\n/path/to/legacy\n\n"
+                "## Stack\n\nNode 22, pnpm\n\n## Vault rules\n\nUse wikilinks\n"
+            )
+            (root / "CLAUDE.md").write_text("# Old\n\n## Bash allowlist\n\n- npm, pnpm, git\n")
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="Legacy Project")
+
+            preview = root / ".adjudant-port-preview"
+            self.assertTrue(preview.is_dir())
+            self.assertTrue((preview / "AGENTS.md.proposed").is_file())
+            self.assertTrue((preview / "CLAUDE.md.proposed").is_file())
+            self.assertTrue((preview / "breadcrumb.proposed").is_file())
+            self.assertTrue((preview / "vault-changes.txt").is_file())
+            self.assertTrue((preview / "summary.md").is_file())
+
+            agents = (preview / "AGENTS.md.proposed").read_text()
+            self.assertIn("# Legacy Project", agents)
+            self.assertIn("Node 22, pnpm", agents)
+            self.assertNotIn("Use wikilinks", agents)
+
+            summary = (preview / "summary.md").read_text()
+            self.assertIn("Flavor: Y", summary)
+            self.assertIn("Vault rules", summary)
+            self.assertIn("DROPPED", summary)
+
+
 from port import render_breadcrumb
 
 
