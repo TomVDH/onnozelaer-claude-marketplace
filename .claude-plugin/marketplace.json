@@ -1,6 +1,6 @@
 {
   "name": "onnozelaer-claude-marketplace",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Personally created Claude Code plugins by Onnozelaer.",
   "owner": {
     "name": "Onnozelaer"
@@ -25,16 +25,16 @@
       "description": "Build polished CLI tools \u2014 interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two separate skills, one consistent visual language."
     },
     {
-      "name": "gemin-eye",
+      "name": "gemineye",
       "version": "0.2.0",
-      "source": "./gemin-eye",
-      "description": "Invoke Gemini as a sandboxed review partner from inside Claude Code. Action-shaped subcommands (review, megareview, wip, sanity, name, compare, save). Every prompt follows a rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT template. Gemini reviews only \u2014 proposed edits return as elaborate code blocks; Claude applies them. Default model `gemini-3.5-flash`; `megareview` uses `gemini-3.5-pro`. Vault-aware (pairs with adjudant)."
+      "source": "./gemineye",
+      "description": "A sandboxed second opinion from Gemini \u2014 review-only. Seven subcommands: review, megareview, wip, sanity, name, compare, save. Gemini proposes edits as code blocks; Claude applies them. Pairs with adjudant for vault context."
     },
     {
       "name": "adjudant",
-      "version": "0.1.2",
+      "version": "0.2.0",
       "source": "./adjudant",
-      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with six verbs (connect, sync, check, ramasse, dream, draw). Rigid project provisioning, locked tag schema, AGENTS.md + CLAUDE.md auto-provisioning, drift-defense via pre-commit validators. Successor to obsidian-bridge."
+      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with seven verbs (connect, port, sync, check, ramasse, dream, draw). Port migrates legacy projects (raw, obsidian-bridge, hand-authored) to adjudant compliance. Rigid spec, locked tag schema, AGENTS.md + CLAUDE.md auto-provisioning, drift-defense via pre-commit validators. Successor to obsidian-bridge."
     }
   ]
 }
