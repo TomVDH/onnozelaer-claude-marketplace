@@ -6,7 +6,10 @@ Detects project flavor (X/Y/Z) or port phase (preview/applied) and
 dispatches accordingly. See docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md.
 """
 
+import os
+import re
 from pathlib import Path
+from typing import Optional
 
 
 _TEMPLATE_SENTINEL_LINES = (
@@ -49,6 +52,61 @@ def detect_flavor(project_root: Path) -> str:
         return "Z"
 
     return "X"
+
+
+def resolve_vault_path(project_root: Path) -> Optional[Path]:
+    """Resolve the vault path for this project per spec resolution order:
+    1. OB_VAULT env var
+    2. .claude/adjudant breadcrumb (vault_path: field)
+    3. .claude/obsidian-bridge breadcrumb (vault: field)
+    4. Walk parent dirs for Home.md with `type: vault-home` frontmatter
+    5. Return None (caller must prompt)
+    """
+    env = os.environ.get("OB_VAULT")
+    if env:
+        return Path(env)
+
+    adj_breadcrumb = project_root / ".claude" / "adjudant"
+    if adj_breadcrumb.is_file():
+        path = _parse_breadcrumb_field(adj_breadcrumb, "vault_path")
+        if path:
+            return Path(path)
+
+    ob_breadcrumb = project_root / ".claude" / "obsidian-bridge"
+    if ob_breadcrumb.is_file():
+        path = _parse_breadcrumb_field(ob_breadcrumb, "vault")
+        if path:
+            return Path(path)
+
+    return _walk_up_for_vault_home(project_root)
+
+
+def _parse_breadcrumb_field(path: Path, field: str) -> Optional[str]:
+    """Parse a simple `key: value` breadcrumb file. Returns the value of `field` or None."""
+    for line in path.read_text().splitlines():
+        m = re.match(rf"^\s*{re.escape(field)}\s*:\s*(.+?)\s*$", line)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _walk_up_for_vault_home(start: Path) -> Optional[Path]:
+    """Walk parent dirs looking for Home.md with `type: vault-home` in frontmatter."""
+    current = start
+    seen = set()
+    while True:
+        resolved = current.resolve()
+        if resolved in seen or resolved == resolved.parent:
+            break
+        seen.add(resolved)
+        home = current / "Home.md"
+        if home.is_file():
+            text = home.read_text()
+            fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
+            if fm_match and re.search(r"^\s*type\s*:\s*vault-home\s*$", fm_match.group(1), re.MULTILINE):
+                return current
+        current = current.parent
+    return None
 
 
 def _is_adjudant_compliant(project_root: Path) -> bool:

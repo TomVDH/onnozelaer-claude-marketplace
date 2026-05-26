@@ -58,5 +58,54 @@ class TestDetectFlavor(unittest.TestCase):
             self.assertEqual(detect_flavor(root), "X")
 
 
+import os
+from port import resolve_vault_path
+
+
+class TestResolveVaultPath(unittest.TestCase):
+    def test_ob_vault_env_var_wins(self):
+        """OB_VAULT env var is preferred over any other resolution path."""
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["OB_VAULT"] = tmp
+            try:
+                self.assertEqual(resolve_vault_path(Path("/nonexistent")), Path(tmp))
+            finally:
+                del os.environ["OB_VAULT"]
+
+    def test_existing_adjudant_breadcrumb_returns_its_vault(self):
+        """If .claude/adjudant breadcrumb exists, its vault_path field is used."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: v\nslug: x\nmode: project\n"
+            )
+            self.assertEqual(resolve_vault_path(root), Path(vault))
+
+    def test_ob_breadcrumb_returns_its_vault(self):
+        """For Y case: read vault from .claude/obsidian-bridge breadcrumb."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(
+                f"vault: {vault}\nslug: legacy-proj\n"
+            )
+            self.assertEqual(resolve_vault_path(root), Path(vault))
+
+    def test_walk_up_finds_home_md_with_vault_home_frontmatter(self):
+        """If parent dir contains Home.md with `type: vault-home` frontmatter, that dir is the vault."""
+        with tempfile.TemporaryDirectory() as parent:
+            vault_root = Path(parent)
+            (vault_root / "Home.md").write_text("---\ntype: vault-home\n---\n\n# Vault\n")
+            child = vault_root / "projects" / "myproject"
+            child.mkdir(parents=True)
+            self.assertEqual(resolve_vault_path(child), vault_root)
+
+    def test_none_returned_when_unresolvable(self):
+        """No env var, no breadcrumbs, no Home.md anywhere up → returns None."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(resolve_vault_path(Path(tmp)))
+
+
 if __name__ == "__main__":
     unittest.main()
