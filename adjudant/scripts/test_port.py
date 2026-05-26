@@ -263,6 +263,31 @@ class TestGeneratePreviewY(unittest.TestCase):
             self.assertIn("DROPPED", summary)
 
 
+from port import generate_preview_x
+
+
+class TestGeneratePreviewX(unittest.TestCase):
+    def test_x_preview_uses_fresh_templates(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            generate_preview_x(
+                root,
+                vault_path=Path(vault),
+                slug="fresh-proj",
+                project_type="coding",
+                project_name="Fresh Project",
+            )
+            preview = root / ".adjudant-port-preview"
+            agents = (preview / "AGENTS.md.proposed").read_text()
+            claude = (preview / "CLAUDE.md.proposed").read_text()
+            self.assertIn("# Fresh Project", agents)
+            self.assertIn("`fresh-proj` · type: `coding`", agents)
+            self.assertTrue(claude.startswith("@AGENTS.md"))
+            self.assertNotIn("## From legacy AGENTS.md", agents)
+            summary = (preview / "summary.md").read_text()
+            self.assertIn("Flavor: X", summary)
+
+
 from port import render_breadcrumb
 
 

@@ -389,6 +389,63 @@ To discard: delete `.adjudant-port-preview/` and start over.
 """
 
 
+def generate_preview_x(
+    project_root: Path,
+    vault_path: Path,
+    slug: str,
+    project_type: str,
+    project_name: str,
+) -> None:
+    """For Flavor X: fresh-scaffold using templates only. No legacy parsing."""
+    preview_dir = project_root / ".adjudant-port-preview"
+    preview_dir.mkdir(exist_ok=True)
+    vault_name = vault_path.name
+
+    agents_out = render_agents_md(
+        project_name=project_name,
+        slug=slug,
+        project_type=project_type,
+        what_this_is="",
+        conventions="",
+        where_things_live_extra_rows="",
+        from_legacy="",
+    )
+    claude_out = render_claude_md(claude_specific_body="")
+    breadcrumb_out = render_breadcrumb(vault_path=vault_path, vault_name=vault_name, slug=slug, mode="project")
+
+    (preview_dir / "AGENTS.md.proposed").write_text(agents_out)
+    (preview_dir / "CLAUDE.md.proposed").write_text(claude_out)
+    (preview_dir / "breadcrumb.proposed").write_text(breadcrumb_out)
+
+    proj = vault_path / "projects" / slug
+    subfolders = _project_type_subfolders(project_type)
+    vault_changes = [f"CREATE:{proj / sub}" for sub in subfolders]
+    vault_changes.append(f"CREATE:{proj / 'brief.md'}")
+    vault_changes.append(f"REGEN:{proj / '_index.md'}")
+    vault_changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
+    (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
+
+    summary = _render_summary(
+        flavor="X",
+        vault_path=vault_path,
+        slug=slug,
+        decisions="(no legacy content — fresh scaffold)\n",
+        vault_changes=vault_changes,
+    )
+    (preview_dir / "summary.md").write_text(summary)
+
+
+def _project_type_subfolders(project_type: str) -> list[str]:
+    """Per spec, vault-standards.md per-type subfolder defaults."""
+    base = {
+        "coding":    ["decisions", "notes", "tasks", "references", "sessions", "images"],
+        "plugin":    ["decisions", "notes", "tasks", "references", "sessions", "images", "releases"],
+        "knowledge": ["notes", "sources", "references", "sessions"],
+        "tinkerage": ["sessions"],
+    }
+    return base.get(project_type, ["sessions"])
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
