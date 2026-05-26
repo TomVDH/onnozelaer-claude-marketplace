@@ -240,6 +240,16 @@ Live in `CLAUDE.md` next to this file. CLAUDE.md `@`-imports this file.
     return body
 
 
+def render_breadcrumb(vault_path: Path, vault_name: str, slug: str, mode: str) -> str:
+    """Render the .claude/adjudant breadcrumb content. Plain `key: value` lines."""
+    return (
+        f"vault_path: {vault_path}\n"
+        f"vault_name: {vault_name}\n"
+        f"slug: {slug}\n"
+        f"mode: {mode}\n"
+    )
+
+
 def render_claude_md(claude_specific_body: str) -> str:
     """Render CLAUDE.md from the template + optional claude-specific body."""
     extra = f"\n{claude_specific_body.rstrip()}\n" if claude_specific_body.strip() else ""

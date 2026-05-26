@@ -226,6 +226,23 @@ class TestRenderAgentsMd(unittest.TestCase):
         self.assertIn("| Working tree | (this folder) |", result)
 
 
+from port import render_breadcrumb
+
+
+class TestRenderBreadcrumb(unittest.TestCase):
+    def test_basic_breadcrumb_format(self):
+        result = render_breadcrumb(
+            vault_path=Path("/v"),
+            vault_name="VaultName",
+            slug="my-proj",
+            mode="project",
+        )
+        self.assertIn("vault_path: /v", result)
+        self.assertIn("vault_name: VaultName", result)
+        self.assertIn("slug: my-proj", result)
+        self.assertIn("mode: project", result)
+
+
 from port import render_claude_md
 
 
