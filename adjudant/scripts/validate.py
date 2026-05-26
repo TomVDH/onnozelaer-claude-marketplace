@@ -10,6 +10,9 @@ Validators:
   4. template-coverage      — every file-type in vault-standards has a matching template
   5. command-metadata-coherence — verbs in command-metadata.json match SKILL.md router
   6. plugin-version-set     — .claude-plugin/plugin.json has a non-empty version
+  7. port-preview-coherence  — if preview dir exists, has all required files
+  8. port-backup-integrity   — backup dirs have at least one .legacy file
+  9. gitignore-includes-port-dirs — .gitignore lists port dirs if either exists
 """
 
 import json
@@ -200,6 +203,61 @@ def validate_plugin_version_set(r: Result) -> None:
     r.add_pass(name)
 
 
+PORT_PREVIEW_REQUIRED = ["AGENTS.md.proposed", "CLAUDE.md.proposed", "breadcrumb.proposed", "vault-changes.txt", "summary.md"]
+
+
+def validate_port_preview_coherence(r: Result) -> None:
+    name = "port-preview-coherence"
+    preview = ROOT / ".adjudant-port-preview"
+    if not preview.is_dir():
+        r.add_pass(name)
+        return
+    missing = [f for f in PORT_PREVIEW_REQUIRED if not (preview / f).is_file()]
+    if missing:
+        r.add_fail(name, f"preview dir missing required files: {missing}")
+        return
+    r.add_pass(name)
+
+
+def validate_port_backup_integrity(r: Result) -> None:
+    name = "port-backup-integrity"
+    backup_root = ROOT / ".adjudant-port-backup"
+    if not backup_root.is_dir():
+        r.add_pass(name)
+        return
+    for subdir in backup_root.iterdir():
+        if subdir.is_dir():
+            has_legacy = any(f.name.endswith(".legacy") for f in subdir.iterdir())
+            if not has_legacy:
+                r.add_fail(name, f"backup dir {subdir.name} has no .legacy files")
+                return
+    r.add_pass(name)
+
+
+def validate_gitignore_includes_port_dirs(r: Result) -> None:
+    name = "gitignore-includes-port-dirs"
+    preview = ROOT / ".adjudant-port-preview"
+    backup = ROOT / ".adjudant-port-backup"
+    if not preview.is_dir() and not backup.is_dir():
+        r.add_pass(name)
+        return
+    gi = ROOT / ".gitignore"
+    if not gi.is_file():
+        r.add_fail(name, "port directories exist but .gitignore is missing")
+        return
+    text = gi.read_text()
+    required = []
+    if preview.is_dir():
+        required.append(".adjudant-port-preview/")
+    if backup.is_dir():
+        required.append(".adjudant-port-backup/")
+    missing = [e for e in required if e not in text]
+    if missing:
+        r.add_fail(name, f".gitignore missing entries: {missing}")
+        return
+    r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -209,6 +267,9 @@ def main() -> int:
     validate_template_coverage(r)
     validate_command_metadata_coherence(r)
     validate_plugin_version_set(r)
+    validate_port_preview_coherence(r)
+    validate_port_backup_integrity(r)
+    validate_gitignore_includes_port_dirs(r)
     return r.report()
 
 
