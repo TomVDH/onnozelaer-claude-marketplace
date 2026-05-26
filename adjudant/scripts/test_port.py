@@ -133,5 +133,49 @@ class TestParseMarkdownSections(unittest.TestCase):
         self.assertEqual(parse_markdown_sections(""), {})
 
 
+from port import map_ob_sections
+
+
+class TestMapObSections(unittest.TestCase):
+    def test_working_tree_maps_to_where_things_live_row(self):
+        ob_sections = {"working tree": "/path/to/repo"}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("/path/to/repo", result["where_things_live_extra_rows"])
+
+    def test_stack_maps_to_conventions(self):
+        ob_sections = {"stack": "Node 22, pnpm, Vite"}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("Node 22, pnpm, Vite", result["conventions"])
+
+    def test_vault_rules_dropped(self):
+        ob_sections = {"vault rules": "Use [[Title|Alias]] form"}
+        result = map_ob_sections(ob_sections)
+        self.assertEqual(result["conventions"], "")
+        self.assertEqual(result["where_things_live_extra_rows"], "")
+        self.assertIn("vault rules", result["decisions"])
+        self.assertIn("DROPPED", result["decisions"])
+
+    def test_claude_instructions_moved_to_claude_md(self):
+        ob_sections = {"claude instructions": "Always use /pnpm not /npm"}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("Always use /pnpm not /npm", result["claude_md_body"])
+
+    def test_what_this_is_preserved(self):
+        ob_sections = {"what this is": "A tool that does X."}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("A tool that does X.", result["what_this_is"])
+
+    def test_unmatched_heading_goes_to_legacy_section(self):
+        ob_sections = {"random heading": "Custom note"}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("Custom note", result["from_legacy"])
+        self.assertIn("random heading", result["from_legacy"])
+
+    def test_aliases_work(self):
+        ob_sections = {"purpose": "A tool."}
+        result = map_ob_sections(ob_sections)
+        self.assertIn("A tool.", result["what_this_is"])
+
+
 if __name__ == "__main__":
     unittest.main()

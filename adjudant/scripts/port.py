@@ -138,6 +138,60 @@ def parse_markdown_sections(text: str) -> dict[str, str]:
     return sections
 
 
+OB_SECTION_MAPPING = {
+    "working tree":          ("where_things_live_extra_rows", None),
+    "stack":                 ("conventions",                  None),
+    "stack and tools":       ("conventions",                  None),
+    "vault rules":           (None,                           "DROPPED — now in vault-standards.md (single source of truth)"),
+    "vault layout":          (None,                           "DROPPED — now in vault-standards.md (single source of truth)"),
+    "claude instructions":   ("claude_md_body",               None),
+    "claude-specific":       ("claude_md_body",               None),
+    "conventions":           ("conventions",                  None),
+    "project rules":         ("conventions",                  None),
+    "what this is":          ("what_this_is",                 None),
+    "purpose":               ("what_this_is",                 None),
+    "overview":              ("what_this_is",                 None),
+}
+
+
+def map_ob_sections(ob_sections: dict[str, str]) -> dict[str, str]:
+    """Apply the OB → adjudant mapping. Input keys are lowercased headings.
+
+    Returns a dict with these slots:
+      - what_this_is: prose for the "What this is" section
+      - conventions: prose for the "Conventions" section
+      - where_things_live_extra_rows: rows to append to the standard table
+      - claude_md_body: content moved to CLAUDE.md (under @AGENTS.md)
+      - from_legacy: unmatched headings, appended to AGENTS.md at end
+      - decisions: log of all mapping decisions (for summary.md)
+    """
+    result = {
+        "what_this_is": "",
+        "conventions": "",
+        "where_things_live_extra_rows": "",
+        "claude_md_body": "",
+        "from_legacy": "",
+        "decisions": "",
+    }
+
+    for heading, body in ob_sections.items():
+        slot, dropped_reason = OB_SECTION_MAPPING.get(heading, (None, None))
+
+        if dropped_reason:
+            result["decisions"] += f'- OB "## {heading}" → {dropped_reason}\n'
+        elif slot is None:
+            # Unmatched
+            result["from_legacy"] += f"### {heading}\n\n{body}\n\n"
+            result["decisions"] += f'- OB "## {heading}" → "## From legacy AGENTS.md" section at end (no template match)\n'
+        else:
+            if result[slot]:
+                result[slot] += "\n\n"
+            result[slot] += body
+            result["decisions"] += f'- OB "## {heading}" → adjudant "{slot}" (deterministic OB mapping)\n'
+
+    return result
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
