@@ -177,5 +177,54 @@ class TestMapObSections(unittest.TestCase):
         self.assertIn("A tool.", result["what_this_is"])
 
 
+from port import render_agents_md
+
+
+class TestRenderAgentsMd(unittest.TestCase):
+    def test_basic_render_has_all_template_sections(self):
+        result = render_agents_md(
+            project_name="My Project",
+            slug="my-project",
+            project_type="coding",
+            what_this_is="A tool that does X.",
+            conventions="Tabs not spaces.",
+            where_things_live_extra_rows="",
+            from_legacy="",
+        )
+        self.assertIn("# My Project", result)
+        self.assertIn("`my-project` · type: `coding`", result)
+        self.assertIn("[[projects/my-project/brief|my-project]]", result)
+        self.assertIn("A tool that does X.", result)
+        self.assertIn("Tabs not spaces.", result)
+        self.assertIn("## What this is", result)
+        self.assertIn("## Where things live", result)
+        self.assertIn("## Conventions", result)
+        self.assertIn("## Vault is canonical", result)
+
+    def test_from_legacy_section_appended_at_end(self):
+        result = render_agents_md(
+            project_name="P", slug="p", project_type="coding",
+            what_this_is="", conventions="",
+            where_things_live_extra_rows="",
+            from_legacy="### custom\n\nSome content\n",
+        )
+        self.assertIn("## From legacy AGENTS.md", result)
+        self.assertIn("Some content", result)
+        self.assertGreater(
+            result.index("## From legacy AGENTS.md"),
+            result.index("## Vault is canonical"),
+        )
+
+    def test_extra_rows_added_to_where_things_live_table(self):
+        result = render_agents_md(
+            project_name="P", slug="p", project_type="coding",
+            what_this_is="", conventions="",
+            where_things_live_extra_rows="| Custom path | `/foo/bar` |",
+            from_legacy="",
+        )
+        self.assertIn("| Custom path | `/foo/bar` |", result)
+        self.assertIn("| Working tree | (this folder) |", result)
+
+
 if __name__ == "__main__":
     unittest.main()

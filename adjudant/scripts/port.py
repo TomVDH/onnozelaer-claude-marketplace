@@ -192,6 +192,54 @@ def map_ob_sections(ob_sections: dict[str, str]) -> dict[str, str]:
     return result
 
 
+def render_agents_md(
+    project_name: str,
+    slug: str,
+    project_type: str,
+    what_this_is: str,
+    conventions: str,
+    where_things_live_extra_rows: str,
+    from_legacy: str,
+) -> str:
+    """Render a complete AGENTS.md from inputs. Matches templates/AGENTS.md shape."""
+    extra = f"\n{where_things_live_extra_rows}" if where_things_live_extra_rows else ""
+    body = f"""# {project_name}
+
+`{slug}` · type: `{project_type}` · vault: [[projects/{slug}/brief|{slug}]]
+
+> One-line purpose of this project.
+
+## What this is
+
+{what_this_is or "{Two to four sentences. Why this project exists, who it's for, what success looks like.}"}
+
+## Where things live
+
+| | |
+|---|---|
+| Working tree | (this folder) |
+| Canonical context | [[projects/{slug}/brief]] |
+| Decisions | [[projects/{slug}/decisions]] |
+| Sessions | [[projects/{slug}/sessions]] |
+| Handoff | [[projects/{slug}/_handoff]] |{extra}
+
+## Conventions
+
+{conventions or "{Project-specific guardrails. Add as they're decided. Examples: stack choices, naming rules, forbidden commands, deploy paths.}"}
+
+## Vault is canonical
+
+When asked "is X documented?" or "do we know Y?", check the vault first — repos document code, the vault documents decisions and context. Use the `adjudant` skill to read/write vault files.
+
+## Claude-specific overrides
+
+Live in `CLAUDE.md` next to this file. CLAUDE.md `@`-imports this file.
+"""
+    if from_legacy.strip():
+        body += f"\n## From legacy AGENTS.md\n\n{from_legacy.rstrip()}\n"
+    return body
+
+
 def _is_adjudant_compliant(project_root: Path) -> bool:
     """Project is compliant if all four hold:
     1. breadcrumb at .claude/adjudant exists
