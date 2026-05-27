@@ -24,3 +24,9 @@ __pycache__/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Adjudant verb working dirs (port + tidy preview/apply state)
+.adjudant-port-preview/
+.adjudant-port-backup/
+.adjudant-tidy-preview/
+.adjudant-tidy-backup/

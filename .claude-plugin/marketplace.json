@@ -32,9 +32,9 @@
     },
     {
       "name": "adjudant",
-      "version": "0.2.5",
+      "version": "0.3.0",
       "source": "./adjudant",
-      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with seven verbs (connect, port, sync, check, ramasse, dream, draw). Port migrates legacy projects (raw, obsidian-bridge, hand-authored) to adjudant compliance. Rigid spec, locked tag schema, AGENTS.md + CLAUDE.md auto-provisioning, drift-defense via pre-commit validators. Successor to obsidian-bridge."
+      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with eight verbs (connect, port, sync, check, tidy, ramasse, dream, draw). v0.3.0 introduces a Python-helper layer (dream.py, check.py, tidy.py, _vault_walk.py) that keeps verb invocation under context budget for large projects. Tidy implements the mechanical sweep (was the ramasse spec); ramasse is reserved for the deep planning verb. Rigid spec, locked tag schema, drift-defense via pre-commit validators."
     }
   ]
 }

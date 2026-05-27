@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "verbs": [
     {
       "name": "connect",
@@ -22,19 +22,25 @@
     },
     {
       "name": "check",
-      "description": "Read-only summary — project state, vault snapshot, schema compliance. Never writes.",
+      "description": "Read-only summary — project state, vault snapshot, schema compliance. Calls check.py for the scan, Claude renders. Never writes.",
       "argumentHint": "(no args)",
       "reference": "reference/check.md"
     },
     {
+      "name": "tidy",
+      "description": "Mechanical vault sweep — rebuild _index.md, normalise tags per locked schema, fix wikilink form, bump updated:. Two-phase: tidy.py preview, then tidy.py apply. Idempotent.",
+      "argumentHint": "(no args)",
+      "reference": "reference/tidy.md"
+    },
+    {
       "name": "ramasse",
-      "description": "Tidy vault — rebuild _index.md, normalize tags, fix wikilink form. Use --vault for vault-wide sweep.",
-      "argumentHint": "[--vault]",
+      "description": "Deep structural refactor — used sparingly. Leverages superpowers (brainstorming, writing-plans, executing-plans) to draft a content-arrangement plan. Distinct from tidy's mechanical sweep.",
+      "argumentHint": "(no args)",
       "reference": "reference/ramasse.md"
     },
     {
       "name": "dream",
-      "description": "Diagnostic crawl — drift report (frontmatter, tags, naming, folders), broken wikilinks, doc/decision mismatches. Reports only, no auto-fix.",
+      "description": "Diagnostic crawl — drift report (frontmatter, tags, naming, folders), broken wikilinks, doc/decision mismatches. Calls dream.py for the scan, Claude renders the narrative. Reports only, no auto-fix.",
       "argumentHint": "(no args)",
       "reference": "reference/dream.md"
     },

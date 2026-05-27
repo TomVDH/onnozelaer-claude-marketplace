@@ -1,0 +1,743 @@
+#!/usr/bin/env python3
+"""Adjudant tidy — mechanical vault sweep.
+
+Four features (locked spec — replaces the old ramasse mechanical surface):
+  1. Rebuild `_index.md` in every project subfolder with ≥2 same-type siblings
+  2. Bump `updated:` frontmatter on touched files (doc, brief, note types)
+  3. Normalise tags per locked 2026-05-25 schema (drop Bucket D, migrate Bucket B)
+  4. Rewrite `[text](path.md)` → `[[path-stem|text]]` when path resolves in vault
+
+Idempotent: a second run with no fresh drift = no changes.
+
+Phases (mirrors port.py):
+  detect   — print one of: 'fresh' | 'preview' | 'applied'
+  preview  — write .adjudant-tidy-preview/ with proposed changes (read-only sweep)
+  apply    — backup live files to .adjudant-tidy-backup/{ts}/, then apply preview
+
+CLI:
+    python3 tidy.py detect  --project-dir PATH
+    python3 tidy.py preview --project-dir PATH [--vault-dir PATH]
+    python3 tidy.py apply   --project-dir PATH
+
+See docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import shutil
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+
+from _vault_walk import (
+    BUCKET_A_TYPES,
+    BUCKET_B_MIGRATIONS,
+    INDEX_EXEMPT_FOLDERS,
+    VaultFile,
+    build_vault_index,
+    is_bucket_b_migration,
+    is_bucket_d_tag,
+    parse_frontmatter,
+    resolve_vault,
+    resolve_wikilink,
+    walk_project,
+)
+
+
+def _migrate_ob_to_bucket_a(tag: str) -> Optional[str]:
+    """If tag is `ob/<bucket-A-type>`, return the bare type. Else None.
+
+    Preserves the file-type tag mandate (§2A) when dropping `ob/*` prefix.
+    """
+    if not tag.startswith("ob/"):
+        return None
+    bare = tag[3:]
+    if bare in BUCKET_A_TYPES:
+        return bare
+    return None
+
+
+PREVIEW_DIR_NAME = ".adjudant-tidy-preview"
+BACKUP_DIR_NAME = ".adjudant-tidy-backup"
+
+DATE_PREFIX_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:-(.*))?$")
+
+# Types eligible for `updated:` bump (per spec)
+UPDATED_BUMP_TYPES = {"doc", "project", "note"}
+
+
+# ============================================================
+# Detection
+# ============================================================
+
+
+def detect_phase(project_dir: Path) -> str:
+    """Return 'preview' if preview dir exists, 'applied' if backup but no preview,
+    else 'fresh'."""
+    preview = project_dir / PREVIEW_DIR_NAME
+    backup = project_dir / BACKUP_DIR_NAME
+    if preview.is_dir():
+        return "preview"
+    if backup.is_dir() and any(backup.iterdir()):
+        return "applied"
+    return "fresh"
+
+
+# ============================================================
+# Tag normalisation
+# ============================================================
+
+
+def normalize_tags(tags: list[str], project_slug: Optional[str]) -> tuple[list[str], list[str]]:
+    """Return (new_tags, dropped_tags). Preserves order, removes duplicates."""
+    seen: set[str] = set()
+    new: list[str] = []
+    dropped: list[str] = []
+    for t in tags:
+        if not isinstance(t, str) or not t.strip():
+            continue
+        tag = t.strip()
+        # Bucket B migration first (cabinet/*)
+        migration = is_bucket_b_migration(tag)
+        if migration:
+            if migration not in seen:
+                new.append(migration)
+                seen.add(migration)
+            dropped.append(f"{tag} → {migration}")
+            continue
+        # ob/{bucket-A-type} → {bucket-A-type} (preserves §2A file-type tag)
+        ob_migration = _migrate_ob_to_bucket_a(tag)
+        if ob_migration:
+            if ob_migration not in seen:
+                new.append(ob_migration)
+                seen.add(ob_migration)
+            dropped.append(f"{tag} → {ob_migration}")
+            continue
+        # Bucket D drop
+        if is_bucket_d_tag(tag, project_slug=project_slug):
+            dropped.append(tag)
+            continue
+        # Keep
+        if tag not in seen:
+            new.append(tag)
+            seen.add(tag)
+    return new, dropped
+
+
+# ============================================================
+# Wikilink form fix
+# ============================================================
+
+
+_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md(?:#[^)\s]*)?)\)")
+
+
+def fix_wikilink_form(body: str, vault_index: set[str]) -> tuple[str, int]:
+    """Rewrite `[text](path.md)` → `[[stem|text]]` IFF path resolves in vault.
+
+    Returns (new_body, fix_count). Skips code blocks.
+    """
+    if not vault_index:
+        return body, 0
+    fixed_count = 0
+    out_lines = []
+    in_fenced = False
+    for line in body.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fenced = not in_fenced
+            out_lines.append(line)
+            continue
+        if in_fenced:
+            out_lines.append(line)
+            continue
+        def _sub(m):
+            nonlocal fixed_count
+            text = m.group(1)
+            path = m.group(2)
+            stem = path.split("#", 1)[0]
+            if resolve_wikilink(stem, vault_index):
+                # Compute display stem without extension
+                no_ext = stem[:-3] if stem.endswith(".md") else stem
+                stem_basename = no_ext.split("/")[-1]
+                # If display text matches the basename, skip the alias
+                if text.strip() == stem_basename or text.strip() == no_ext:
+                    fixed_count += 1
+                    return f"[[{no_ext}]]"
+                fixed_count += 1
+                return f"[[{no_ext}|{text}]]"
+            return m.group(0)
+        out_lines.append(_MD_LINK_RE.sub(_sub, line))
+    return "\n".join(out_lines), fixed_count
+
+
+# ============================================================
+# Index regeneration
+# ============================================================
+
+
+def _capitalize_folder_name(name: str) -> str:
+    name = name.replace("-", " ").replace("_", " ")
+    return " ".join(w.capitalize() for w in name.split())
+
+
+def _sort_entries(entries: list[Path]) -> list[Path]:
+    """Sort: reverse-chronological for date-prefixed, alphabetical otherwise.
+    Mixed sets: date entries first (reverse chrono), then plain alphabetical."""
+    dated = []
+    plain = []
+    for f in entries:
+        m = DATE_PREFIX_RE.match(f.stem)
+        if m and m.group(1):
+            dated.append((m.group(1), f))
+        else:
+            plain.append(f)
+    if dated and not plain:
+        return [f for _, f in sorted(dated, key=lambda x: x[0], reverse=True)]
+    if not dated and plain:
+        return sorted(plain, key=lambda x: x.stem)
+    return (
+        [f for _, f in sorted(dated, key=lambda x: x[0], reverse=True)]
+        + sorted(plain, key=lambda x: x.stem)
+    )
+
+
+def _format_entry_bullet(f: Path) -> str:
+    stem = f.stem
+    m = DATE_PREFIX_RE.match(stem)
+    if m and m.group(1) and m.group(2):
+        display = f"{m.group(1)} {m.group(2).replace('-', ' ')}"
+    else:
+        display = stem.replace("-", " ").replace("_", " ")
+    return f"- [[{stem}|{display}]]"
+
+
+def generate_index_content(
+    folder_name: str,
+    entries: list[Path],
+    project_slug: Optional[str],
+) -> str:
+    """Generate canonical `_index.md` content for a folder with no existing index."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    pretty = _capitalize_folder_name(folder_name)
+    sorted_entries = _sort_entries(entries)
+    rows = [_format_entry_bullet(f) for f in sorted_entries]
+    project_line = f'project: "[[../brief|{project_slug}]]"\n' if project_slug else ""
+    return (
+        "---\n"
+        "type: index\n"
+        + project_line
+        + f"updated: {today}\n"
+        "tags:\n"
+        "  - index\n"
+        "---\n\n"
+        f"# {pretty}\n\n"
+        "## Entries\n\n"
+        + "\n".join(rows)
+        + "\n"
+    )
+
+
+_ENTRIES_HEADING_RE = re.compile(r"^##\s+entries\b", re.IGNORECASE)
+_NEXT_H2_RE = re.compile(r"^##\s+")
+_BULLET_LINK_RE = re.compile(r"^\s*-\s+\[\[")
+
+
+def _find_entries_section_in_body(body: str) -> Optional[tuple[int, int]]:
+    """Locate the `## Entries` section. Returns (content_start, content_end)
+    as 0-indexed line bounds (end exclusive). Excludes the heading itself.
+    Returns None if no `## Entries` heading exists.
+    """
+    lines = body.split("\n")
+    heading_idx = None
+    for i, line in enumerate(lines):
+        if _ENTRIES_HEADING_RE.match(line.strip()):
+            heading_idx = i
+            break
+    if heading_idx is None:
+        return None
+    start = heading_idx + 1
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if _NEXT_H2_RE.match(lines[i]):
+            end = i
+            break
+    return (start, end)
+
+
+def _section_is_bullet_list(lines: list[str]) -> bool:
+    """True if section content is predominantly `- [[wikilink]]` bullets."""
+    non_blank = [l for l in lines if l.strip()]
+    if not non_blank:
+        return True  # empty section — safe to fill
+    bullets = [l for l in non_blank if _BULLET_LINK_RE.match(l)]
+    return len(bullets) >= max(1, len(non_blank) // 2)
+
+
+def upsert_index_content(
+    existing_text: str,
+    folder_name: str,
+    entries: list[Path],
+    project_slug: Optional[str],
+) -> tuple[str, str]:
+    """Conservatively update an existing `_index.md`.
+
+    Behaviour:
+      - Normalise frontmatter tags (drop Bucket D, migrate Bucket B + ob/*)
+      - Bump `updated:` to today (if field present)
+      - If body has `## Entries` heading with bullet-list content: replace bullets,
+        keep heading + everything else. mode='upserted'.
+      - If body has `## Entries` with non-bullet content (table, prose): leave
+        body alone (only frontmatter changes). mode='frontmatter_only'.
+      - If no `## Entries` heading: leave body alone. mode='frontmatter_only'.
+
+    Returns (new_text, mode).
+    """
+    today = datetime.now().strftime("%Y-%m-%d")
+    fm, body = parse_frontmatter(existing_text)
+
+    # Frontmatter side: normalize tags + bump updated
+    new_text = existing_text
+    fm_tags = fm.fields.get("tags") if isinstance(fm.fields.get("tags"), list) else []
+    new_tags, _ = normalize_tags([str(t) for t in fm_tags] if fm_tags else [], project_slug)
+    # Ensure 'index' is present (this IS an index)
+    if "index" not in new_tags:
+        new_tags = ["index"] + new_tags
+    new_text = _rewrite_tags_block(new_text, new_tags)
+    new_text = _bump_updated_field(new_text, today)
+
+    # Body side: try entries upsert
+    # Re-parse to get the body AFTER frontmatter changes
+    fm2, body2 = parse_frontmatter(new_text)
+    section = _find_entries_section_in_body(body2)
+    if section is None:
+        return new_text, "frontmatter_only"
+
+    start, end = section
+    body_lines = body2.split("\n")
+    section_lines = body_lines[start:end]
+    if not _section_is_bullet_list(section_lines):
+        return new_text, "frontmatter_only"
+
+    # Generate new entry bullets
+    sorted_entries = _sort_entries(entries)
+    new_bullets = [_format_entry_bullet(f) for f in sorted_entries]
+
+    # Replace section content: keep leading/trailing blank lines if any in original style
+    # Use one blank before bullets, one trailing blank
+    new_section = [""] + new_bullets + [""]
+    # Trim trailing blank from input section if we'd duplicate
+    while new_section and new_section[-1] == "" and end < len(body_lines) and body_lines[end - 1] == "":
+        # already blank-padded
+        break
+
+    new_body_lines = body_lines[:start] + new_section + body_lines[end:]
+    new_body = "\n".join(new_body_lines)
+
+    # Reassemble: keep frontmatter from new_text, replace body
+    new_text = _strip_then_prepend_body(new_text, new_body)
+    return new_text, "upserted"
+
+
+# ============================================================
+# File content rewriter — surgical edit of tags + body wikilinks + updated
+# ============================================================
+
+
+def _rewrite_tags_block(text: str, new_tags: list[str]) -> str:
+    """Surgically replace the `tags:` block in frontmatter with new_tags.
+
+    Handles two existing forms: list (`tags:\\n  - foo`) and missing.
+    If the file has no `tags:` field, adds one before the closing `---`.
+    If new_tags is empty, removes the block.
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip() != "---":
+        return text
+
+    # Find frontmatter closing index
+    close_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            close_idx = i
+            break
+    if close_idx is None:
+        return text
+
+    fm_lines = lines[1:close_idx]
+    # Find existing tags block
+    tags_start = None
+    tags_end = None
+    for i, ln in enumerate(fm_lines):
+        if re.match(r"^tags\s*:", ln):
+            tags_start = i
+            # find end: subsequent indented list items
+            j = i + 1
+            while j < len(fm_lines):
+                if re.match(r"^\s+-\s+", fm_lines[j]):
+                    j += 1
+                else:
+                    break
+            tags_end = j
+            break
+
+    new_block: list[str] = []
+    if new_tags:
+        new_block.append("tags:")
+        for t in new_tags:
+            new_block.append(f"  - {t}")
+
+    if tags_start is not None:
+        # Replace [tags_start:tags_end] with new_block
+        fm_lines = fm_lines[:tags_start] + new_block + fm_lines[tags_end:]
+    else:
+        # Add tags block before close (only if there are tags to add)
+        if new_tags:
+            fm_lines = fm_lines + new_block
+
+    return "\n".join([lines[0]] + fm_lines + lines[close_idx:])
+
+
+def _bump_updated_field(text: str, today: str) -> str:
+    """If frontmatter has `updated:`, set it to today. Does NOT add the field."""
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip() != "---":
+        return text
+    close_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            close_idx = i
+            break
+    if close_idx is None:
+        return text
+    for i in range(1, close_idx):
+        m = re.match(r"^(updated\s*:\s*).*$", lines[i])
+        if m:
+            lines[i] = f"{m.group(1)}{today}"
+            break
+    return "\n".join(lines)
+
+
+# ============================================================
+# Preview build
+# ============================================================
+
+
+def build_preview(
+    project_dir: Path,
+    vault_index: set[str],
+    project_slug: Optional[str],
+) -> dict[str, Any]:
+    """Walk project, compute all proposed changes, return a change-set dict
+    (not yet written to disk). Caller serialises it.
+    """
+    files = list(walk_project(project_dir))
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Bucket: per-file proposed full content (only when content changes)
+    file_proposals: dict[str, dict[str, Any]] = {}
+    # Index proposals (always-regenerated)
+    index_proposals: dict[str, dict[str, Any]] = {}
+
+    # --- Feature 1: index rebuilds ---
+    from collections import defaultdict
+    by_parent: dict[Path, list[VaultFile]] = defaultdict(list)
+    for f in files:
+        parent = f.rel_path.parent
+        if parent == Path("."):
+            continue
+        by_parent[parent].append(f)
+
+    for parent, members in by_parent.items():
+        # Skip exempt folders
+        if any(p in INDEX_EXEMPT_FOLDERS for p in parent.parts):
+            continue
+        non_index = [m for m in members if m.rel_path.name != "_index.md"]
+        if len(non_index) < 2:
+            continue
+        idx_rel = str(parent / "_index.md")
+        existing_path = project_dir / parent / "_index.md"
+
+        if existing_path.is_file():
+            existing = existing_path.read_text(errors="replace")
+            proposed, mode = upsert_index_content(
+                existing,
+                folder_name=parent.name,
+                entries=[m.rel_path for m in non_index],
+                project_slug=project_slug,
+            )
+            if proposed.strip() != existing.strip():
+                index_proposals[idx_rel] = {
+                    "folder": str(parent),
+                    "had_existing": True,
+                    "mode": mode,
+                    "entry_count": len(non_index),
+                    "proposed_content": proposed,
+                }
+        else:
+            proposed = generate_index_content(
+                folder_name=parent.name,
+                entries=[m.rel_path for m in non_index],
+                project_slug=project_slug,
+            )
+            index_proposals[idx_rel] = {
+                "folder": str(parent),
+                "had_existing": False,
+                "mode": "generated",
+                "entry_count": len(non_index),
+                "proposed_content": proposed,
+            }
+
+    # --- Features 2-4: per-file edits ---
+    for f in files:
+        original = f.path.read_text(errors="replace")
+        modified = original
+
+        # Feature 3: tag normalisation
+        if f.tags_frontmatter:
+            new_tags, dropped = normalize_tags(f.tags_frontmatter, project_slug)
+            if dropped:
+                modified = _rewrite_tags_block(modified, new_tags)
+
+        # Feature 4: wikilink form fix
+        fm, body = parse_frontmatter(modified)
+        new_body, wf_count = fix_wikilink_form(body, vault_index)
+        if wf_count > 0:
+            # Re-assemble: original frontmatter prefix + new body
+            modified = _strip_then_prepend_body(modified, new_body)
+
+        # Feature 2: bump updated (only if other changes happened, and only on eligible types)
+        if modified != original and f.file_type in UPDATED_BUMP_TYPES:
+            modified = _bump_updated_field(modified, today)
+
+        if modified != original:
+            rel = str(f.rel_path)
+            file_proposals[rel] = {
+                "original_hash": _hash_short(original),
+                "proposed_hash": _hash_short(modified),
+                "proposed_content": modified,
+            }
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "project_dir": str(project_dir),
+        "project_slug": project_slug,
+        "summary": {
+            "files_modified": len(file_proposals),
+            "indexes_rebuilt": len(index_proposals),
+            "total_changes": len(file_proposals) + len(index_proposals),
+        },
+        "file_proposals": file_proposals,
+        "index_proposals": index_proposals,
+    }
+
+
+def _strip_then_prepend_body(text: str, new_body: str) -> str:
+    """Replace the body portion of a file (keeping frontmatter intact)."""
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip() != "---":
+        return new_body
+    close_idx = None
+    for i in range(1, len(lines)):
+        if lines[i].rstrip() == "---":
+            close_idx = i
+            break
+    if close_idx is None:
+        return new_body
+    return "\n".join(lines[: close_idx + 1]) + "\n" + new_body
+
+
+def _hash_short(s: str) -> str:
+    """8-char hex content hash (for visual diff confidence in summary)."""
+    import hashlib
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()[:8]
+
+
+# ============================================================
+# Preview writer (disk)
+# ============================================================
+
+
+def write_preview_to_disk(project_dir: Path, change_set: dict[str, Any]) -> Path:
+    """Write the change_set to .adjudant-tidy-preview/. Returns preview path."""
+    preview = project_dir / PREVIEW_DIR_NAME
+    if preview.exists():
+        shutil.rmtree(preview)
+    preview.mkdir()
+
+    # changes.json
+    (preview / "changes.json").write_text(json.dumps(change_set, indent=2, default=str))
+
+    # files/ tree
+    files_root = preview / "files"
+    files_root.mkdir()
+    for rel, info in change_set["file_proposals"].items():
+        target = files_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(info["proposed_content"])
+    for rel, info in change_set["index_proposals"].items():
+        target = files_root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(info["proposed_content"])
+
+    # summary.md
+    summary_lines = [
+        "# Tidy preview",
+        "",
+        f"Generated: {change_set['generated_at']}",
+        f"Project: {change_set['project_slug']}",
+        "",
+        "## Summary",
+        "",
+        f"- Files to modify: {change_set['summary']['files_modified']}",
+        f"- Indexes to rebuild: {change_set['summary']['indexes_rebuilt']}",
+        f"- Total changes: {change_set['summary']['total_changes']}",
+        "",
+        "## Index rebuilds",
+        "",
+    ]
+    for rel, info in sorted(change_set["index_proposals"].items()):
+        if not info["had_existing"]:
+            marker = "create"
+        elif info.get("mode") == "frontmatter_only":
+            marker = "frontmatter-only"
+        elif info.get("mode") == "upserted":
+            marker = "upsert-entries"
+        else:
+            marker = "rewrite"
+        summary_lines.append(f"- {marker}: `{rel}` ({info['entry_count']} entries)")
+    summary_lines.append("")
+    summary_lines.append("## File modifications")
+    summary_lines.append("")
+    for rel, info in sorted(change_set["file_proposals"].items()):
+        summary_lines.append(f"- `{rel}` ({info['original_hash']} → {info['proposed_hash']})")
+    summary_lines.append("")
+    summary_lines.append("## Next steps")
+    summary_lines.append("")
+    summary_lines.append("- Review the proposed files under `files/`")
+    summary_lines.append("- To apply: `python3 tidy.py apply --project-dir <PATH>`")
+    summary_lines.append(f"- To discard: delete `{PREVIEW_DIR_NAME}/`")
+    (preview / "summary.md").write_text("\n".join(summary_lines) + "\n")
+
+    return preview
+
+
+# ============================================================
+# Apply phase
+# ============================================================
+
+
+def apply_preview(project_dir: Path) -> Path:
+    """Apply .adjudant-tidy-preview/ to live files. Returns backup dir path."""
+    preview = project_dir / PREVIEW_DIR_NAME
+    if not preview.is_dir():
+        raise RuntimeError(f"no preview at {preview}")
+    changes_path = preview / "changes.json"
+    if not changes_path.is_file():
+        raise RuntimeError(f"corrupt preview: {changes_path} missing")
+    change_set = json.loads(changes_path.read_text())
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = project_dir / BACKUP_DIR_NAME / timestamp
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    files_root = preview / "files"
+
+    # Backup + apply
+    for rel_set in (change_set["file_proposals"], change_set["index_proposals"]):
+        for rel in rel_set.keys():
+            live = project_dir / rel
+            proposed = files_root / rel
+            if not proposed.is_file():
+                continue
+            # Backup live (if exists)
+            if live.is_file():
+                backup_target = backup_dir / (rel + ".legacy")
+                backup_target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(live, backup_target)
+            # Apply
+            live.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(proposed, live)
+
+    # Clean up preview
+    shutil.rmtree(preview)
+    return backup_dir
+
+
+# ============================================================
+# CLI
+# ============================================================
+
+
+def cli_main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="tidy.py",
+        description="Adjudant tidy — mechanical sweep (preview / apply).",
+    )
+    parser.add_argument("phase", choices=["detect", "preview", "apply"])
+    parser.add_argument("--project-dir", default=".", help="Project root (default: cwd)")
+    parser.add_argument("--vault-dir", help="Vault root (default: resolved from breadcrumb)")
+    args = parser.parse_args(argv)
+
+    project_dir = Path(args.project_dir).expanduser().resolve()
+    if not project_dir.is_dir():
+        print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
+        return 1
+
+    if args.phase == "detect":
+        print(detect_phase(project_dir))
+        return 0
+
+    # Resolve vault for both preview + apply (preview needs index for feature 4;
+    # apply just needs project_dir but we keep the same flag for parity).
+    vault_dir: Optional[Path]
+    if args.vault_dir:
+        vault_dir = Path(args.vault_dir).expanduser().resolve()
+    else:
+        vault_dir = resolve_vault(project_dir)
+
+    # Project slug: from brief.md
+    slug: Optional[str] = None
+    brief = project_dir / "brief.md"
+    if brief.is_file():
+        fm, _ = parse_frontmatter(brief.read_text(errors="replace"))
+        s = fm.fields.get("slug")
+        if isinstance(s, str):
+            slug = s
+
+    if args.phase == "preview":
+        if detect_phase(project_dir) == "preview":
+            print(f"error: preview already exists at {project_dir / PREVIEW_DIR_NAME}", file=sys.stderr)
+            print("delete it or run 'apply' to commit it", file=sys.stderr)
+            return 1
+        vault_index = build_vault_index(vault_dir) if vault_dir and vault_dir.is_dir() else set()
+        change_set = build_preview(project_dir, vault_index, slug)
+        preview = write_preview_to_disk(project_dir, change_set)
+        print(f"[tidy] preview written to {preview}", file=sys.stderr)
+        summary = change_set["summary"]
+        print(
+            f"[tidy] {summary['total_changes']} changes "
+            f"({summary['files_modified']} files, {summary['indexes_rebuilt']} indexes)",
+            file=sys.stderr,
+        )
+        # Stdout: compact JSON of the summary block for Claude
+        print(json.dumps(summary))
+        return 0
+
+    if args.phase == "apply":
+        if detect_phase(project_dir) != "preview":
+            print(f"error: no preview at {project_dir / PREVIEW_DIR_NAME}; run 'preview' first", file=sys.stderr)
+            return 1
+        backup_dir = apply_preview(project_dir)
+        print(f"[tidy] applied; backup at {backup_dir}", file=sys.stderr)
+        print(json.dumps({"backup_dir": str(backup_dir)}))
+        return 0
+
+    return 2  # unreachable
+
+
+if __name__ == "__main__":
+    sys.exit(cli_main())

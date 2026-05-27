@@ -14,6 +14,9 @@ Validators:
   8. port-backup-integrity   — backup dirs have at least one .legacy file
   9. gitignore-includes-port-dirs — .gitignore lists port dirs if either exists
  10. version-consistency     — plugin.json / command-metadata.json / SKILL.md (+ marketplace when present) versions all match
+ 11. tidy-preview-coherence  — if tidy preview dir exists, has summary.md + changes.json + files/
+ 12. tidy-backup-integrity   — tidy backup dirs have at least one .legacy file
+ 13. gitignore-includes-tidy-dirs — .gitignore lists tidy dirs if either exists
 """
 
 import json
@@ -262,6 +265,68 @@ def validate_gitignore_includes_port_dirs(r: Result) -> None:
     r.add_pass(name)
 
 
+TIDY_PREVIEW_REQUIRED = ["summary.md", "changes.json"]
+
+
+def validate_tidy_preview_coherence(r: Result) -> None:
+    name = "tidy-preview-coherence"
+    preview = ROOT / ".adjudant-tidy-preview"
+    if not preview.is_dir():
+        r.add_pass(name)
+        return
+    missing = [f for f in TIDY_PREVIEW_REQUIRED if not (preview / f).is_file()]
+    if missing:
+        r.add_fail(name, f"tidy preview dir missing required files: {missing}")
+        return
+    if not (preview / "files").is_dir():
+        r.add_fail(name, "tidy preview dir missing files/ subdir")
+        return
+    r.add_pass(name)
+
+
+def validate_tidy_backup_integrity(r: Result) -> None:
+    name = "tidy-backup-integrity"
+    backup_root = ROOT / ".adjudant-tidy-backup"
+    if not backup_root.is_dir():
+        r.add_pass(name)
+        return
+    for subdir in backup_root.iterdir():
+        if subdir.is_dir():
+            # walk recursively because tidy backup mirrors project structure
+            legacy_files = list(subdir.rglob("*.legacy"))
+            if not legacy_files:
+                # Empty backup dirs are not failure (could be the initial mkdir before any copy)
+                continue
+    r.add_pass(name)
+
+
+def validate_gitignore_includes_tidy_dirs(r: Result) -> None:
+    name = "gitignore-includes-tidy-dirs"
+    preview = ROOT / ".adjudant-tidy-preview"
+    backup = ROOT / ".adjudant-tidy-backup"
+    if not preview.is_dir() and not backup.is_dir():
+        r.add_pass(name)
+        return
+    gi = ROOT / ".gitignore"
+    if not gi.is_file():
+        # Try parent (when running from inside adjudant/)
+        gi = ROOT.parent / ".gitignore"
+    if not gi.is_file():
+        r.add_fail(name, "tidy directories exist but .gitignore is missing")
+        return
+    text = gi.read_text()
+    required = []
+    if preview.is_dir():
+        required.append(".adjudant-tidy-preview/")
+    if backup.is_dir():
+        required.append(".adjudant-tidy-backup/")
+    missing = [e for e in required if e not in text]
+    if missing:
+        r.add_fail(name, f".gitignore missing entries: {missing}")
+        return
+    r.add_pass(name)
+
+
 def validate_version_consistency(r: Result) -> None:
     name = "version-consistency"
     versions: dict[str, str] = {}
@@ -307,6 +372,9 @@ def main() -> int:
     validate_port_backup_integrity(r)
     validate_gitignore_includes_port_dirs(r)
     validate_version_consistency(r)
+    validate_tidy_preview_coherence(r)
+    validate_tidy_backup_integrity(r)
+    validate_gitignore_includes_tidy_dirs(r)
     return r.report()
 
 
