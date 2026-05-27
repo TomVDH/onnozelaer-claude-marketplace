@@ -30,3 +30,6 @@ __pycache__/
 .adjudant-port-backup/
 .adjudant-tidy-preview/
 .adjudant-tidy-backup/
+
+# Adjudant breadcrumb (project-local)
+.claude/adjudant
