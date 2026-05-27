@@ -1,8 +1,25 @@
-"""Tests for adjudant/scripts/sync.py."""
+"""Tests for adjudant/scripts/sync.py and adjudant/hooks/scripts/precompact.py."""
 
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+# Allow importing precompact from the sibling hooks/scripts directory
+_HOOKS_SCRIPTS = Path(__file__).parent.parent / "hooks" / "scripts"
+if str(_HOOKS_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_HOOKS_SCRIPTS))
+
+from precompact import (
+    HARVEST_MAX_CHARS,
+    HARVEST_N_MSGS,
+    extract_transcript_text,
+    harvest_with_gemini,
+    sync_handoff,
+)
 
 from sync import (
     find_remember_source,
@@ -154,6 +171,170 @@ class TestRunSyncEndToEnd(unittest.TestCase):
             # No breadcrumb
             with self.assertRaises(RuntimeError):
                 run_sync(Path(tmp))
+
+
+# ============================================================
+# PreCompact: harvest_with_gemini failure modes
+# ============================================================
+
+
+class TestHarvestMissingTranscript(unittest.TestCase):
+
+    def test_harvest_returns_empty_on_missing_transcript(self):
+        result = harvest_with_gemini(Path("/nonexistent/path/transcript.jsonl"))
+        self.assertEqual(result, "")
+
+
+class TestHarvestUnparseableTranscript(unittest.TestCase):
+
+    def test_harvest_returns_empty_on_unparseable_transcript(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            t.write_text("this is not valid jsonl\njust plain text\n")
+            result = harvest_with_gemini(t)
+            self.assertEqual(result, "")
+
+
+class TestHarvestGeminiTimeout(unittest.TestCase):
+
+    def test_harvest_returns_empty_on_gemini_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            t.write_text(
+                json.dumps({"role": "user", "content": "Hello, world"}) + "\n"
+            )
+            with patch("precompact.subprocess.run",
+                       side_effect=subprocess.TimeoutExpired(cmd="gemini", timeout=30)):
+                result = harvest_with_gemini(t)
+        self.assertEqual(result, "")
+
+
+class TestHarvestNonZeroExit(unittest.TestCase):
+
+    def test_harvest_returns_empty_on_non_zero_exit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            t.write_text(
+                json.dumps({"role": "user", "content": "Hello, world"}) + "\n"
+            )
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_result.stdout = "- some bullet"
+            with patch("precompact.subprocess.run", return_value=mock_result):
+                result = harvest_with_gemini(t)
+        self.assertEqual(result, "")
+
+
+class TestHarvestNonBulletOutput(unittest.TestCase):
+
+    def test_harvest_returns_empty_on_non_bullet_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            t.write_text(
+                json.dumps({"role": "user", "content": "Hello, world"}) + "\n"
+            )
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "I'm sorry, I can't help with that."
+            with patch("precompact.subprocess.run", return_value=mock_result):
+                result = harvest_with_gemini(t)
+        self.assertEqual(result, "")
+
+
+class TestHarvestSuccess(unittest.TestCase):
+
+    def test_harvest_returns_bullets_on_success(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            t.write_text(
+                json.dumps({"role": "user", "content": "Implement the feature"}) + "\n"
+                + json.dumps({"role": "assistant", "content": "Done"}) + "\n"
+            )
+            expected = "- decision 1\n- decision 2"
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = expected
+            with patch("precompact.subprocess.run", return_value=mock_result):
+                result = harvest_with_gemini(t)
+        self.assertEqual(result, expected)
+
+
+# ============================================================
+# PreCompact: sync_handoff harvest injection
+# ============================================================
+
+
+class TestSyncHandoffHarvestInjection(unittest.TestCase):
+
+    def _make_env(self, tmp: str) -> tuple:
+        proj = Path(tmp) / "code"
+        proj.mkdir()
+        vault = Path(tmp) / "vault"
+        vault.mkdir()
+        (vault / "projects").mkdir()
+        (vault / "projects" / "p").mkdir()
+        (proj / ".remember").mkdir()
+        (proj / ".remember" / "now.md").write_text("state body\n")
+        return proj, vault
+
+    def test_sync_handoff_includes_harvest_when_provided(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj, vault = self._make_env(tmp)
+            sync_handoff(proj, vault, "p", "2026-05-27", "14:00",
+                         harvest="- decision made\n- blocker found")
+            content = (vault / "projects" / "p" / "_handoff.md").read_text()
+            self.assertIn("## Gemini harvest", content)
+            self.assertIn("- decision made", content)
+            self.assertIn("- blocker found", content)
+
+    def test_sync_handoff_omits_harvest_when_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj, vault = self._make_env(tmp)
+            sync_handoff(proj, vault, "p", "2026-05-27", "14:00", harvest="")
+            content = (vault / "projects" / "p" / "_handoff.md").read_text()
+            self.assertNotIn("## Gemini harvest", content)
+
+
+# ============================================================
+# PreCompact: extract_transcript_text
+# ============================================================
+
+
+class TestExtractTranscriptText(unittest.TestCase):
+
+    def test_extract_transcript_text_strips_tool_calls(self):
+        """tool_use and tool_result content blocks are excluded; only text survives."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            lines = [
+                json.dumps({"role": "user", "content": "plain text message"}),
+                json.dumps({"role": "assistant", "content": [
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "ls"}},
+                    {"type": "text", "text": "visible assistant text"},
+                ]}),
+                json.dumps({"role": "tool", "content": [
+                    {"type": "tool_result", "content": "tool output here"},
+                ]}),
+            ]
+            t.write_text("\n".join(lines) + "\n")
+            result = extract_transcript_text(t)
+            self.assertIn("plain text message", result)
+            self.assertIn("visible assistant text", result)
+            # tool_use name and tool_result content should not appear as text
+            self.assertNotIn("tool output here", result)
+
+    def test_extract_transcript_text_truncates_to_max_chars(self):
+        """Output must not exceed HARVEST_MAX_CHARS characters."""
+        with tempfile.TemporaryDirectory() as tmp:
+            t = Path(tmp) / "transcript.jsonl"
+            # Write enough messages to exceed the limit
+            lines = [
+                json.dumps({"role": "user", "content": "x" * 1000})
+                for _ in range(20)
+            ]
+            t.write_text("\n".join(lines) + "\n")
+            result = extract_transcript_text(t)
+            self.assertLessEqual(len(result), HARVEST_MAX_CHARS)
 
 
 if __name__ == "__main__":

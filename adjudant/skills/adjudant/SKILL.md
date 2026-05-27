@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Use when operating an Obsidian vault — connect a project, sync state, check status, tidy mechanical drift (tidy), deep structural restructure (ramasse), or create canvases/diagrams (draw). Handles vault layout, frontmatter, tags, wikilinks, templates, and project AGENTS.md/CLAUDE.md files. Also when writing decisions, sessions, notes, or docs into a vault, or when the user types `/adjudant {verb}`.
-version: 0.4.1
+version: 0.5.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|tidy|ramasse|draw] [args]"
 license: MIT
