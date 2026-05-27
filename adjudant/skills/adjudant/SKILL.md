@@ -25,7 +25,7 @@ Vault editor/writer and project initializer. One skill, one command, seven verbs
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
 
-## The locked three-tier model (v0.3.1)
+## The locked three-tier model
 
 ```
 tidy    = surface mechanical    (routine, daily/weekly, never breaks)

@@ -1,6 +1,6 @@
 # /adjudant check
 
-Read-only summary. Never writes. v0.3.0 backed by `check.py` which scans the project mechanically and emits structured JSON; this skill consumes the JSON and renders the 3-section block.
+Read-only summary. Never writes. Backed by `check.py` which scans the project mechanically and emits structured JSON; this skill consumes the JSON and renders the 3-section block.
 
 ## The 3 features (locked spec)
 

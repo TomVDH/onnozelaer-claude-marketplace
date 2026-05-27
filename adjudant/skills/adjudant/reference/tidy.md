@@ -54,7 +54,7 @@ python3 "$(dirname "$0")/../../../scripts/tidy.py" detect --project-dir "$PROJEC
 
 ## Scope
 
-Default: current project resolved via `.claude/adjudant` breadcrumb. Vault-wide variant is **not** implemented in v0.3.0 — invoke per-project for now.
+Default: current project resolved via `.claude/adjudant` breadcrumb (auto-followed by `tidy.py`). Vault-wide variant is **not yet implemented** — invoke per-project for now.
 
 ## What tidy does NOT do
 
