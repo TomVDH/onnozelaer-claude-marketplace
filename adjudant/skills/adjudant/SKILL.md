@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Use when operating an Obsidian vault — connect a project, sync state, check status, tidy mechanical drift (tidy), deep structural restructure (ramasse), or create canvases/diagrams (draw). Handles vault layout, frontmatter, tags, wikilinks, templates, and project AGENTS.md/CLAUDE.md files. Also when writing decisions, sessions, notes, or docs into a vault, or when the user types `/adjudant {verb}`.
-version: 0.3.1
+version: 0.4.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|tidy|ramasse|draw] [args]"
 license: MIT
@@ -35,18 +35,20 @@ dream   = content/knowledge/memory refresh (semantic; NOT YET BUILT — v0.4+)
 
 `dream` is reserved for the future content-refresh verb that reads actual prose and identifies outdated/stale/redundant ideas. The structural-drift detector previously named `dream.py` in v0.3.0 has been renamed `ramasse_scan.py` and now feeds ramasse's analysis phase.
 
-## Python helper layer
+## Python helper layer (v0.4.0)
 
-Verbs touching many files use a Python helper that pre-digests structured output Claude renders, keeping per-verb context cost bounded.
+Every file-touching verb is backed by a Python helper. Helpers follow the `.claude/adjudant` breadcrumb automatically — pass `--project-dir` pointed at the code project root and the helper auto-resolves to the vault project. Cross-machine portable via `vault_name` fallback resolution.
 
 | Verb | Helper | Output |
 |---|---|---|
+| `connect` | `connect.py` | idempotent project init (5 steps + projects-index row) |
 | `port` | `port.py` | preview/apply with backup |
+| `sync` | `sync.py` | brief refresh + handoff mirror + projects-index row refresh |
 | `tidy` | `tidy.py` + `_vault_walk.py` | preview/apply with backup |
-| `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase) |
+| `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase); planning + execute via superpowers |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
 
-`_vault_walk.py` is the shared primitives module. Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
+`_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
 
 ## Vault standards — single source of truth
 

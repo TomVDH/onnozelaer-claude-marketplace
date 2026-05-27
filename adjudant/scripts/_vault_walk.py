@@ -173,6 +173,16 @@ ALIAS_SEP_RE = re.compile(r"\\?\|")  # | or \|, both alias separators
 TAG_RE = re.compile(r"(?:^|[\s,()])#([A-Za-z][\w/-]*)")
 MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md(?:#[^)\s]*)?)\)")
 URL_RE = re.compile(r"https?://\S+")
+# Inline code spans (single-line): `…`. Triple backticks are fenced blocks,
+# handled separately. Substituting with spaces preserves line geometry.
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
+
+def _strip_inline_code(line: str) -> str:
+    """Replace `inline code` spans with spaces to neutralise content
+    that shouldn't match link/tag patterns (e.g. ``[[stem|text]]`` in a
+    code example, or ``#tag`` in a literal command)."""
+    return INLINE_CODE_RE.sub(lambda m: " " * len(m.group(0)), line)
 
 
 def extract_wikilinks(body: str) -> list[Wikilink]:
@@ -191,7 +201,10 @@ def extract_wikilinks(body: str) -> list[Wikilink]:
         # exactly 4+ spaces AND doesn't have a `-`/`*`/`+` as the first non-space char.
         if line.startswith("    ") and line.lstrip()[:1] not in ("-", "*", "+", "|", "["):
             continue
-        for m in WIKILINK_RE.finditer(line):
+        # Strip inline-code spans before extracting (prevents [[stem|text]] in
+        # backticks from being picked up).
+        scan = _strip_inline_code(line)
+        for m in WIKILINK_RE.finditer(scan):
             inner = m.group(1)
             parts = ALIAS_SEP_RE.split(inner, maxsplit=1)
             target_full = parts[0].strip()
@@ -226,6 +239,7 @@ def extract_inline_tags(body: str) -> list[str]:
         if line.startswith("    "):
             continue
         cleaned = URL_RE.sub("", line)
+        cleaned = _strip_inline_code(cleaned)
         for m in TAG_RE.finditer(cleaned):
             out.append(m.group(1))
     return out
@@ -242,7 +256,8 @@ def extract_markdown_md_links(body: str) -> list[tuple[str, str, int]]:
             continue
         if in_fenced:
             continue
-        for m in MD_LINK_RE.finditer(line):
+        scan = _strip_inline_code(line)
+        for m in MD_LINK_RE.finditer(scan):
             out.append((m.group(1), m.group(2), lineno))
     return out
 
@@ -389,25 +404,52 @@ def parse_breadcrumb(project_root: Path) -> Optional[dict]:
     return out
 
 
+def _candidate_vault_paths(vault_name: str) -> list[Path]:
+    """Standard macOS locations where an Obsidian vault named `vault_name`
+    might live. Used as a cross-machine portability fallback when an
+    absolute `vault_path` in the breadcrumb doesn't resolve on this user."""
+    home = Path.home()
+    return [
+        home / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents" / vault_name,
+        home / "Documents" / vault_name,
+        home / "Documents" / "Obsidian" / vault_name,
+        home / "Obsidian" / vault_name,
+        home / "Dropbox" / "Obsidian" / vault_name,
+    ]
+
+
 def resolve_vault(
     project_root: Path,
     env_vault: Optional[str] = None,
 ) -> Optional[Path]:
-    """4-step resolution: env → .claude/adjudant → .claude/obsidian-bridge → walk up."""
+    """5-step resolution:
+      1. env var override (OB_VAULT or passed env_vault)
+      2. .claude/adjudant breadcrumb `vault_path` field (absolute, current machine)
+      3. .claude/adjudant breadcrumb `vault_name` field → standard locations
+         under THIS machine's $HOME (cross-machine portability)
+      4. .claude/obsidian-bridge legacy breadcrumb `vault:` field
+      5. walk up parents for `Home.md` with `type: vault-home`
+    """
     # 1. Env var override
     if env_vault:
         p = Path(env_vault).expanduser()
         if p.is_dir():
             return p
 
-    # 2. adjudant breadcrumb
+    # 2. adjudant breadcrumb absolute vault_path
     bc = parse_breadcrumb(project_root)
     if bc and "vault_path" in bc:
         p = Path(bc["vault_path"]).expanduser()
         if p.is_dir():
             return p
 
-    # 3. legacy OB breadcrumb
+    # 3. adjudant breadcrumb vault_name (cross-machine portability)
+    if bc and "vault_name" in bc:
+        for cand in _candidate_vault_paths(bc["vault_name"]):
+            if cand.is_dir():
+                return cand
+
+    # 4. legacy OB breadcrumb
     ob = project_root / ".claude" / "obsidian-bridge"
     if ob.is_file():
         for line in ob.read_text().splitlines():
@@ -417,7 +459,7 @@ def resolve_vault(
                 if p.is_dir():
                     return p
 
-    # 4. Walk up for Home.md
+    # 5. Walk up for Home.md
     cur = project_root.resolve()
     while cur != cur.parent:
         home = cur / "Home.md"
@@ -430,6 +472,69 @@ def resolve_vault(
                 pass
         cur = cur.parent
     return None
+
+
+@dataclass
+class ProjectContext:
+    """Resolved adjudant project — links code-side root to vault project."""
+    code_root: Path
+    vault_path: Path
+    slug: str
+    vault_project_dir: Path
+
+    @property
+    def is_connected(self) -> bool:
+        return self.vault_project_dir.is_dir()
+
+
+def resolve_project_from_cwd(cwd: Optional[Path] = None) -> Optional[ProjectContext]:
+    """Read `.claude/adjudant` at cwd (or given dir), resolve the vault,
+    return a `ProjectContext`. None if no breadcrumb or vault unresolvable.
+
+    Used by check/tidy/ramasse_scan/sync to auto-follow the breadcrumb
+    when invoked from the code-side project root.
+    """
+    root = Path(cwd) if cwd else Path.cwd()
+    root = root.expanduser().resolve()
+    bc = parse_breadcrumb(root)
+    if not bc or "slug" not in bc:
+        return None
+    vault = resolve_vault(root)
+    if not vault:
+        return None
+    return ProjectContext(
+        code_root=root,
+        vault_path=vault,
+        slug=bc["slug"],
+        vault_project_dir=vault / "projects" / bc["slug"],
+    )
+
+
+def smart_project_dir(project_dir_arg: str) -> tuple[Path, Optional[Path]]:
+    """Resolve `--project-dir` smartly across helpers.
+
+    Returns (project_scan_dir, vault_dir_hint).
+
+    - If the arg points at a directory containing `.claude/adjudant`:
+      treat it as a code root, follow the breadcrumb, return the vault
+      project dir + vault path.
+    - Otherwise: treat the arg as already-the-vault-project-dir,
+      return it unchanged + try to resolve the vault upward.
+
+    Backward-compatible: code that passed a vault project path still works.
+    """
+    arg_path = Path(project_dir_arg).expanduser().resolve()
+    breadcrumb = arg_path / ".claude" / "adjudant"
+    if breadcrumb.is_file():
+        ctx = resolve_project_from_cwd(arg_path)
+        if ctx is not None and ctx.is_connected:
+            return ctx.vault_project_dir, ctx.vault_path
+        if ctx is not None and not ctx.is_connected:
+            # Breadcrumb exists but vault project dir missing — surface the
+            # intended path so callers can error out with a clear message.
+            return ctx.vault_project_dir, ctx.vault_path
+    # Treat as vault project path directly
+    return arg_path, None
 
 
 # ============================================================

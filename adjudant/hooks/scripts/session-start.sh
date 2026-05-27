@@ -14,8 +14,9 @@ main() {
   [ ! -f "$breadcrumb" ] && return 0
 
   local vault_path slug
-  vault_path=$(grep -E '^vault_path=' "$breadcrumb" 2>/dev/null | head -n1 | cut -d= -f2- || true)
-  slug=$(grep -E '^slug=' "$breadcrumb" 2>/dev/null | head -n1 | cut -d= -f2- || true)
+  # Breadcrumb format is `key: value` (YAML-ish, written by connect.py).
+  vault_path=$(sed -n 's/^vault_path:[[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
+  slug=$(sed -n 's/^slug:[[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
 
   [ -z "$vault_path" ] && return 0
   [ -z "$slug" ] && return 0

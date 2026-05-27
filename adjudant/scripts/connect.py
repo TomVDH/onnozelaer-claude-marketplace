@@ -1,0 +1,599 @@
+#!/usr/bin/env python3
+"""Adjudant connect — automate the 5-step project init.
+
+Onboards a code-side project to the vault:
+  1. Write `.claude/adjudant` breadcrumb (vault_path, vault_name, slug, mode)
+  2. Provision AGENTS.md + CLAUDE.md at project root (skip if exist)
+  3. Scaffold vault project: brief.md (from project_type template) + per-type
+     subfolders + per-folder `_index.md` (skip per-folder indexes for
+     INDEX_EXEMPT_FOLDERS like sessions/ and images/)
+  4. Write today's session note: `{vault}/projects/{slug}/sessions/{YYYY-MM-DD}.md`
+  5. Append `.claude/adjudant` to project `.gitignore`
+  Also: add or update the project's row in `{vault}/projects/_index.md`.
+
+Idempotent. Re-running fills gaps; never overwrites user-authored content.
+
+CLI:
+    python3 connect.py \\
+        --project-root PATH \\
+        [--vault-name NAME] [--vault-path PATH] \\
+        [--slug SLUG] [--project-type {coding|knowledge|plugin|tinkerage}] \\
+        [--project-name "Display Name"]
+
+Resolution order (per field):
+    vault       → --vault-path → --vault-name → existing breadcrumb → walk up
+    slug        → --slug → existing breadcrumb → cwd basename
+    type        → --project-type → existing brief → required (fail if missing)
+    name        → --project-name → existing brief heading → slug.title()
+
+See docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
+from _vault_walk import (
+    INDEX_EXEMPT_FOLDERS,
+    PROJECT_TYPE_DEFAULT_FOLDERS,
+    _candidate_vault_paths,
+    parse_breadcrumb,
+    parse_frontmatter,
+    resolve_vault,
+)
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+TEMPLATES = SCRIPT_DIR.parent / "skills" / "adjudant" / "templates"
+
+VALID_PROJECT_TYPES = ("coding", "knowledge", "plugin", "tinkerage")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+# ============================================================
+# Slug + name helpers
+# ============================================================
+
+
+def validate_slug(slug: str) -> Optional[str]:
+    """Return None if valid, else an error message."""
+    if not slug:
+        return "slug must not be empty"
+    if not SLUG_RE.match(slug):
+        return (
+            f"slug {slug!r} must be lowercase kebab-case "
+            f"(letters, digits, hyphens; no leading hyphen)"
+        )
+    return None
+
+
+def slug_to_title(slug: str) -> str:
+    return " ".join(part.capitalize() for part in slug.replace("_", "-").split("-") if part)
+
+
+# ============================================================
+# Vault path resolution for connect (more permissive — accepts unconnected case)
+# ============================================================
+
+
+def resolve_vault_for_connect(
+    project_root: Path,
+    vault_path_arg: Optional[str],
+    vault_name_arg: Optional[str],
+) -> Optional[Path]:
+    """Resolve vault path for the connect flow.
+
+    Different from `resolve_vault()` in that it accepts explicit args first
+    and tolerates a missing breadcrumb (since connect creates it).
+    """
+    # 1. --vault-path argument
+    if vault_path_arg:
+        p = Path(vault_path_arg).expanduser()
+        if p.is_dir():
+            return p
+
+    # 2. --vault-name argument → search standard locations
+    if vault_name_arg:
+        for cand in _candidate_vault_paths(vault_name_arg):
+            if cand.is_dir():
+                return cand
+
+    # 3. Existing breadcrumb (re-connect case)
+    bc = parse_breadcrumb(project_root)
+    if bc:
+        if "vault_path" in bc:
+            p = Path(bc["vault_path"]).expanduser()
+            if p.is_dir():
+                return p
+        if "vault_name" in bc:
+            for cand in _candidate_vault_paths(bc["vault_name"]):
+                if cand.is_dir():
+                    return cand
+
+    # 4. Walk up for Home.md
+    return resolve_vault(project_root)
+
+
+def derive_vault_name(vault_path: Path, vault_name_arg: Optional[str]) -> str:
+    """Vault name = explicit arg → vault dir basename."""
+    if vault_name_arg:
+        return vault_name_arg
+    return vault_path.name
+
+
+# ============================================================
+# Step 1: breadcrumb
+# ============================================================
+
+
+def write_breadcrumb(
+    project_root: Path,
+    vault_path: Path,
+    vault_name: str,
+    slug: str,
+) -> Path:
+    bc_dir = project_root / ".claude"
+    bc_dir.mkdir(parents=True, exist_ok=True)
+    bc = bc_dir / "adjudant"
+    content = (
+        f"vault_path: {vault_path}\n"
+        f"vault_name: {vault_name}\n"
+        f"slug: {slug}\n"
+        f"mode: project\n"
+    )
+    bc.write_text(content)
+    return bc
+
+
+# ============================================================
+# Step 2: context files
+# ============================================================
+
+
+def provision_context_files(project_root: Path) -> dict[str, str]:
+    """Copy AGENTS.md + CLAUDE.md from templates if missing.
+
+    Returns dict mapping filename → action ('created' | 'preserved').
+    """
+    actions: dict[str, str] = {}
+    for fname in ("AGENTS.md", "CLAUDE.md"):
+        live = project_root / fname
+        if live.exists():
+            actions[fname] = "preserved"
+            continue
+        template = TEMPLATES / fname
+        if not template.is_file():
+            actions[fname] = f"template missing: {template}"
+            continue
+        live.write_text(template.read_text())
+        actions[fname] = "created"
+    return actions
+
+
+# ============================================================
+# Step 3: vault scaffold
+# ============================================================
+
+
+def derive_project_name(
+    project_name_arg: Optional[str],
+    existing_brief: Optional[Path],
+    slug: str,
+) -> str:
+    if project_name_arg:
+        return project_name_arg
+    if existing_brief and existing_brief.is_file():
+        text = existing_brief.read_text(errors="replace")
+        for line in text.split("\n"):
+            line = line.strip()
+            if line.startswith("# "):
+                return line[2:].strip()
+    return slug_to_title(slug)
+
+
+def derive_project_type(
+    project_type_arg: Optional[str],
+    existing_brief: Optional[Path],
+) -> Optional[str]:
+    if project_type_arg:
+        return project_type_arg
+    if existing_brief and existing_brief.is_file():
+        fm, _ = parse_frontmatter(existing_brief.read_text(errors="replace"))
+        pt = fm.fields.get("project_type")
+        if isinstance(pt, str) and pt in VALID_PROJECT_TYPES:
+            return pt
+    return None
+
+
+def scaffold_vault_project(
+    vault_path: Path,
+    slug: str,
+    project_type: str,
+    project_name: str,
+    today: str,
+) -> dict[str, list[str]]:
+    """Create vault project folder, brief, subfolders, per-folder indexes.
+
+    Returns dict with 'created' / 'preserved' filenames lists.
+    """
+    proj_dir = vault_path / "projects" / slug
+    created: list[str] = []
+    preserved: list[str] = []
+
+    if not proj_dir.exists():
+        proj_dir.mkdir(parents=True)
+        created.append(str(proj_dir.relative_to(vault_path)))
+
+    # brief.md
+    brief_path = proj_dir / "brief.md"
+    if not brief_path.is_file():
+        template_path = TEMPLATES / f"project-brief-{project_type}.md"
+        if not template_path.is_file():
+            raise RuntimeError(f"template missing: {template_path}")
+        text = template_path.read_text()
+        text = (
+            text.replace("{kebab-slug}", slug)
+                .replace("{YYYY-MM-DD}", today)
+                .replace("{Project Name}", project_name)
+        )
+        brief_path.write_text(text)
+        created.append("brief.md")
+    else:
+        preserved.append("brief.md")
+
+    # Subfolders + per-folder indexes
+    defaults = PROJECT_TYPE_DEFAULT_FOLDERS.get(project_type)
+    if not defaults:
+        raise RuntimeError(f"unknown project_type: {project_type}")
+    with_index = defaults["with_index"]
+    no_index = defaults["no_index"]
+
+    for sub in with_index + no_index:
+        sub_dir = proj_dir / sub
+        if not sub_dir.exists():
+            sub_dir.mkdir()
+            created.append(f"{sub}/")
+        idx = sub_dir / "_index.md"
+        if sub in INDEX_EXEMPT_FOLDERS:
+            continue
+        if sub in with_index and not idx.is_file():
+            heading = " ".join(w.capitalize() for w in sub.replace("-", " ").replace("_", " ").split())
+            idx_content = (
+                "---\n"
+                "type: index\n"
+                f"project: \"[[../brief|{slug}]]\"\n"
+                f"updated: {today}\n"
+                "tags:\n"
+                "  - index\n"
+                "---\n\n"
+                f"# {heading}\n\n"
+                "## Entries\n\n"
+            )
+            idx.write_text(idx_content)
+            created.append(f"{sub}/_index.md")
+
+    return {"created": created, "preserved": preserved}
+
+
+# ============================================================
+# Step 4: today's session note
+# ============================================================
+
+
+def write_session_note(
+    vault_path: Path,
+    slug: str,
+    today: str,
+    now_hhmm: str,
+) -> str:
+    sess_dir = vault_path / "projects" / slug / "sessions"
+    sess_dir.mkdir(parents=True, exist_ok=True)
+    sess_file = sess_dir / f"{today}.md"
+    if sess_file.is_file():
+        return "preserved"
+    template_path = TEMPLATES / "session.md"
+    if template_path.is_file():
+        text = template_path.read_text()
+        text = (
+            text.replace("{slug}", slug)
+                .replace("{YYYY-MM-DD}", today)
+                .replace("{HH:MM}", now_hhmm)
+        )
+        # Default intent + first log entry if template has placeholder
+        text = text.replace(
+            "{One-line intent. Frozen after first write.}",
+            "Session initiated by /adjudant connect.",
+        )
+    else:
+        text = (
+            "---\n"
+            "type: session\n"
+            f"project: \"[[projects/{slug}/brief|{slug}]]\"\n"
+            f"date: {today}\n"
+            f"started: \"{now_hhmm}\"\n"
+            "tags:\n"
+            "  - session\n"
+            "---\n\n"
+            f"> Session initiated by /adjudant connect.\n\n"
+            "## Log\n\n"
+            f"- {now_hhmm} · session started\n"
+        )
+    sess_file.write_text(text)
+    return "created"
+
+
+# ============================================================
+# Step 5: .gitignore
+# ============================================================
+
+
+def append_gitignore(project_root: Path) -> str:
+    """Add `.claude/adjudant` to .gitignore (idempotent). Returns 'added' / 'preserved'."""
+    gi = project_root / ".gitignore"
+    breadcrumb_line = ".claude/adjudant"
+    if gi.is_file():
+        text = gi.read_text()
+        if any(line.strip() == breadcrumb_line for line in text.splitlines()):
+            return "preserved"
+        sep = "" if text.endswith("\n") else "\n"
+        gi.write_text(text + sep + "\n# Adjudant breadcrumb (project-local)\n" + breadcrumb_line + "\n")
+        return "added"
+    else:
+        gi.write_text("# Adjudant breadcrumb (project-local)\n" + breadcrumb_line + "\n")
+        return "created"
+
+
+# ============================================================
+# Step 6: projects/_index.md row (upsert)
+# ============================================================
+
+
+PROJECTS_INDEX_ROW_RE = re.compile(
+    r"^\|\s*\[\[(?P<slug>[^/|\]]+)/brief\\?\|[^]]+\]\]\s*\|"
+)
+
+
+def count_non_index_files(folder: Path) -> int:
+    if not folder.is_dir():
+        return 0
+    return sum(
+        1 for f in folder.iterdir()
+        if f.is_file() and f.suffix == ".md" and f.name != "_index.md"
+    )
+
+
+def newest_session_date(sessions_dir: Path) -> str:
+    if not sessions_dir.is_dir():
+        return "—"
+    dates: list[str] = []
+    for f in sessions_dir.iterdir():
+        if not f.is_file() or f.suffix != ".md":
+            continue
+        m = re.match(r"^(\d{4}-\d{2}-\d{2})", f.stem)
+        if m:
+            dates.append(m.group(1))
+    return max(dates) if dates else "—"
+
+
+def upsert_projects_index_row(
+    vault_path: Path,
+    slug: str,
+    project_type: str,
+    status: str,
+    decisions_n: int,
+    sessions_n: int,
+    last_session: str,
+) -> str:
+    idx = vault_path / "projects" / "_index.md"
+    new_row = (
+        f"| [[{slug}/brief\\|{slug}]] | {project_type} | {status} | "
+        f"{decisions_n} | {sessions_n} | {last_session} |"
+    )
+    if not idx.is_file():
+        idx.write_text(
+            "---\ntype: index\nupdated: " + datetime.now().strftime("%Y-%m-%d") + "\ntags:\n  - index\n---\n\n"
+            "# All Projects\n\n"
+            "| Project | Type | Status | Decisions | Sessions | Last Session |\n"
+            "|---------|------|--------|-----------|----------|--------------|\n"
+            + new_row + "\n"
+        )
+        return "created-index"
+
+    text = idx.read_text()
+    lines = text.splitlines()
+    # Find existing row by slug
+    target_pattern = re.compile(
+        r"^\|\s*\[\[" + re.escape(slug) + r"/brief\\?\|"
+    )
+    new_lines = []
+    found = False
+    for line in lines:
+        if target_pattern.search(line):
+            new_lines.append(new_row)
+            found = True
+        else:
+            new_lines.append(line)
+    if not found:
+        # Insert after the separator line (`|---|---|...|`)
+        insert_idx = None
+        for i, line in enumerate(new_lines):
+            if re.match(r"^\|[\s\-|]+\|\s*$", line):
+                insert_idx = i + 1
+                break
+        if insert_idx is not None:
+            new_lines.insert(insert_idx, new_row)
+        else:
+            new_lines.append(new_row)
+    idx.write_text("\n".join(new_lines) + "\n")
+    return "updated" if found else "inserted"
+
+
+# ============================================================
+# Top-level run
+# ============================================================
+
+
+def detect_state(project_root: Path, vault_path: Optional[Path], slug: Optional[str]) -> str:
+    """Returns 'fresh' | 'partial' | 'connected'."""
+    bc_exists = (project_root / ".claude" / "adjudant").is_file()
+    vault_proj_exists = False
+    if vault_path and slug:
+        vault_proj_exists = (vault_path / "projects" / slug).is_dir()
+    if bc_exists and vault_proj_exists:
+        return "connected"
+    if bc_exists or vault_proj_exists:
+        return "partial"
+    return "fresh"
+
+
+def run_connect(
+    project_root: Path,
+    vault_path: Path,
+    vault_name: str,
+    slug: str,
+    project_type: str,
+    project_name: str,
+    today: str,
+    now_hhmm: str,
+) -> dict[str, Any]:
+    """Idempotent connect. Returns summary dict."""
+    summary: dict[str, Any] = {
+        "project_root": str(project_root),
+        "vault_path": str(vault_path),
+        "vault_name": vault_name,
+        "slug": slug,
+        "project_type": project_type,
+        "project_name": project_name,
+        "today": today,
+        "steps": {},
+    }
+
+    # Step 1
+    write_breadcrumb(project_root, vault_path, vault_name, slug)
+    summary["steps"]["breadcrumb"] = "written"
+
+    # Step 2
+    summary["steps"]["context_files"] = provision_context_files(project_root)
+
+    # Step 3
+    summary["steps"]["vault_scaffold"] = scaffold_vault_project(
+        vault_path, slug, project_type, project_name, today
+    )
+
+    # Step 4
+    summary["steps"]["session_note"] = write_session_note(vault_path, slug, today, now_hhmm)
+
+    # Step 5
+    summary["steps"]["gitignore"] = append_gitignore(project_root)
+
+    # Step 6
+    proj_dir = vault_path / "projects" / slug
+    decisions_n = count_non_index_files(proj_dir / "decisions")
+    sessions_n = count_non_index_files(proj_dir / "sessions")
+    last_session = newest_session_date(proj_dir / "sessions")
+    brief_path = proj_dir / "brief.md"
+    status = "active"
+    if brief_path.is_file():
+        fm, _ = parse_frontmatter(brief_path.read_text(errors="replace"))
+        s = fm.fields.get("status")
+        if isinstance(s, str) and s:
+            status = s
+    summary["steps"]["projects_index_row"] = upsert_projects_index_row(
+        vault_path, slug, project_type, status, decisions_n, sessions_n, last_session
+    )
+
+    return summary
+
+
+def cli_main(argv: Optional[list[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="connect.py",
+        description="Adjudant connect — onboard a project to the vault. Idempotent.",
+    )
+    parser.add_argument("--project-root", default=".", help="Project root (default: cwd)")
+    parser.add_argument("--vault-path", help="Explicit vault path")
+    parser.add_argument("--vault-name", help="Vault name (looked up under standard locations)")
+    parser.add_argument("--slug", help="Project slug (kebab-case)")
+    parser.add_argument("--project-type", choices=VALID_PROJECT_TYPES)
+    parser.add_argument("--project-name", help="Human-readable display name")
+    parser.add_argument("--detect-only", action="store_true",
+                        help="Print state ('fresh' | 'partial' | 'connected') and exit")
+    args = parser.parse_args(argv)
+
+    project_root = Path(args.project_root).expanduser().resolve()
+    if not project_root.is_dir():
+        print(f"error: project-root not found: {project_root}", file=sys.stderr)
+        return 1
+
+    # Resolve vault
+    vault_path = resolve_vault_for_connect(project_root, args.vault_path, args.vault_name)
+    if not vault_path:
+        print("error: vault unresolvable. Pass --vault-path or --vault-name, "
+              "or run inside a directory under a vault containing Home.md.", file=sys.stderr)
+        return 1
+    vault_name = derive_vault_name(vault_path, args.vault_name)
+
+    # Resolve slug
+    slug = args.slug
+    if not slug:
+        bc = parse_breadcrumb(project_root)
+        if bc and "slug" in bc:
+            slug = bc["slug"]
+        else:
+            slug = project_root.name
+    err = validate_slug(slug)
+    if err:
+        print(f"error: {err}", file=sys.stderr)
+        return 1
+
+    if args.detect_only:
+        print(detect_state(project_root, vault_path, slug))
+        return 0
+
+    # Resolve project_type
+    existing_brief = vault_path / "projects" / slug / "brief.md"
+    project_type = derive_project_type(args.project_type, existing_brief if existing_brief.is_file() else None)
+    if not project_type:
+        print("error: --project-type required (one of: " + ", ".join(VALID_PROJECT_TYPES) + ")", file=sys.stderr)
+        return 1
+
+    # Resolve project_name
+    project_name = derive_project_name(args.project_name, existing_brief if existing_brief.is_file() else None, slug)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    now_hhmm = datetime.now().strftime("%H:%M")
+
+    summary = run_connect(
+        project_root=project_root,
+        vault_path=vault_path,
+        vault_name=vault_name,
+        slug=slug,
+        project_type=project_type,
+        project_name=project_name,
+        today=today,
+        now_hhmm=now_hhmm,
+    )
+
+    print(f"[connect] state: {detect_state(project_root, vault_path, slug)}", file=sys.stderr)
+    print(f"[connect] vault: {vault_name} at {vault_path}", file=sys.stderr)
+    print(f"[connect] project: {slug} ({project_type}) - {project_name}", file=sys.stderr)
+    print(f"[connect] breadcrumb: {summary['steps']['breadcrumb']}", file=sys.stderr)
+    print(f"[connect] context_files: {summary['steps']['context_files']}", file=sys.stderr)
+    print(f"[connect] vault_scaffold: created={len(summary['steps']['vault_scaffold']['created'])}, "
+          f"preserved={len(summary['steps']['vault_scaffold']['preserved'])}", file=sys.stderr)
+    print(f"[connect] session_note: {summary['steps']['session_note']}", file=sys.stderr)
+    print(f"[connect] gitignore: {summary['steps']['gitignore']}", file=sys.stderr)
+    print(f"[connect] projects_index_row: {summary['steps']['projects_index_row']}", file=sys.stderr)
+
+    print(json.dumps(summary, indent=2, default=str))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(cli_main())

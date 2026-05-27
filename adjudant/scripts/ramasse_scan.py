@@ -44,6 +44,7 @@ from _vault_walk import (
     is_bucket_d_tag,
     resolve_vault,
     resolve_wikilink,
+    smart_project_dir,
     walk_project,
 )
 
@@ -410,14 +411,23 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--include-legacy", action="store_true", help="Include _legacy/ in scan")
     args = parser.parse_args(argv)
 
-    project_dir = Path(args.project_dir).expanduser().resolve()
+    project_dir, vault_hint = smart_project_dir(args.project_dir)
     if not project_dir.is_dir():
-        print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
+        if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
+            print(
+                f"error: breadcrumb at {args.project_dir}/.claude/adjudant points to "
+                f"vault project {project_dir} which doesn't exist. Run /adjudant connect first.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
         return 1
 
     vault_dir: Optional[Path]
     if args.vault_dir:
         vault_dir = Path(args.vault_dir).expanduser().resolve()
+    elif vault_hint:
+        vault_dir = vault_hint
     else:
         vault_dir = resolve_vault(project_dir)
     if vault_dir and not vault_dir.is_dir():

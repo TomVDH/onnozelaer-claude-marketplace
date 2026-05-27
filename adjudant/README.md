@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, seven verbs.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, seven verbs, Python helpers under each.
 
 ## Install
 
@@ -10,41 +10,69 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 /plugin install adjudant
 ```
 
-## Surface
+## Surface (v0.4.0)
 
 | | |
 |---|---|
 | Command | `/adjudant {verb}` |
-| Verbs | `connect`, `sync`, `check`, `ramasse`, `dream`, `draw` |
+| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `draw` |
+| Reserved | `dream` (returns in v0.4+ as the semantic content/knowledge/memory refresh verb) |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 (AGENTS.md, CLAUDE.md, project briefs × 4, session, decision, note, doc, handoff, source, iteration, release, dream-report, home, indexes × 2) |
-| Drift defense | `python3 scripts/validate.py` — six validators, runs via pre-commit hook |
+| Python helpers | `_vault_walk.py` (primitives), `port.py`, `connect.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `check.py` |
+| Drift defense | `python3 scripts/validate.py` — 13 validators, runs via pre-commit |
+| Tests | 200+ unit tests across 8 modules; `python3 -m unittest discover -p 'test_*.py'` |
+
+## The three-tier cleanup model (locked 2026-05-26)
+
+```
+tidy    = surface mechanical    (routine; tags, indexes, wikilink form, updated:)
+ramasse = deep structural clean (sparing; folders, schema, file types, naming, renames)
+dream   = content / knowledge / memory refresh  (v0.4+; semantic content audit)
+```
+
+Risk tolerance is the dividing line: tidy never breaks anything; ramasse can break things deliberately under human supervision via the superpowers chain; dream (v0.4+) will be LLM-judgment heavy semantic cleanup.
 
 ## Verbs
 
-| Verb | Purpose |
-|---|---|
-| `/adjudant connect` | Rigid 5-step project init — breadcrumb, AGENTS.md + CLAUDE.md, vault scaffold, session note, .gitignore. Idempotent. |
-| `/adjudant sync` | Push brief + handoff to vault. |
-| `/adjudant check` | Read-only project + vault summary. |
-| `/adjudant ramasse` | Rebuild `_index.md` files, normalize tags, fix wikilink form. |
-| `/adjudant dream` | Diagnostic crawl — drift report, broken wikilinks, doc/decision mismatches. Reports only, no auto-fix. |
-| `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. |
+| Verb | Purpose | Helper |
+|---|---|---|
+| `/adjudant connect` | Onboard a code project to a vault. Rigid 5-step idempotent init. | `connect.py` |
+| `/adjudant port` | Migrate a legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance. Two-phase preview → apply. | `port.py` |
+| `/adjudant sync` | Push project state to the vault: refresh brief, mirror handoff, refresh project-row counts. | `sync.py` |
+| `/adjudant check` | Read-only summary — project state, vault snapshot, schema compliance. | `check.py` |
+| `/adjudant tidy` | Surface mechanical sweep — rebuild indexes, normalise tags, fix wikilink form. Two-phase preview → apply. | `tidy.py` |
+| `/adjudant ramasse` | Deep structural clean — analysis phase via `ramasse_scan.py`, planning + execute via the superpowers chain. | `ramasse_scan.py` |
+| `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. | (runbook) |
+
+All helpers follow the breadcrumb: pass `--project-dir` pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
 
 ## Architecture
 
-- **Source of truth**: `skills/adjudant/` — the canonical skill directory.
-- **Harness copies**: `source/skills/adjudant/`, `.claude/skills/adjudant/`, and `.gemini/skills/adjudant/` are symlinks to the canonical. Edit the canonical, all harnesses see it instantly. No build step.
-- **Validators**: `scripts/validate.py` enforces schema coherence on pre-commit.
+- **Canonical skill location**: `skills/adjudant/` — single source of truth.
+- **Harness copies**: `source/skills/adjudant/`, `.claude/skills/adjudant/`, `.gemini/skills/adjudant/` are symlinks. Edit the canonical, all harnesses see it. No build step.
+- **Helper layer doctrine**: every verb touching >10 files gets a Python helper that pre-digests structured output Claude renders. Keeps per-verb context cost bounded regardless of project size.
+- **Cross-machine portability**: the breadcrumb stores both `vault_path` (absolute, current machine) and `vault_name` (canonical). If the absolute path doesn't resolve on another machine, `vault_name` triggers a search of standard Obsidian locations under the current user's `$HOME`.
+- **Validators**: `scripts/validate.py` enforces schema + version coherence on pre-commit.
 
 ## Vault standards
 
-`source/skills/adjudant/reference/vault-standards.md` is the authoritative spec for tag taxonomy, frontmatter, folder structure, file-naming, and wikilink form. All vault writes conform.
+`skills/adjudant/reference/vault-standards.md` is the authoritative spec for tag taxonomy, frontmatter, folder structure, file-naming, and wikilink form. All vault writes conform.
 
 ## Hooks
 
-All five hooks are vault-aware. Universal drift-defense (git safety, voice checks, etc.) lives in `hookify`, not here.
+All five hooks are vault-aware:
+
+| Event | Script | Purpose |
+|---|---|---|
+| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note |
+| UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart vault reminder when project isn't linked and prompt has vault-y keywords |
+| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log |
+| PreCompact | `hooks/scripts/precompact.py` | Append `paused (compaction)` marker + sync handoff |
+| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + sync handoff |
+
+Universal drift-defense (git safety, voice checks, etc.) lives in `hookify` — not here.
 
 ## Pairing
 

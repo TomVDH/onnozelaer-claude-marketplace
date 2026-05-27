@@ -7,6 +7,7 @@ from pathlib import Path
 from _vault_walk import (
     Frontmatter,
     Wikilink,
+    ProjectContext,
     parse_frontmatter,
     extract_wikilinks,
     extract_inline_tags,
@@ -16,6 +17,8 @@ from _vault_walk import (
     resolve_wikilink,
     parse_breadcrumb,
     resolve_vault,
+    resolve_project_from_cwd,
+    smart_project_dir,
     is_bucket_d_tag,
     is_bucket_b_migration,
     BUCKET_A_TYPES,
@@ -407,6 +410,121 @@ class TestBucketDClassification(unittest.TestCase):
         self.assertEqual(is_bucket_b_migration("cabinet/recon"), "recon-item")
         self.assertIsNone(is_bucket_b_migration("cabinet/random"))
         self.assertIsNone(is_bucket_b_migration("project"))
+
+
+# ============================================================
+# Inline-code wikilink skip (regression: false positive in release notes)
+# ============================================================
+
+
+class TestInlineCodeSkip(unittest.TestCase):
+
+    def test_wikilink_inside_backticks_skipped(self):
+        body = "Rewrite `[[stem|text]]` to the canonical form."
+        links = extract_wikilinks(body)
+        self.assertEqual(links, [])
+
+    def test_wikilink_outside_backticks_kept(self):
+        body = "Real [[link]] here."
+        links = extract_wikilinks(body)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0].target, "link")
+
+    def test_mixed_inline_code_and_real_link(self):
+        body = "Use `[[code-example]]` but see [[real-link]]."
+        links = extract_wikilinks(body)
+        self.assertEqual([l.target for l in links], ["real-link"])
+
+    def test_tag_inside_backticks_skipped(self):
+        body = "Use `#sample-tag` as literal; real tag is #real-tag."
+        tags = extract_inline_tags(body)
+        self.assertEqual(tags, ["real-tag"])
+
+    def test_md_link_inside_backticks_skipped(self):
+        body = "Don't link `[a](b.md)` from inside code; do link [c](c.md) outside."
+        out = extract_markdown_md_links(body)
+        paths = [p for _, p, _ in out]
+        self.assertEqual(paths, ["c.md"])
+
+
+# ============================================================
+# Breadcrumb auto-follow (smart_project_dir + resolve_project_from_cwd)
+# ============================================================
+
+
+class TestSmartProjectDir(unittest.TestCase):
+
+    def test_passes_through_when_no_breadcrumb(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            # No .claude/adjudant — should treat arg as the vault project itself
+            scan_dir, vault_hint = smart_project_dir(tmp)
+            self.assertEqual(scan_dir, Path(tmp).resolve())
+            self.assertIsNone(vault_hint)
+
+    def test_follows_breadcrumb_to_vault_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code = Path(tmp) / "code"; code.mkdir()
+            vault = Path(tmp) / "vault"; vault.mkdir()
+            (vault / "projects").mkdir()
+            (vault / "projects" / "p").mkdir()
+            (code / ".claude").mkdir()
+            (code / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: vault\nslug: p\nmode: project\n"
+            )
+            scan_dir, vault_hint = smart_project_dir(str(code))
+            self.assertEqual(scan_dir.resolve(), (vault / "projects" / "p").resolve())
+            self.assertEqual(vault_hint.resolve(), vault.resolve())
+
+
+class TestResolveProjectFromCwd(unittest.TestCase):
+
+    def test_returns_context_when_breadcrumb_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code = Path(tmp) / "code"; code.mkdir()
+            vault = Path(tmp) / "vault"; vault.mkdir()
+            (vault / "projects" / "p").mkdir(parents=True)
+            (code / ".claude").mkdir()
+            (code / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: vault\nslug: p\nmode: project\n"
+            )
+            ctx = resolve_project_from_cwd(code)
+            self.assertIsNotNone(ctx)
+            self.assertEqual(ctx.slug, "p")
+            self.assertTrue(ctx.is_connected)
+
+    def test_returns_none_without_breadcrumb(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(resolve_project_from_cwd(Path(tmp)))
+
+
+# ============================================================
+# Vault-name cross-machine resolution
+# ============================================================
+
+
+class TestVaultNameResolution(unittest.TestCase):
+
+    def test_vault_name_resolves_when_abs_path_fails(self):
+        """If breadcrumb's vault_path is missing/wrong but vault_name matches a
+        standard-location vault, resolve_vault should still find it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            from unittest.mock import patch
+
+            home = Path(tmp)
+            (home / "Documents").mkdir()
+            vault = home / "Documents" / "MyVault"
+            vault.mkdir()
+
+            code = home / "code"; code.mkdir()
+            (code / ".claude").mkdir()
+            # Absolute path is bogus, vault_name should rescue
+            (code / ".claude" / "adjudant").write_text(
+                "vault_path: /nope/missing\nvault_name: MyVault\nslug: p\nmode: project\n"
+            )
+
+            with patch("pathlib.Path.home", return_value=home):
+                resolved = resolve_vault(code)
+            self.assertEqual(resolved.resolve(), vault.resolve())
 
 
 if __name__ == "__main__":

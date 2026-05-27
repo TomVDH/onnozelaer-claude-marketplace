@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from _vault_walk import parse_frontmatter, resolve_vault
+from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir
 
 
 def _read_brief(project_dir: Path) -> dict[str, Any]:
@@ -155,9 +155,18 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--out", help="Write JSON to FILE instead of stdout")
     args = parser.parse_args(argv)
 
-    project_dir = Path(args.project_dir).expanduser().resolve()
+    project_dir, _vault_hint = smart_project_dir(args.project_dir)
     if not project_dir.is_dir():
-        print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
+        # Breadcrumb resolved to a vault project that doesn't exist yet
+        if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
+            print(
+                f"error: breadcrumb at {args.project_dir}/.claude/adjudant points to "
+                f"vault project {project_dir} which doesn't exist. Run /adjudant connect "
+                f"to create it.",
+                file=sys.stderr,
+            )
+        else:
+            print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
         return 1
 
     report = run_check(project_dir)

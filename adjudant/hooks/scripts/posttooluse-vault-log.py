@@ -14,14 +14,24 @@ from pathlib import Path
 
 
 def read_breadcrumb(project_dir: Path) -> dict:
+    """Read `.claude/adjudant` breadcrumb (`key: value` per line, YAML-ish).
+
+    Format written by connect.py — uses `:` separator. Old `=` format
+    (pre-v0.4.0) also tolerated for transition.
+    """
     breadcrumb = project_dir / ".claude" / "adjudant"
     if not breadcrumb.exists():
         return {}
     info = {}
     for line in breadcrumb.read_text().splitlines():
-        if "=" in line:
-            k, v = line.split("=", 1)
-            info[k.strip()] = v.strip()
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        sep = ":" if ":" in line else ("=" if "=" in line else None)
+        if not sep:
+            continue
+        k, v = line.split(sep, 1)
+        info[k.strip()] = v.strip()
     return info
 
 
