@@ -1,6 +1,6 @@
 {
   "name": "gemineye",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A sandboxed second opinion from Gemini — review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. Gemini proposes edits as code blocks; Claude applies them. harvest extracts 5 durable bullets from any file (transcript, doc, code) — the manual surface for the same pattern adjudant uses automatically at PreCompact. Pairs with adjudant for vault context.",
   "author": {
     "name": "Onnozelaer"

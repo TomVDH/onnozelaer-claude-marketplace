@@ -1,13 +1,8 @@
 ---
 name: gemineye
-description: >
-  A sandboxed second opinion from Gemini. Use for the /gemineye
-  subcommands (review, megareview, wip, sanity, name, compare, save) or
-  phrases like "ask Gemini", "second opinion", "Gemini's take". Gemini
-  reviews only — it never writes files; it proposes edits as code blocks
-  and Claude applies them.
+description: Sandboxed second opinion from Gemini. `/gemineye {review|megareview|wip|sanity|name|compare|save|harvest}` or phrases like "ask Gemini" / "second opinion". Review-only — Claude applies any proposed edits.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.3.0
+version: 0.3.1
 user-invocable: true
 argument-hint: "[review|megareview|wip|sanity|name|compare|save|harvest] [args]"
 ---
