@@ -381,6 +381,54 @@ CONTEXT
 {constraints}
 ```
 
+### `/gemineye harvest <path>`
+
+Extract 5 durable bullets from any file — transcript, doc, or code.
+Model: flash. Same prompt template that adjudant's PreCompact hook
+uses automatically; this is the on-demand, user-initiated surface.
+
+This is the canonical prompt. Adjudant's `precompact.py` inlines its
+own copy for hook performance (no cross-plugin runtime dependency at
+compaction time). The two plugins share the discipline, not the code path.
+
+```
+ROLE
+You are a session-end archivist for a Claude Code working session about to be compacted.
+
+DO
+- Extract concrete decisions, problems solved, blockers, and unresolved questions
+- One bullet per item, max 25 words
+- Reference specific files/commits/issues by name when possible
+
+DON'T
+- Summarise the chat
+- Include code blocks
+- Use softening language ("we discussed", "considered")
+- Output anything except the bullets
+
+SCOPE — IN
+- The most recent {n_msgs} messages of the transcript (provided below)
+
+SCOPE — OUT
+- Greetings, tool-call mechanics, status pings, hook output
+- Anything older than what's included
+
+OUTPUT
+- Exactly 5 bullets, no preamble, no trailing text. If fewer than 5 concrete items exist, output fewer.
+- Format: `- <bullet text>`
+
+CONTEXT
+{transcript_chunk}
+```
+
+Claude's prep for `harvest`: read the named file, pass its content
+(truncated to ~10,000 chars) as `{transcript_chunk}`. Set `{n_msgs}`
+to the approximate number of message turns included. Run:
+
+```bash
+gemini --sandbox -m gemini-3.5-flash -p "$(cat prompt.txt)"
+```
+
 ---
 
 ## Context-bundle assembly

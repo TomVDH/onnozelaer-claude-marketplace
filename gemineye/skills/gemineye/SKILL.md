@@ -7,9 +7,9 @@ description: >
   reviews only — it never writes files; it proposes edits as code blocks
   and Claude applies them.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.2.1
+version: 0.3.0
 user-invocable: true
-argument-hint: "[review|megareview|wip|sanity|name|compare|save] [args]"
+argument-hint: "[review|megareview|wip|sanity|name|compare|save|harvest] [args]"
 ---
 
 # Gemineye
@@ -34,6 +34,7 @@ reads what's prepared, writes notes, leaves. No drawings on the walls.
 | `/gemineye name <thing(s)>` | one or many | flash |
 | `/gemineye compare <A> <B> [<C>...]` | 2+ options | flash |
 | `/gemineye save [topic]` | last review | — (file write) |
+| `/gemineye harvest <path>` | extract 5 durable bullets from any file | flash |
 
 Models: `gemini-3.5-flash` is default. Only `megareview` switches to
 `gemini-3.5-pro` — it's the one mode that needs the deeper pass.

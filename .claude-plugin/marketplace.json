@@ -26,9 +26,9 @@
     },
     {
       "name": "gemineye",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "source": "./gemineye",
-      "description": "A sandboxed second opinion from Gemini \u2014 review-only. Seven subcommands: review, megareview, wip, sanity, name, compare, save. Gemini proposes edits as code blocks; Claude applies them. Pairs with adjudant for vault context."
+      "description": "A sandboxed second opinion from Gemini \u2014 review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. Gemini proposes edits as code blocks; Claude applies them. harvest extracts 5 durable bullets from any file (transcript, doc, code) \u2014 the manual surface for the same pattern adjudant uses automatically at PreCompact. Pairs with adjudant for vault context."
     },
     {
       "name": "adjudant",
