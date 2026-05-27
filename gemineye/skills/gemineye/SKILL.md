@@ -7,7 +7,9 @@ description: >
   reviews only — it never writes files; it proposes edits as code blocks
   and Claude applies them.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.2.0
+version: 0.2.1
+user-invocable: true
+argument-hint: "[review|megareview|wip|sanity|name|compare|save] [args]"
 ---
 
 # Gemineye

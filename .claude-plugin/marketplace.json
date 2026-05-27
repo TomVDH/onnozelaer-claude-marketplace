@@ -26,7 +26,7 @@
     },
     {
       "name": "gemineye",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "source": "./gemineye",
       "description": "A sandboxed second opinion from Gemini \u2014 review-only. Seven subcommands: review, megareview, wip, sanity, name, compare, save. Gemini proposes edits as code blocks; Claude applies them. Pairs with adjudant for vault context."
     },
