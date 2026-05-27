@@ -83,7 +83,7 @@ See `templates/*.md` for the canonical frontmatter shape of every file type. Val
 | `doc` | `doc.md` | purpose sentence + `## {Section}` |
 | `handoff` | `handoff.md` | sync-managed body |
 | `source` | `source.md` | `## Key Points` / `## Notes` / `## Relevance` |
-| `iteration` | `iteration.md` | free-form (title only by default) |
+| `iteration` | `iteration.md` (folder index) | a **folder** of build artefacts (HTML tryouts, experiments, superpowers); the optional `_iteration.md` is its index/manifest, read by `iteration-shelf` |
 | `release` | `release.md` | `## Changes` |
 | `dream-report` | `dream-report.md` | auto-populated by `/adjudant dream` |
 | `index` | `_index-projects.md` or `_index-collection.md` | table or list |
@@ -116,8 +116,7 @@ Quick test: "When was this decided?" — clear answer = decision; "it's just how
 | Note | `{kebab-title}.md` (no date unless time-relevant) | strict |
 | Source | `{kebab-title}.md` | strict |
 | Release | `v{X.Y.Z}.md` | strict |
-| Iteration (file) | `{YYYY-MM-DD}-iter-{id}-{kebab-slug}.md` | strict |
-| Iteration (folder) | `{YYYY-MM-DD}-iter-{id}-{kebab-slug}/_iteration.md` | strict |
+| Iteration (folder) | `iterations/{YYYY-MM-DD}-iter-{id}-{kebab-slug}/` — holds the artefacts (HTML, etc.); optional `_iteration.md` index inside | strict |
 | Dream report | `{YYYY-MM-DD}.md` | strict |
 | Doc | `{NAME}.md` — **UPPERCASE** (e.g. `STANDARDS.md`, `MANIFESTO.md`) | strict |
 | Handoff | `_handoff.md` | strict |
@@ -162,7 +161,7 @@ Anything actually present under the project but not in (defaults ∪ `extra_fold
 
 Every folder under a project (or at vault root) that holds ≥2 sibling `.md` files of the same conceptual type gets an `_index.md`.
 
-**Exceptions:** `sessions/` (chronological ordering is the index), `images/`, `assets/`, `previews/` (non-text or build artefacts).
+**Exceptions:** `sessions/` (chronological ordering is the index), `images/`, `assets/`, `previews/`, and `iterations/` plus the iteration folders inside it (non-text / build artefacts — HTML tryouts, experiments; the optional `_iteration.md` is the only conformant file, and artefacts carry no frontmatter).
 
 **Index shape:** `# {Collection Name}`, one-line description, `## Entries` with wikilinks. Chronological where dates are in filenames; alphabetical otherwise. `/adjudant ramasse` rebuilds these mechanically.
 

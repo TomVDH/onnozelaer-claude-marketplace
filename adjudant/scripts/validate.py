@@ -13,6 +13,7 @@ Validators:
   7. port-preview-coherence  — if preview dir exists, has all required files
   8. port-backup-integrity   — backup dirs have at least one .legacy file
   9. gitignore-includes-port-dirs — .gitignore lists port dirs if either exists
+ 10. version-consistency     — plugin.json / command-metadata.json / SKILL.md (+ marketplace when present) versions all match
 """
 
 import json
@@ -261,6 +262,38 @@ def validate_gitignore_includes_port_dirs(r: Result) -> None:
     r.add_pass(name)
 
 
+def validate_version_consistency(r: Result) -> None:
+    name = "version-consistency"
+    versions: dict[str, str] = {}
+    # In-plugin sources (always present)
+    try:
+        versions["plugin.json"] = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text()).get("version", "")
+        versions["command-metadata.json"] = json.loads((ROOT / "scripts" / "command-metadata.json").read_text()).get("version", "")
+    except (json.JSONDecodeError, OSError) as e:
+        r.add_fail(name, f"could not read a version source: {e}")
+        return
+    skill_file = CANONICAL / "SKILL.md"
+    m = re.search(r"^version:\s*(\S+)", skill_file.read_text(), re.M) if skill_file.exists() else None
+    versions["SKILL.md"] = m.group(1) if m else ""
+    # marketplace.json lives in the parent repo — only check when present (standalone installs won't have it)
+    mk = ROOT.parent / ".claude-plugin" / "marketplace.json"
+    if mk.is_file():
+        try:
+            entry = next((p for p in json.loads(mk.read_text()).get("plugins", []) if p.get("name") == "adjudant"), None)
+            if entry is not None:
+                versions["marketplace.json"] = entry.get("version", "")
+        except json.JSONDecodeError:
+            pass
+    empties = [k for k, v in versions.items() if not v]
+    if empties:
+        r.add_fail(name, f"missing/empty version in: {empties}")
+        return
+    if len(set(versions.values())) != 1:
+        r.add_fail(name, f"version mismatch: {versions}")
+        return
+    r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -273,6 +306,7 @@ def main() -> int:
     validate_port_preview_coherence(r)
     validate_port_backup_integrity(r)
     validate_gitignore_includes_port_dirs(r)
+    validate_version_consistency(r)
     return r.report()
 
 
