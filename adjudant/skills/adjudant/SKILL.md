@@ -1,15 +1,15 @@
 ---
 name: adjudant
-description: Use when operating an Obsidian vault — connect a project, sync state, check status, tidy mechanical drift (tidy), deep restructure (ramasse), run diagnostics (dream), or create canvases/diagrams (draw). Handles vault layout, frontmatter, tags, wikilinks, templates, and project AGENTS.md/CLAUDE.md files. Also when writing decisions, sessions, notes, or docs into a vault, or when the user types `/adjudant {verb}`.
-version: 0.3.0
+description: Use when operating an Obsidian vault — connect a project, sync state, check status, tidy mechanical drift (tidy), deep structural restructure (ramasse), or create canvases/diagrams (draw). Handles vault layout, frontmatter, tags, wikilinks, templates, and project AGENTS.md/CLAUDE.md files. Also when writing decisions, sessions, notes, or docs into a vault, or when the user types `/adjudant {verb}`.
+version: 0.3.1
 user-invocable: true
-argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw] [args]"
+argument-hint: "[connect|port|sync|check|tidy|ramasse|draw] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, eight verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
+Vault editor/writer and project initializer. One skill, one command, seven verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
@@ -19,25 +19,34 @@ Vault editor/writer and project initializer. One skill, one command, eight verbs
 | `port` | `reference/port.md` | Migrate any legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance via two-phase preview → apply |
 | `sync` | `reference/sync.md` | Push brief + handoff to vault |
 | `check` | `reference/check.md` | Read-only project + vault summary (consumes `check.py` JSON) |
-| `tidy` | `reference/tidy.md` | Mechanical sweep — rebuild indexes, normalise tags, fix wikilink form. Two-phase preview→apply (via `tidy.py`) |
-| `ramasse` | `reference/ramasse.md` | Deep structural refactor — used sparingly, superpowers-driven planning |
-| `dream` | `reference/dream.md` | Diagnostic crawl — drift report (consumes `dream.py` JSON), no auto-fix |
+| `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`) |
+| `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
 | `draw` | `reference/draw.md` | Create canvas / base / diagram |
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
 
-## Python helper layer (v0.3.0)
+## The locked three-tier model (v0.3.1)
 
-The four heaviest verbs are backed by Python helpers in `scripts/` that pre-digest project files into compact structured output Claude renders. This keeps per-verb context cost bounded regardless of project size.
+```
+tidy    = surface mechanical    (routine, daily/weekly, never breaks)
+ramasse = deep structural clean (sparing, quarterly, deliberate)
+dream   = content/knowledge/memory refresh (semantic; NOT YET BUILT — v0.4+)
+```
+
+`dream` is reserved for the future content-refresh verb that reads actual prose and identifies outdated/stale/redundant ideas. The structural-drift detector previously named `dream.py` in v0.3.0 has been renamed `ramasse_scan.py` and now feeds ramasse's analysis phase.
+
+## Python helper layer
+
+Verbs touching many files use a Python helper that pre-digests structured output Claude renders, keeping per-verb context cost bounded.
 
 | Verb | Helper | Output |
 |---|---|---|
 | `port` | `port.py` | preview/apply with backup |
 | `tidy` | `tidy.py` + `_vault_walk.py` | preview/apply with backup |
-| `dream` | `dream.py` + `_vault_walk.py` | JSON drift catalog |
+| `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase) |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
 
-`_vault_walk.py` is the shared primitives module (frontmatter parsing, wikilink extraction, schema constants). Has a CLI smoke-test mode for debugging: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
+`_vault_walk.py` is the shared primitives module. Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
 
 ## Vault standards — single source of truth
 

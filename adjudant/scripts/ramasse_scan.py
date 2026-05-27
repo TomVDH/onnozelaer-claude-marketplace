@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
-"""Adjudant dream — drift catalog harvester.
+"""Adjudant ramasse_scan — structural drift catalog (ramasse analysis phase).
 
 Scans an adjudant-managed vault project and emits a structured drift
-catalog (JSON) for Claude to render. Read-only — never writes.
+catalog (JSON) for Claude to render or for `/adjudant ramasse` to use
+as the analysis phase before planning a deep restructure.
+
+Reports on: folder drift, index gaps, frontmatter drift, tag drift,
+type drift, naming violations, wikilink form violations, broken
+wikilinks, doc/decision mismatches. Read-only — never writes.
 
 CLI:
-    python3 dream.py --project-dir PATH [--vault-dir PATH] [--out FILE] [--include-legacy]
+    python3 ramasse_scan.py --project-dir PATH [--vault-dir PATH] [--out FILE] [--include-legacy]
 
-Output is JSON on stdout by default (or to --out FILE). Status info on stderr.
+NOTE: This module was originally named `dream.py` in v0.3.0. Renamed
+in v0.3.1 to align with the locked 3-tier model:
+  - tidy    = surface mechanical sweep
+  - ramasse = deep structural clean (this scanner is its analysis phase)
+  - dream   = content/knowledge/memory refresh (semantic; not yet built)
 
 See docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md.
 """
@@ -314,11 +323,11 @@ def detect_doc_decision_flags(files: list[VaultFile]) -> list[dict]:
 
 
 # ============================================================
-# Top-level dream run
+# Top-level scan
 # ============================================================
 
 
-def run_dream(
+def run_scan(
     project_dir: Path,
     vault_dir: Optional[Path],
     *,
@@ -392,8 +401,8 @@ def run_dream(
 
 def cli_main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="dream.py",
-        description="Adjudant dream — drift catalog harvester (read-only).",
+        prog="ramasse_scan.py",
+        description="Adjudant ramasse_scan — structural drift catalog (read-only).",
     )
     parser.add_argument("--project-dir", help="Project root (default: cwd)", default=".")
     parser.add_argument("--vault-dir", help="Vault root (default: resolved from breadcrumb)")
@@ -415,19 +424,19 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(f"warn: vault-dir not a directory: {vault_dir}", file=sys.stderr)
         vault_dir = None
 
-    report = run_dream(project_dir, vault_dir, include_legacy=args.include_legacy)
+    report = run_scan(project_dir, vault_dir, include_legacy=args.include_legacy)
 
     payload = json.dumps(report, indent=2, default=str)
     if args.out:
         Path(args.out).expanduser().write_text(payload + "\n")
-        print(f"[dream] wrote {args.out}", file=sys.stderr)
+        print(f"[ramasse_scan] wrote {args.out}", file=sys.stderr)
     else:
         print(payload)
 
     # Stderr summary
     summary = report["summary"]
     print(
-        f"[dream] {report['meta']['project_slug']}: "
+        f"[ramasse_scan] {report['meta']['project_slug']}: "
         f"{report['meta']['files_scanned']} files, "
         f"{summary['drift_items']} drift items, "
         f"{summary['wikilinks_broken_pct']}% broken wikilinks",

@@ -45,7 +45,7 @@ The morning session on the work machine produced the `verb-implementation-gaps` 
 
 | Phase | Skill leveraged | Output |
 |---|---|---|
-| 1. Analyse | (dream-like deep scan) | full drift catalog + project-shape assessment |
+| 1. Analyse | `ramasse_scan.py` + Claude | full structural drift catalog + project-shape assessment |
 | 2. Brainstorm | `superpowers:brainstorming` | explore restructure options with user (folder reorgs, file consolidations, schema shifts) |
 | 3. Plan | `superpowers:writing-plans` | content arrangement plan with step-by-step structural changes |
 | 4. Review | (human checkpoint) | user reviews + approves plan; can edit |
@@ -55,9 +55,9 @@ The morning session on the work machine produced the `verb-implementation-gaps` 
 - tidy = mechanical, idempotent, runs often, no user dialogue
 - ramasse = restructural, planning-driven, runs rarely, user-in-the-loop
 
-**Distinction from `/adjudant dream`:**
-- dream = read-only diagnostic crawl, generates a report file, no plan
-- ramasse = uses dream-like analysis but goes further to propose + execute restructure
+**Distinction from `/adjudant tidy`:**
+- tidy = routine mechanical sweep, never breaks anything, fully automated
+- ramasse = uses `ramasse_scan.py` for analysis + superpowers for planning, can break things deliberately under human review
 
 **Implementation:** runbook-only (no Python). The whole verb is Claude-runtime, leveraging the superpowers skill chain.
 
@@ -90,69 +90,63 @@ The morning session on the work machine produced the `verb-implementation-gaps` 
 - New `templates/ide-snapshot.md` template
 - vault-standards.md update: add `/IDE/` folder + `ide-snapshot` file type to Bucket A
 
-## Resulting surface
+## Resulting surface across versions
 
-| | Before (v0.2.5) | After (v0.4.x target) |
-|---|---|---|
-| Verbs | 7 | 9 |
-| Python-backed | port | port, tidy |
-| Claude-runtime | connect, sync, check, ramasse, dream, draw | connect, sync, check, ramasse, dream, draw, log |
-| Idempotent | port | port, tidy, log |
+| | v0.2.5 (before) | v0.3.1 (now) | v0.4.x (target) |
+|---|---|---|---|
+| Verbs | 7 | 7 | 9 |
+| Verb list | connect, port, sync, check, ramasse, dream, draw | connect, port, sync, check, tidy, ramasse, draw | + log + dream (semantic) |
+| Python-backed | port | port, tidy, check, ramasse_scan | + dream.py (v0.4) |
+| Claude-runtime | most | connect, sync, ramasse, draw | + log + dream-runtime |
 
-## Dream reframe — semantic compaction (2026-05-26 late evening)
+`/adjudant dream` was removed from the v0.3.1 surface — the name is reserved for the future content/knowledge/memory refresh verb. What was v0.3.0's `dream.py` is now `ramasse_scan.py` (feeds `/adjudant ramasse` as its analysis phase).
 
-User raised a fundamental reframe of what `dream` should be. Captured here for v0.4+ work.
+## The locked three-tier cleanup model (2026-05-26, late evening)
 
-### Current dream (v0.3.0) — structural drift catalog
+After two rounds of design discussion, the cleanup verb responsibilities are locked:
 
-What `dream.py` does today:
-- Walks project, reports frontmatter / tag / type / naming / wikilink-form / broken-wikilink / folder / index / doc-decision drift
-- Read-only, JSON output, Claude renders narrative
-- Scope: schema-level (the *form* of files, not the *content*)
+```
+tidy    = surface mechanical sweep      (routine, daily/weekly, never breaks)
+ramasse = deep structural clean         (sparing, quarterly, deliberate)
+dream   = content/knowledge/memory      (semantic; reserved for v0.4+)
+          refresh
+```
 
-This is useful but **not what dream should primarily be.** It's closer to a `lint` / `audit` pass.
+Each layer operates on a different concern:
+- **tidy** = the FORM of files (tags, indexes, wikilink form, `updated:`). Schema-conformant surface.
+- **ramasse** = the SHAPE of the project (folders, file types, naming, schema, broken-wikilink triage, doc/decision mismatches). Structural.
+- **dream** = the CONTENT of files (outdated decisions, stale references, redundant notes, orphan threads). Semantic.
 
-### Future dream (v0.4+) — semantic compaction
+Risk tolerance is the dividing line: tidy never breaks anything; ramasse can break things deliberately under human supervision via the superpowers chain; dream (v0.4+) is LLM-judgment heavy semantic cleanup.
 
-User's vision: **dream is to a vault project what PreCompact is to a Claude conversation.**
+### What changed v0.3.0 → v0.3.1
 
-- Read the actual **content** of decisions, notes, sessions (not just frontmatter)
-- Identify:
-  - **Outdated info**: decision A made 2026-05-08 contradicts decision B made 2026-05-15 → A might be stale
-  - **Irregularities**: notes referencing things that no longer exist; sessions mentioning archived projects
+v0.3.0 shipped a `dream.py` helper + `/adjudant dream` verb that did **structural drift detection** — folder drift, frontmatter, tags, types, naming, wikilink form, broken wikilinks, doc/decision flags. That work was misnamed.
+
+Per the locked model, structural detection belongs to **ramasse**, not dream. So in v0.3.1:
+- `dream.py` → `ramasse_scan.py` (file renamed, structure unchanged)
+- `test_dream.py` → `test_ramasse_scan.py`
+- `run_dream()` → `run_scan()`
+- `/adjudant dream` verb removed from the surface
+- `reference/dream.md` rewritten as a "reserved name" stub
+- `reference/ramasse.md` rewritten to describe the 5-phase superpowers chain that consumes `ramasse_scan.py` as its phase-1 analyser
+- Surface: 8 verbs → 7
+
+### What v0.4+ dream will look like
+
+Dream becomes a vault-content equivalent of PreCompact:
+- Read the actual **prose** of decisions, notes, sessions (not just frontmatter)
+- Identify content-level issues:
+  - **Outdated info**: decision A contradicts decision B
+  - **Irregularities**: refs to things that no longer exist
   - **Redundancy**: multiple notes saying the same thing
   - **Orphan threads**: open questions from old sessions never resolved
   - **Stale references**: decisions citing outdated tech/files/people
-- **Clean up semantically** — meaning dream becomes write-capable (mark decisions as superseded, consolidate duplicates, archive stale sessions, update references)
-- Output is a **distilled, current view** of the project, not "X drift items"
+- **Clean up semantically** — write-capable: mark decisions as superseded, consolidate duplicates, archive stale sessions, update references
 
-This is LLM-judgment heavy. The Python helper does the heavy reading + emits structured comparators ("decision A line 42 conflicts with decision B line 18 about subject X"); Claude does the semantic judging + writes the cleanup plan.
+Architecture: a future `dream.py` does the structured comparison work (heavy reading); Claude does the semantic judging + writes the refresh plan. Two-phase preview→apply mirroring port/tidy.
 
-### What this means for ramasse
-
-Open question. Two plausible reads:
-- **Dream eats ramasse**: three verbs total (check / tidy / dream) with dream as the deep semantic+structural cleanup. Ramasse goes away or means something else.
-- **Distinct layers**: dream operates at the content-level (semantic) within one project; ramasse operates at the architectural-level (folder reshapes, schema evolution) across projects.
-
-Defer the choice until designing v0.4. The current `reference/ramasse.md` (deep planning verb spec) stays as a placeholder.
-
-### What v0.3.0 ships meanwhile
-
-The structural detection in `dream.py` is **the foundation layer** the semantic version will sit on:
-- `_vault_walk.py` walks + parses
-- `dream.py` structural detectors run
-- v0.4+ adds: content-level semantic detectors → write-capable compaction phase
-
-Don't tear down v0.3.0 to build v0.4. Layer it.
-
-### Naming question (deferred)
-
-If v0.4 dream becomes semantic-write, the current `dream.py` structural pass could be:
-- (a) Renamed to `audit.py` and given its own verb `/adjudant audit`
-- (b) Folded into tidy's preview (which already reports what it would change)
-- (c) Kept as the first phase of dream (structural before semantic)
-
-Lean (c) for minimal surface churn. The runbook (`reference/dream.md`) describes a 2-pass model: structural pass first, semantic pass second. v0.3.0 ships pass 1.
+The v0.3.x helper layer (`_vault_walk.py`, `ramasse_scan.py`'s reusable detectors) is the foundation v0.4+ dream sits on. No teardown.
 
 ---
 

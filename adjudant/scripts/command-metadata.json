@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "verbs": [
     {
       "name": "connect",
@@ -28,21 +28,15 @@
     },
     {
       "name": "tidy",
-      "description": "Mechanical vault sweep — rebuild _index.md, normalise tags per locked schema, fix wikilink form, bump updated:. Two-phase: tidy.py preview, then tidy.py apply. Idempotent.",
+      "description": "Surface mechanical sweep — rebuild _index.md, normalise tags per locked schema, fix wikilink form, bump updated:. Two-phase: tidy.py preview, then tidy.py apply. Idempotent. Daily/weekly cadence.",
       "argumentHint": "(no args)",
       "reference": "reference/tidy.md"
     },
     {
       "name": "ramasse",
-      "description": "Deep structural refactor — used sparingly. Leverages superpowers (brainstorming, writing-plans, executing-plans) to draft a content-arrangement plan. Distinct from tidy's mechanical sweep.",
+      "description": "Deep structural clean — folder shape, schema, file types, naming, renames, broken-wikilink triage, doc/decision mismatches. Used sparingly (quarterly). Analysis phase via ramasse_scan.py; planning + execute via superpowers.",
       "argumentHint": "(no args)",
       "reference": "reference/ramasse.md"
-    },
-    {
-      "name": "dream",
-      "description": "Diagnostic crawl — drift report (frontmatter, tags, naming, folders), broken wikilinks, doc/decision mismatches. Calls dream.py for the scan, Claude renders the narrative. Reports only, no auto-fix.",
-      "argumentHint": "(no args)",
-      "reference": "reference/dream.md"
     },
     {
       "name": "draw",

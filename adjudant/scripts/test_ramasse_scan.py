@@ -1,11 +1,11 @@
-"""Tests for adjudant/scripts/dream.py."""
+"""Tests for adjudant/scripts/ramasse_scan.py."""
 
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from dream import (
+from ramasse_scan import (
     detect_broken_wikilinks,
     detect_doc_decision_flags,
     detect_folder_drift,
@@ -15,7 +15,7 @@ from dream import (
     detect_tag_drift,
     detect_type_drift,
     detect_wikilink_form_violations,
-    run_dream,
+    run_scan,
 )
 from _vault_walk import build_vault_index, walk_project
 
@@ -324,7 +324,7 @@ class TestDetectDocDecisionFlags(unittest.TestCase):
 
 
 # ============================================================
-# End-to-end run_dream
+# End-to-end run_scan
 # ============================================================
 
 
@@ -338,7 +338,7 @@ class TestRunDream(unittest.TestCase):
             _write_file(root / "decisions" / "2026-05-26-test.md", "---\ntype: decision\n---\n")
             _write_file(root / "decisions" / "2026-05-25-test.md", "---\ntype: decision\n---\n")
             _write_file(root / "decisions" / "_index.md", "---\ntype: index\n---\n# Decisions")
-            report = run_dream(root, root)
+            report = run_scan(root, root)
             self.assertEqual(report["meta"]["project_slug"], "test")
             self.assertEqual(report["meta"]["project_type"], "coding")
             self.assertEqual(report["summary"]["drift_items"], 0)
@@ -351,7 +351,7 @@ class TestRunDream(unittest.TestCase):
             _write_file(root / "a.md", "---\ntype: note\ntags:\n  - ob/note\n---\n")
             # Add a non-canonical type
             _write_file(root / "b.md", "---\ntype: api-ref\n---\n")
-            report = run_dream(root, root)
+            report = run_scan(root, root)
             self.assertGreater(report["summary"]["drift_items"], 0)
             self.assertGreater(report["tag_drift"]["bucket_d_total_occurrences"], 0)
             self.assertGreater(report["type_drift"]["non_canonical_count"], 0)
@@ -362,7 +362,7 @@ class TestRunDream(unittest.TestCase):
             root = Path(tmp)
             _make_minimal_project(root)
             _write_file(root / "a.md", "---\ntype: note\ntags:\n  - ob/note\n---\n")
-            report = run_dream(root, root)
+            report = run_scan(root, root)
             payload = json.dumps(report, default=str)
             roundtrip = json.loads(payload)
             self.assertEqual(roundtrip["meta"]["project_slug"], "test")

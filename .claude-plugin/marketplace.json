@@ -32,9 +32,9 @@
     },
     {
       "name": "adjudant",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "source": "./adjudant",
-      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with eight verbs (connect, port, sync, check, tidy, ramasse, dream, draw). v0.3.0 introduces a Python-helper layer (dream.py, check.py, tidy.py, _vault_walk.py) that keeps verb invocation under context budget for large projects. Tidy implements the mechanical sweep (was the ramasse spec); ramasse is reserved for the deep planning verb. Rigid spec, locked tag schema, drift-defense via pre-commit validators."
+      "description": "Vault editor/writer and project initializer. One skill, one command (/adjudant) with seven verbs (connect, port, sync, check, tidy, ramasse, draw). Locked three-tier cleanup model: tidy = surface mechanical (routine), ramasse = deep structural (sparing), dream = content/knowledge/memory refresh (semantic, v0.4+). v0.3.0 added Python-helper layer (ramasse_scan.py, check.py, tidy.py, _vault_walk.py); v0.3.1 aligned naming to the locked model. Rigid spec, locked tag schema, drift-defense via pre-commit validators."
     }
   ]
 }
