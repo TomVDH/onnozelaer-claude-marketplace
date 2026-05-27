@@ -142,6 +142,13 @@ class TestMapObSections(unittest.TestCase):
         result = map_ob_sections(ob_sections)
         self.assertIn("/path/to/repo", result["where_things_live_extra_rows"])
 
+    def test_working_tree_formatted_as_table_row(self):
+        result = map_ob_sections({"working tree": "/path/to/repo"})
+        # Must be a complete markdown table row, not a raw path
+        rows = result["where_things_live_extra_rows"].splitlines()
+        self.assertTrue(any(r.startswith("|") and r.endswith("|") and "/path/to/repo" in r for r in rows),
+                        f"Expected table row containing path, got: {result['where_things_live_extra_rows']!r}")
+
     def test_stack_maps_to_conventions(self):
         ob_sections = {"stack": "Node 22, pnpm, Vite"}
         result = map_ob_sections(ob_sections)
@@ -261,6 +268,55 @@ class TestGeneratePreviewY(unittest.TestCase):
             self.assertIn("Flavor: Y", summary)
             self.assertIn("Vault rules", summary)
             self.assertIn("DROPPED", summary)
+
+    def test_y_brief_md_proposed_has_adjudant_shape(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(f"vault: {vault}\nslug: p\n")
+            (root / "AGENTS.md").write_text("# P\n")
+            # Pre-populate OB-shaped vault brief
+            (Path(vault) / "projects" / "p").mkdir(parents=True)
+            (Path(vault) / "projects" / "p" / "brief.md").write_text(
+                "---\ntype: project-brief-ob\nslug: p\n---\n\n# P Brief\n\nOriginal content.\n"
+            )
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
+            proposed_brief = (root / ".adjudant-port-preview" / "brief.md.proposed")
+            self.assertTrue(proposed_brief.is_file())
+            text = proposed_brief.read_text()
+            self.assertIn("type: project-brief-coding", text)
+            self.assertNotIn("type: project-brief-ob", text)
+            self.assertIn("Original content.", text)
+
+    def test_y_apply_actually_replaces_brief_md(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(f"vault: {vault}\nslug: p\n")
+            (root / "AGENTS.md").write_text("# P\n")
+            (root / "CLAUDE.md").write_text("# P claude\n")
+            (Path(vault) / "projects" / "p").mkdir(parents=True)
+            (Path(vault) / "projects" / "p" / "brief.md").write_text(
+                "---\ntype: project-brief-ob\n---\n\n# P\n\nOld content.\n"
+            )
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
+            apply_preview(root)
+            new_brief = (Path(vault) / "projects" / "p" / "brief.md").read_text()
+            self.assertIn("type: project-brief-coding", new_brief)
+            self.assertNotIn("type: project-brief-ob", new_brief)
+            self.assertIn("Old content.", new_brief)
+
+    def test_y_claude_md_heading_uses_first_letter_capitalization_only(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(f"vault: {vault}\nslug: p\n")
+            (root / "AGENTS.md").write_text("# P\n")
+            (root / "CLAUDE.md").write_text("# Old\n\n## bash allowlist\n\n- npm\n")
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
+            claude_proposed = (root / ".adjudant-port-preview" / "CLAUDE.md.proposed").read_text()
+            self.assertIn("## Bash allowlist", claude_proposed)
+            self.assertNotIn("## Bash Allowlist", claude_proposed)
 
 
 from port import generate_preview_z_scaffold

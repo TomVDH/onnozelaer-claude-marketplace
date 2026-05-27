@@ -204,6 +204,16 @@ def map_ob_sections(ob_sections: dict[str, str]) -> dict[str, str]:
             # Unmatched
             result["from_legacy"] += f"### {heading}\n\n{body}\n\n"
             result["decisions"] += f'- OB "## {heading}" → "## From legacy AGENTS.md" section at end (no template match)\n'
+        elif slot == "where_things_live_extra_rows":
+            # Format as a markdown table row — this slot is appended directly to a table
+            if heading == "working tree":
+                formatted = f"| Working tree (legacy) | {body.strip()} |"
+            else:
+                formatted = f"| {heading.capitalize()} | {body.strip()} |"
+            if result[slot]:
+                result[slot] += "\n"
+            result[slot] += formatted
+            result["decisions"] += f'- OB "## {heading}" → adjudant "{slot}" (deterministic OB mapping)\n'
         else:
             if result[slot]:
                 result[slot] += "\n\n"
@@ -289,6 +299,31 @@ This file is for **Claude Code-specific overrides only**:
 {extra}"""
 
 
+def render_brief_md_y(legacy_brief_text: str, slug: str, project_type: str) -> str:
+    """For Y flavor: produce a new adjudant-shape brief.md preserving the legacy body.
+
+    Strips the legacy frontmatter (if any), writes a new adjudant frontmatter
+    block, appends the legacy body (without its title duplicate if present).
+    """
+    body = legacy_brief_text
+    # Strip legacy frontmatter
+    fm_match = re.match(r"^---\s*\n.*?\n---\s*\n", body, re.DOTALL)
+    if fm_match:
+        body = body[fm_match.end():]
+    body = body.lstrip()
+
+    return (
+        f"---\n"
+        f"type: project-brief-{project_type}\n"
+        f"slug: {slug}\n"
+        f"status: active\n"
+        f"updated: \n"
+        f"---\n"
+        f"\n"
+        f"{body}"
+    )
+
+
 def generate_preview_y(
     project_root: Path,
     vault_path: Path,
@@ -314,7 +349,7 @@ def generate_preview_y(
     for heading, body in claude_sections.items():
         if claude_body:
             claude_body += "\n\n"
-        claude_body += f"## {heading.title()}\n\n{body}"
+        claude_body += f"## {heading.capitalize()}\n\n{body}"
         mapped["decisions"] += f'- Legacy CLAUDE.md "## {heading}" → Kept in CLAUDE.md (legacy claude content)\n'
 
     agents_out = render_agents_md(
@@ -332,6 +367,12 @@ def generate_preview_y(
     (preview_dir / "AGENTS.md.proposed").write_text(agents_out)
     (preview_dir / "CLAUDE.md.proposed").write_text(claude_out)
     (preview_dir / "breadcrumb.proposed").write_text(breadcrumb_out)
+
+    # Generate brief.md.proposed if the legacy vault project has a brief
+    legacy_brief = vault_path / "projects" / slug / "brief.md"
+    if legacy_brief.is_file():
+        brief_out = render_brief_md_y(legacy_brief.read_text(), slug, project_type)
+        (preview_dir / "brief.md.proposed").write_text(brief_out)
 
     vault_changes = _y_vault_changes(vault_path, slug, project_type)
     (preview_dir / "vault-changes.txt").write_text("\n".join(vault_changes) + "\n")
@@ -361,7 +402,7 @@ def _y_vault_changes(vault_path: Path, slug: str, project_type: str) -> list[str
         if not (proj / sub).is_dir():
             changes.append(f"CREATE:{proj / sub}")
     if (proj / "brief.md").is_file():
-        changes.append(f"REPLACE:{proj / 'brief.md'}")
+        changes.append(f"REPLACE-FROM-PROPOSED:{proj / 'brief.md'}:brief.md.proposed")
     changes.append(f"REGEN:{proj / '_index.md'}")
     changes.append(f"UPDATE-ROW:{vault_path / 'projects' / '_index.md'}:{slug}")
     return changes
@@ -572,7 +613,7 @@ def apply_preview(project_root: Path) -> None:
         for line in vault_changes_file.read_text().splitlines():
             line = line.strip()
             if line:
-                _apply_vault_change(line)
+                _apply_vault_change(line, preview_dir=preview)
 
     _ensure_gitignore_entries(
         project_root,
@@ -582,7 +623,7 @@ def apply_preview(project_root: Path) -> None:
     shutil.rmtree(preview)
 
 
-def _apply_vault_change(line: str) -> None:
+def _apply_vault_change(line: str, preview_dir: Optional[Path] = None) -> None:
     """Apply a single vault-changes.txt line. Format: ACTION:path[:path2[:extra]]."""
     parts = line.split(":", 3)
     action = parts[0]
@@ -597,8 +638,17 @@ def _apply_vault_change(line: str) -> None:
         if src.is_dir():
             dst.parent.mkdir(parents=True, exist_ok=True)
             src.rename(dst)
+    elif action == "REPLACE-FROM-PROPOSED":
+        if preview_dir is None:
+            raise RuntimeError("REPLACE-FROM-PROPOSED requires preview_dir")
+        live_path = Path(parts[1])
+        proposed_name = parts[2]
+        proposed_path = preview_dir / proposed_name
+        if not proposed_path.is_file():
+            raise RuntimeError(f"REPLACE-FROM-PROPOSED: {proposed_path} not found in preview")
+        live_path.write_text(proposed_path.read_text())
     elif action == "REPLACE":
-        pass
+        pass  # leave as-is for legacy compat; tests should use REPLACE-FROM-PROPOSED now
     elif action == "REGEN":
         target = Path(parts[1])
         if not target.is_file():
