@@ -667,19 +667,29 @@ def _apply_vault_change(line: str, preview_dir: Optional[Path] = None) -> None:
 
 
 def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
-    """Add or update a row for `slug` in the vault's projects/_index.md."""
+    """Add a row for `slug` in the vault's projects/_index.md, conservatively.
+
+    Safety rules (prevents corrupting hand-maintained vault indexes):
+      1. If the file doesn't exist, create the adjudant default (2-column).
+      2. If any existing row references this slug (`{slug}/brief` substring),
+         do nothing — idempotent.
+      3. If the file uses the adjudant default header (`| Slug |`),
+         append our 2-column row.
+      4. Otherwise (unknown / custom format), DO NOT WRITE. User adds
+         the row themselves; we don't risk corrupting a richer table.
+    """
     idx_path.parent.mkdir(parents=True, exist_ok=True)
     if not idx_path.is_file():
         idx_path.write_text(f"# Projects\n\n| Slug | Brief |\n|---|---|\n| {slug} | [[projects/{slug}/brief]] |\n")
         return
     text = idx_path.read_text()
-    row = f"| {slug} | [[projects/{slug}/brief]] |"
-    if row in text:
+    # Idempotency: any existing reference to this slug's brief = already there
+    if f"{slug}/brief" in text:
         return
-    if "| Slug |" not in text:
-        idx_path.write_text(text.rstrip() + f"\n\n| Slug | Brief |\n|---|---|\n{row}\n")
-        return
-    idx_path.write_text(text.rstrip() + f"\n{row}\n")
+    # Only append if the file uses the adjudant default header — never corrupt richer formats
+    if "| Slug |" in text:
+        row = f"| {slug} | [[projects/{slug}/brief]] |"
+        idx_path.write_text(text.rstrip() + f"\n{row}\n")
 
 
 def _ensure_gitignore_entries(project_root: Path, entries: list[str]) -> None:

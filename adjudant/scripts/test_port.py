@@ -540,6 +540,55 @@ class TestApplyPreview(unittest.TestCase):
             self.assertIn(".claude/adjudant", ignore)
 
 
+from port import _upsert_project_index_row
+
+
+class TestUpsertProjectIndexRow(unittest.TestCase):
+    """The vault projects/_index.md varies wildly across real vaults.
+    These tests verify the conservative-write behavior."""
+
+    def test_creates_file_with_default_format_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            _upsert_project_index_row(idx, "newproj")
+            self.assertTrue(idx.is_file())
+            text = idx.read_text()
+            self.assertIn("| Slug | Brief |", text)
+            self.assertIn("| newproj | [[projects/newproj/brief]] |", text)
+
+    def test_idempotent_when_slug_already_referenced(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            idx.parent.mkdir()
+            original = "# Custom\n\n| Project | Type |\n|---|---|\n| [[hubspot/brief\\|hubspot]] | coding |\n"
+            idx.write_text(original)
+            _upsert_project_index_row(idx, "hubspot")
+            # File unchanged: slug already referenced via /brief substring
+            self.assertEqual(idx.read_text(), original)
+
+    def test_skips_write_on_unknown_format(self):
+        """If the file uses a richer header than the adjudant default, skip rather than corrupt."""
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            idx.parent.mkdir()
+            original = "# Custom\n\n| Project | Type | Status |\n|---|---|---|\n| [[other/brief\\|other]] | coding | active |\n"
+            idx.write_text(original)
+            _upsert_project_index_row(idx, "newproj")
+            # File unchanged — adjudant didn't try to add a 2-column row to a 3-column table
+            self.assertEqual(idx.read_text(), original)
+
+    def test_appends_row_when_default_format_detected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            idx.parent.mkdir()
+            original = "# Projects\n\n| Slug | Brief |\n|---|---|\n| existing | [[projects/existing/brief]] |\n"
+            idx.write_text(original)
+            _upsert_project_index_row(idx, "newproj")
+            text = idx.read_text()
+            self.assertIn("| existing | [[projects/existing/brief]] |", text)
+            self.assertIn("| newproj | [[projects/newproj/brief]] |", text)
+
+
 import subprocess
 import sys
 
