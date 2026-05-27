@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, six verbs.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, seven verbs.
 
 ## Install
 

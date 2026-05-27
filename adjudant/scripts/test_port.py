@@ -547,46 +547,56 @@ class TestUpsertProjectIndexRow(unittest.TestCase):
     """The vault projects/_index.md varies wildly across real vaults.
     These tests verify the conservative-write behavior."""
 
-    def test_creates_file_with_default_format_when_missing(self):
+    SIX_COL_HEADER = "| Project | Type | Status | Decisions | Sessions | Last Session |"
+
+    def test_creates_canonical_six_column_index_when_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             idx = Path(tmp) / "projects" / "_index.md"
             _upsert_project_index_row(idx, "newproj")
             self.assertTrue(idx.is_file())
             text = idx.read_text()
-            self.assertIn("| Slug | Brief |", text)
-            self.assertIn("| newproj | [[projects/newproj/brief]] |", text)
+            self.assertIn(self.SIX_COL_HEADER, text)
+            self.assertIn("[[projects/newproj/brief|newproj]]", text)
+            self.assertNotIn("| Slug | Brief |", text)  # never the legacy 2-column shape
 
     def test_idempotent_when_slug_already_referenced(self):
         with tempfile.TemporaryDirectory() as tmp:
             idx = Path(tmp) / "projects" / "_index.md"
             idx.parent.mkdir()
-            original = "# Custom\n\n| Project | Type |\n|---|---|\n| [[hubspot/brief\\|hubspot]] | coding |\n"
+            original = (
+                "# All Projects\n\n" + self.SIX_COL_HEADER + "\n|---|---|---|---|---|---|\n"
+                "| [[projects/hubspot/brief|hubspot]] | coding | active | 3 | 5 | 2026-05-01 |\n"
+            )
             idx.write_text(original)
             _upsert_project_index_row(idx, "hubspot")
-            # File unchanged: slug already referenced via /brief substring
-            self.assertEqual(idx.read_text(), original)
+            self.assertEqual(idx.read_text(), original)  # already listed -> no change
 
     def test_skips_write_on_unknown_format(self):
-        """If the file uses a richer header than the adjudant default, skip rather than corrupt."""
+        """A richer/custom header is left untouched rather than corrupted."""
         with tempfile.TemporaryDirectory() as tmp:
             idx = Path(tmp) / "projects" / "_index.md"
             idx.parent.mkdir()
-            original = "# Custom\n\n| Project | Type | Status |\n|---|---|---|\n| [[other/brief\\|other]] | coding | active |\n"
+            original = "# Custom\n\n| Name | Owner |\n|---|---|\n| other | tom |\n"
             idx.write_text(original)
             _upsert_project_index_row(idx, "newproj")
-            # File unchanged — adjudant didn't try to add a 2-column row to a 3-column table
             self.assertEqual(idx.read_text(), original)
 
-    def test_appends_row_when_default_format_detected(self):
+    def test_appends_six_column_row_into_canonical_index(self):
+        """The regression: appending into a real 6-column index adds ONE row, no second table."""
         with tempfile.TemporaryDirectory() as tmp:
             idx = Path(tmp) / "projects" / "_index.md"
             idx.parent.mkdir()
-            original = "# Projects\n\n| Slug | Brief |\n|---|---|\n| existing | [[projects/existing/brief]] |\n"
+            original = (
+                "# All Projects\n\n" + self.SIX_COL_HEADER + "\n|---|---|---|---|---|---|\n"
+                "| [[projects/existing/brief|existing]] | coding | active | 2 | 4 | 2026-04-30 |\n"
+            )
             idx.write_text(original)
             _upsert_project_index_row(idx, "newproj")
             text = idx.read_text()
-            self.assertIn("| existing | [[projects/existing/brief]] |", text)
-            self.assertIn("| newproj | [[projects/newproj/brief]] |", text)
+            self.assertIn("[[projects/existing/brief|existing]]", text)   # existing preserved
+            self.assertIn("[[projects/newproj/brief|newproj]]", text)     # new row added
+            self.assertEqual(text.count(self.SIX_COL_HEADER), 1)          # exactly one table
+            self.assertNotIn("| Slug | Brief |", text)
 
 
 import subprocess

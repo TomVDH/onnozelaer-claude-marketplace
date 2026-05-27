@@ -666,30 +666,58 @@ def _apply_vault_change(line: str, preview_dir: Optional[Path] = None) -> None:
         _upsert_project_index_row(idx_path, slug)
 
 
-def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
-    """Add a row for `slug` in the vault's projects/_index.md, conservatively.
+PROJECTS_INDEX_HEADER = "| Project | Type | Status | Decisions | Sessions | Last Session |"
+PROJECTS_INDEX_SEP = "|---|---|---|---|---|---|"
 
-    Safety rules (prevents corrupting hand-maintained vault indexes):
-      1. If the file doesn't exist, create the adjudant default (2-column).
-      2. If any existing row references this slug (`{slug}/brief` substring),
-         do nothing — idempotent.
-      3. If the file uses the adjudant default header (`| Slug |`),
-         append our 2-column row.
-      4. Otherwise (unknown / custom format), DO NOT WRITE. User adds
-         the row themselves; we don't risk corrupting a richer table.
+
+def _project_type_from_brief(proj_dir: Path) -> str:
+    """Best-effort project_type for the index row. Reads the project's brief
+    frontmatter; returns '—' when it can't be determined."""
+    brief = proj_dir / "brief.md"
+    if not brief.is_file():
+        return "—"
+    text = brief.read_text()
+    m = re.search(r'^project_type:\s*"?([a-z]+)"?', text, re.M)
+    if m:
+        return m.group(1)
+    m = re.search(r'^type:\s*project-brief-([a-z]+)', text, re.M)
+    if m:
+        return m.group(1)
+    return "—"
+
+
+def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
+    """Add a row for `slug` in the vault's projects/_index.md using adjudant's
+    canonical 6-column format (matches templates/_index-projects.md):
+    `| Project | Type | Status | Decisions | Sessions | Last Session |`.
+    Count columns are left as '—'; `/adjudant ramasse` fills them.
+
+    Safety rules (never corrupt a hand-maintained vault index):
+      1. Missing file -> create from the canonical 6-column template.
+      2. Idempotent -> if a row already links projects/{slug}/brief, do nothing.
+      3. Canonical 6-column header present -> append a 6-column row.
+      4. Any other (unknown / custom) format -> DO NOT WRITE; the user adds the
+         row themselves (surfaced in the port summary).
     """
     idx_path.parent.mkdir(parents=True, exist_ok=True)
+    proj_type = _project_type_from_brief(idx_path.parent / slug)
+    row = f"| [[projects/{slug}/brief|{slug}]] | {proj_type} | active | — | — | — |"
+
     if not idx_path.is_file():
-        idx_path.write_text(f"# Projects\n\n| Slug | Brief |\n|---|---|\n| {slug} | [[projects/{slug}/brief]] |\n")
+        idx_path.write_text(
+            "---\ntype: index\ntags:\n  - index\n---\n\n# All Projects\n\n"
+            f"{PROJECTS_INDEX_HEADER}\n{PROJECTS_INDEX_SEP}\n{row}\n"
+        )
         return
+
     text = idx_path.read_text()
-    # Idempotency: any existing reference to this slug's brief = already there
-    if f"{slug}/brief" in text:
+    # Idempotency: already listed
+    if f"projects/{slug}/brief" in text:
         return
-    # Only append if the file uses the adjudant default header — never corrupt richer formats
-    if "| Slug |" in text:
-        row = f"| {slug} | [[projects/{slug}/brief]] |"
+    # Append only into the canonical 6-column index — never corrupt other formats
+    if PROJECTS_INDEX_HEADER.replace(" ", "") in text.replace(" ", ""):
         idx_path.write_text(text.rstrip() + f"\n{row}\n")
+    # else: unrecognised/custom format -> leave untouched (conservative)
 
 
 def _ensure_gitignore_entries(project_root: Path, entries: list[str]) -> None:
