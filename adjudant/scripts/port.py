@@ -749,6 +749,15 @@ def main(argv: Optional[list[str]] = None) -> int:
             print(f"[port] ERROR: {e}", file=sys.stderr)
             return 1
 
+    # Check phase-state before resolving vault — short-circuit if no migration is due
+    flavor = detect_flavor(root)
+    if flavor == "applied":
+        print("[port] Already ported. Run /adjudant:adjudant check to verify.")
+        return 0
+    if flavor == "preview":
+        print("[port] Preview exists at .adjudant-port-preview/. Run `port.py apply` to apply it, or delete the preview dir to restart.", file=sys.stderr)
+        return 1
+
     vault_path = Path(args.vault_path) if args.vault_path else resolve_vault_path(root)
     if vault_path is None:
         print("[port] ERROR: Vault path unresolvable. Pass --vault-path or set OB_VAULT env var.", file=sys.stderr)
@@ -758,7 +767,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     project_type = args.project_type or "coding"
     project_name = args.project_name or slug.replace("-", " ").title()
 
-    flavor = detect_flavor(root)
     if flavor == "Y":
         generate_preview_y(root, vault_path=vault_path, project_type=project_type, project_name=project_name)
     elif flavor == "Z":
