@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.10+ stdlib only (unittest for tests — no new deps), bash for git operations, markdown + JSON for templates/metadata. Pre-commit hook chain via `.pre-commit-config.yaml`.
 
-**Spec reference:** `docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md`
+**Spec reference:** `docs/superpowers/2026-05-26-adjudant-port.design.md`
 
 ---
 
@@ -88,7 +88,7 @@ Write `adjudant/scripts/port.py`:
 
 Run from the project root (or via `python3 adjudant/scripts/port.py`).
 Detects project flavor (X/Y/Z) or port phase (preview/applied) and
-dispatches accordingly. See docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md.
+dispatches accordingly. See docs/superpowers/2026-05-26-adjudant-port.design.md.
 """
 
 from pathlib import Path
@@ -2200,7 +2200,7 @@ This:
 - `reference/connect.md` — adjudant's simpler counterpart (X-flavor only, no migration)
 - `templates/AGENTS.md`, `templates/CLAUDE.md` — the shapes `port` enforces
 - `reference/vault-standards.md` — per-`project_type` folder defaults
-- `docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md` — full design spec
+- `docs/superpowers/2026-05-26-adjudant-port.design.md` — full design spec
 ```
 
 - [ ] **Step 2: Verify file written**
@@ -2513,8 +2513,8 @@ Adds /adjudant:adjudant port verb: universal entry point migrating
 any legacy project (raw repo, obsidian-bridge, hand-authored) to
 adjudant compliance via two-phase preview → apply.
 
-Spec: docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md
-Plan: docs/superpowers/plans/2026-05-26-adjudant-port-verb.md
+Spec: docs/superpowers/2026-05-26-adjudant-port.design.md
+Plan: docs/superpowers/2026-05-26-adjudant-port.plan.md
 
 Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 EOF

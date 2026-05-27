@@ -144,4 +144,4 @@ This:
 - `reference/connect.md` — adjudant's simpler counterpart (X-flavor only, no migration)
 - `templates/AGENTS.md`, `templates/CLAUDE.md` — the shapes `port` enforces
 - `reference/vault-standards.md` — per-`project_type` folder defaults
-- `docs/superpowers/specs/2026-05-26-adjudant-port-verb-design.md` — full design spec
+- `docs/superpowers/2026-05-26-adjudant-port.design.md` — full design spec

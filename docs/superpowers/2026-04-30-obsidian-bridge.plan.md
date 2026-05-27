@@ -8,7 +8,7 @@
 
 **Tech Stack:** Claude Code plugin system (markdown commands/skills, JSON hooks, bash scripts). Obsidian CLI 1.12+ (primary transport). Bash/zsh shell scripts for hooks. YAML frontmatter. Wikilinks.
 
-**Spec:** `docs/superpowers/specs/2026-04-30-obsidian-bridge-design.md` — all section references (§N) point there.
+**Spec:** `docs/superpowers/2026-04-30-obsidian-bridge.design.md` — all section references (§N) point there.
 
 ---
 
