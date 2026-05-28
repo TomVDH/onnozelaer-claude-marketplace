@@ -24,7 +24,7 @@ A pre-compaction Gemini-driven harvest can surface 3–5 durable bullets (decisi
 ## Goals
 
 1. **Zero-risk addition.** Existing PreCompact behavior preserved verbatim. Gemini step is purely additive and fails closed (any failure → no harvest, existing sync still runs).
-2. **Cheap.** `gemini-3.5-flash` model, ~30-message context window, 5-bullet output, runs once per compaction.
+2. **Cheap.** `gemini-2.5-flash` model, ~30-message context window, 5-bullet output, runs once per compaction.
 3. **Useful.** Bullets must be concrete decisions/blockers, not chat summary. Discipline enforced by the prompt template (per gemineye's pattern).
 4. **No MCP dependency in the hook.** Hook calls `gemini` CLI directly via subprocess — avoids requiring the MCP server to be running at compaction time.
 5. **Transcript-aware.** Read the transcript file from the JSON payload that CC sends on stdin (currently unread).
@@ -69,7 +69,7 @@ The current script reads only `CLAUDE_PROJECT_DIR` from env and ignores stdin. T
         │           │
         │           ├─ Reads last N messages from transcript
         │           ├─ Builds rigid template prompt
-        │           ├─ subprocess gemini --sandbox -m gemini-3.5-flash -p <prompt>
+        │           ├─ subprocess gemini --sandbox -m gemini-2.5-flash -p <prompt>
         │           ├─ Timeout 30s
         │           └─ Returns bullets on success, "" on any failure
         │
@@ -156,7 +156,7 @@ tags:
 
 *Mirrored from `.remember/now.md` on <date> <time>.*
 
-## Gemini harvest — <date> <time> (model: gemini-3.5-flash)
+## Gemini harvest — <date> <time> (model: gemini-2.5-flash)
 
 - bullet 1
 - bullet 2
@@ -269,7 +269,7 @@ def harvest_with_gemini(transcript_path: Path) -> str:
     prompt = HARVEST_PROMPT_TEMPLATE.format(n_msgs=HARVEST_N_MSGS, transcript_chunk=chunk)
     try:
         result = subprocess.run(
-            ["gemini", "--sandbox", "-m", "gemini-3.5-flash", "-p", prompt],
+            ["gemini", "--sandbox", "-m", "gemini-2.5-flash", "-p", prompt],
             capture_output=True,
             text=True,
             timeout=HARVEST_TIMEOUT_SECS,

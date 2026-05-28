@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Obsidian vault editor and project initializer. One command, /adjudant, with seven verbs (connect, port, sync, check, tidy, ramasse, draw) — each backed by a Python helper that follows the .claude/adjudant breadcrumb automatically. Locked three-tier cleanup model: tidy = surface mechanical (routine), ramasse = deep structural (sparing), dream = content/knowledge/memory refresh (semantic, v0.4+ reserved). Cross-machine portable via vault_name fallback resolution. Enforces vault standards; pairs with hookify and Gemineye.",
   "author": { "name": "Onnozelaer" },
   "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/adjudant",

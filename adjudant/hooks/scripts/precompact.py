@@ -101,7 +101,7 @@ def harvest_with_gemini(transcript_path: Path) -> str:
     prompt = HARVEST_PROMPT_TEMPLATE.format(n_msgs=HARVEST_N_MSGS, transcript_chunk=chunk)
     try:
         result = subprocess.run(
-            ["gemini", "--sandbox", "-m", "gemini-3.5-flash", "-p", prompt],
+            ["gemini", "--sandbox", "-m", "gemini-2.5-flash", "-p", prompt],
             capture_output=True,
             text=True,
             timeout=HARVEST_TIMEOUT_SECS,
@@ -187,7 +187,7 @@ def sync_handoff(
     harvest_section = ""
     if harvest:
         harvest_section = (
-            f"\n## Gemini harvest — {today} {ts} (model: gemini-3.5-flash)\n\n"
+            f"\n## Gemini harvest — {today} {ts} (model: gemini-2.5-flash)\n\n"
             f"{harvest}\n"
         )
 
