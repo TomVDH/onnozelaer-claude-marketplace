@@ -43,8 +43,8 @@ opinion", "Gemini review").
 | Trigger | Explicit phrases or `/gemineye` subcommand |
 | Sandbox | Always (`--sandbox`). Folder is not trusted by Gemini |
 | Permissions | Review-only. No `--yolo`. No write tools |
-| Default model | `gemini-3.5-flash` |
-| `megareview` model | `gemini-3.5-pro` |
+| Default tier | `fast` (omits `-m`; CLI picks its current default model) |
+| `megareview` tier | `pro` (`-m gemini-2.5-pro`) |
 | Prompt shape | Rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT |
 | Edits | Returned as elaborate code blocks; Claude applies |
 | Context | Claude-prepared bundle, project Markdown, vault if available |

@@ -42,22 +42,23 @@ free", "consider"). Loose prompts get loose reviews.
 ## CLI invocation — sandboxed only
 
 ```bash
-# Default — flash, sandboxed
-gemini --sandbox -m gemini-3.5-flash -p "$(cat prompt.txt)"
+# Fast tier (review, wip, sanity, name, compare, harvest) — no -m, CLI picks default
+gemini --sandbox -p "$(cat prompt.txt)"
 
-# Megareview — pro, sandboxed
-gemini --sandbox -m gemini-3.5-pro   -p "$(cat prompt.txt)"
+# Pro tier (megareview only)
+gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
 
-# Multi-file context
-gemini --sandbox -m gemini-3.5-flash \
+# Multi-file context (fast tier)
+gemini --sandbox \
        --file path/to/file.ts \
        --file docs/architecture.md \
        -p "$(cat prompt.txt)"
 
-# Long prompt via stdin
-cat prompt.txt | gemini --sandbox -m gemini-3.5-flash \
-                        --file path/to/file.ts -
+# Long prompt via stdin (fast tier)
+cat prompt.txt | gemini --sandbox --file path/to/file.ts -
 ```
+
+Pin the pro-tier model string in SKILL.md; update there when a new Pro rev ships. Fast tier intentionally omits `-m` so the CLI's current default applies — no plugin edits needed when Google rotates fast models.
 
 **Never** pass `--yolo`. **Never** drop `--sandbox`. **Never** grant
 write tools. The folder is not trusted yet — Gemini reviews only.
@@ -100,7 +101,7 @@ Claude's job to escalate to Tom.
 
 ### `/gemineye review <target>`
 
-Single artefact — code, doc, or prompt. Model: flash.
+Single artefact — code, doc, or prompt. Tier: fast.
 
 ```
 ROLE
@@ -142,7 +143,7 @@ CONTEXT
 
 ### `/gemineye megareview <scope>`
 
-Module / feature / plugin sweep. Model: **pro**.
+Module / feature / plugin sweep. Tier: **pro**.
 
 ```
 ROLE
@@ -188,7 +189,7 @@ CONTEXT
 
 ### `/gemineye wip`
 
-Review uncommitted changes + current branch diff. Model: flash.
+Review uncommitted changes + current branch diff. Tier: fast.
 
 ```
 ROLE
@@ -248,7 +249,7 @@ specifies otherwise.
 
 ### `/gemineye sanity <topic>`
 
-Idea / plan / decision sanity check. Model: flash.
+Idea / plan / decision sanity check. Tier: fast.
 
 ```
 ROLE
@@ -289,7 +290,7 @@ CONTEXT
 
 ### `/gemineye name <thing(s)>`
 
-One name or a related set. Model: flash.
+One name or a related set. Tier: fast.
 
 ```
 ROLE
@@ -341,7 +342,7 @@ CONTEXT
 
 ### `/gemineye compare <A> <B> [<C>...]`
 
-Head-to-head ranking, 2+ options. Model: flash.
+Head-to-head ranking, 2+ options. Tier: fast.
 
 ```
 ROLE
@@ -384,7 +385,7 @@ CONTEXT
 ### `/gemineye harvest <path>`
 
 Extract 5 durable bullets from any file — transcript, doc, or code.
-Model: flash. Same prompt template that adjudant's PreCompact hook
+Tier: fast. Same prompt template that adjudant's PreCompact hook
 uses automatically; this is the on-demand, user-initiated surface.
 
 This is the canonical prompt. Adjudant's `precompact.py` inlines its
@@ -426,7 +427,7 @@ Claude's prep for `harvest`: read the named file, pass its content
 to the approximate number of message turns included. Run:
 
 ```bash
-gemini --sandbox -m gemini-3.5-flash -p "$(cat prompt.txt)"
+gemini --sandbox -p "$(cat prompt.txt)"
 ```
 
 ---

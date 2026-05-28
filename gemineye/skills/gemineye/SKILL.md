@@ -2,7 +2,7 @@
 name: gemineye
 description: Sandboxed second opinion from Gemini. `/gemineye {review|megareview|wip|sanity|name|compare|save|harvest}` or phrases like "ask Gemini" / "second opinion". Review-only — Claude applies any proposed edits.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.3.1
+version: 0.3.2
 user-invocable: true
 argument-hint: "[review|megareview|wip|sanity|name|compare|save|harvest] [args]"
 ---
@@ -20,19 +20,23 @@ reads what's prepared, writes notes, leaves. No drawings on the walls.
 
 ## Subcommands
 
-| Command | Scope | Model |
+| Command | Scope | Tier |
 |---|---|---|
-| `/gemineye review <target>` | one artefact | flash |
+| `/gemineye review <target>` | one artefact | fast |
 | `/gemineye megareview <scope>` | module / feature / plugin | **pro** |
-| `/gemineye wip` | uncommitted + current branch diff | flash |
-| `/gemineye sanity <topic>` | idea / plan / decision | flash |
-| `/gemineye name <thing(s)>` | one or many | flash |
-| `/gemineye compare <A> <B> [<C>...]` | 2+ options | flash |
+| `/gemineye wip` | uncommitted + current branch diff | fast |
+| `/gemineye sanity <topic>` | idea / plan / decision | fast |
+| `/gemineye name <thing(s)>` | one or many | fast |
+| `/gemineye compare <A> <B> [<C>...]` | 2+ options | fast |
 | `/gemineye save [topic]` | last review | — (file write) |
-| `/gemineye harvest <path>` | extract 5 durable bullets from any file | flash |
+| `/gemineye harvest <path>` | extract 5 durable bullets from any file | fast |
 
-Models: `gemini-3.5-flash` is default. Only `megareview` switches to
-`gemini-3.5-pro` — it's the one mode that needs the deeper pass.
+Tiers, not model IDs:
+
+- **fast** (Fast/Light) — omit `-m`; CLI picks its current default model. Used by everything except `megareview`.
+- **pro** (Pro/Slow) — `-m gemini-2.5-pro`. Used only by `megareview` for deeper architectural passes.
+
+Update the pro-tier model string here when Gemini publishes a new Pro rev; nothing else in the plugin pins a version.
 
 Natural-language triggers ("ask Gemini", "second opinion", "Gemini
 take") default to `review` if a target is named, otherwise ask for
@@ -111,11 +115,11 @@ If missing, stop. Don't fall back. Tell Tom.
 ## Standard invocation
 
 ```bash
-# Default (review, wip, sanity, name, compare)
-gemini --sandbox -m gemini-3.5-flash -p "$(cat prompt.txt)"
+# Fast tier (review, wip, sanity, name, compare, harvest) — no -m, CLI picks default
+gemini --sandbox -p "$(cat prompt.txt)"
 
-# Megareview only
-gemini --sandbox -m gemini-3.5-pro   -p "$(cat prompt.txt)"
+# Pro tier (megareview only)
+gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
 ```
 
 Never pass `--yolo`, never grant write tools, never drop `--sandbox`.
@@ -164,7 +168,7 @@ date: YYYY-MM-DD
 topic: <one-line topic>
 target: <file or area reviewed>
 subcommand: <review|megareview|wip|sanity|name|compare>
-model: <gemini-3.5-flash|gemini-3.5-pro>
+model: <fast|pro>
 ---
 
 # Gemini review — <topic>

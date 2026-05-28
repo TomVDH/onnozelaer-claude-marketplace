@@ -6,6 +6,34 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-05-27
+
+### Fixed
+- **Model IDs are no longer hard-coded.** Previously the plugin pinned
+  `gemini-3.5-flash` / `gemini-3.5-pro`, which the Gemini CLI rejects
+  with `ModelNotFoundError (404)` — those revs don't exist.
+  - Fast tier (review, wip, sanity, name, compare, harvest) now omits
+    `-m` entirely; the CLI picks its current default model. No more
+    drift when Google rotates fast models.
+  - Pro tier (megareview) uses `-m gemini-2.5-pro`. Update this single
+    string in `SKILL.md` when a new Pro rev ships.
+- README, SKILL.md, invocation-patterns.md, and the persisted-file
+  frontmatter template all rephrased in tier terms (`fast` / `pro`)
+  instead of version-pinned model IDs.
+
+### Known
+- The `--file` flag in `references/invocation-patterns.md` does not
+  exist in the current `gemini` CLI (rejected as `Unknown argument`).
+  Multi-file context must be inlined into the prompt for now. Fix
+  deferred to a follow-up.
+
+## [0.3.1] — 2026-05-27
+
+### Changed
+- Concise skill description in SKILL.md frontmatter (commit 080aa8c).
+
+## [0.3.0]
+
 ### Changed
 - **Renamed** plugin slug `gemin-eye` → `gemineye` (command is now
   `/gemineye`; persisted-output folders are now `gemineye/`). Breaking —
