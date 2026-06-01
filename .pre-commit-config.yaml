@@ -7,3 +7,9 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+      - id: marketplace-version-parity
+        name: Marketplace — every plugin version matches its plugin.json
+        entry: python3 scripts/check_marketplace_versions.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

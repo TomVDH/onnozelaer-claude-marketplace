@@ -32,6 +32,7 @@ from _vault_walk import (
     parse_frontmatter,
     resolve_project_from_cwd,
 )
+from _handoff_freshness import compute_freshness, freshness_header
 from connect import (
     count_non_index_files,
     newest_session_date,
@@ -113,35 +114,38 @@ def mirror_handoff(
     handoff_path: Path,
     slug: str,
     today: str,
+    now: Optional[datetime] = None,
 ) -> str:
-    """Copy remember/now body into handoff body (frontmatter regenerated).
+    """Copy remember/now body into handoff body, with a freshness header.
 
-    Returns: 'mirrored' / 'no-source' / 'unchanged'.
+    Output shape matches the PreCompact hook's `sync_handoff` (single source of
+    truth for the freshness block via `_handoff_freshness`), so a manual
+    `/adjudant sync` and an auto-compaction sync produce identical handoffs.
+
+    Returns: 'mirrored' / 'no-source'.
     """
     source = find_remember_source(project_root)
     if not source:
         return "no-source"
 
+    now = now or datetime.now()
     body = source.read_text(errors="replace").rstrip() + "\n"
-    new_content = HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today) + body
 
-    if handoff_path.is_file():
-        # Preserve existing frontmatter if user-customised, only update body + updated:
-        existing = handoff_path.read_text(errors="replace")
-        fm, _ = parse_frontmatter(existing)
-        if fm.has_block:
-            # Surgically update the `updated:` field and replace body
-            lines = existing.split("\n")
-            close_idx = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None)
-            if close_idx is not None:
-                for i in range(1, close_idx):
-                    m = re.match(r"^(updated\s*:\s*).*$", lines[i])
-                    if m:
-                        lines[i] = f"{m.group(1)}{today}"
-                        break
-                new_content = "\n".join(lines[: close_idx + 1]) + "\n\n" + body
-        if new_content.rstrip() == existing.rstrip():
-            return "unchanged"
+    # Freshness header — same primitives the hook uses. Session note sits beside
+    # the handoff (vault project dir / sessions / {today}.md).
+    session_file = handoff_path.parent / "sessions" / f"{today}.md"
+    light, age_str, next_line, stale = compute_freshness(project_root, body, source, session_file, now)
+    fresh = freshness_header(light, age_str, next_line, stale)
+    fresh_block = f"{fresh}\n\n" if fresh else ""
+
+    new_content = (
+        f"{HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today)}"
+        f"# Handoff — {slug}\n\n"
+        f"{fresh_block}"
+        f"*Mirrored from `.remember/{source.name}` on {today}.*\n\n"
+        f"---\n\n"
+        f"{body}"
+    )
 
     handoff_path.write_text(new_content)
     return "mirrored"

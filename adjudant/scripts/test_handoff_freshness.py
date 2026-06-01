@@ -1,15 +1,15 @@
-"""Tests for adjudant/hooks/scripts/precompact.py (freshness layer)."""
+"""Tests for adjudant/scripts/_handoff_freshness.py.
 
-import sys
+The shared freshness primitives used by both the PreCompact hook and the
+`/adjudant sync` verb.
+"""
+
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 
-# precompact.py lives under hooks/scripts/, not scripts/ — make it importable.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "scripts"))
-
-import precompact as pc  # noqa: E402
+import _handoff_freshness as pc
 
 NOW = datetime(2026, 6, 1, 14, 0)
 

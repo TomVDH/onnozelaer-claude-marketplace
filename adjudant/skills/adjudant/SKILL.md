@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw}` for project-to-vault scaffolding, schema-enforced writes, and structural + content cleanup. Also fires when writing decisions/sessions/notes into a linked vault.
-version: 0.7.0
+version: 0.7.1
 user-invocable: true
 argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw] [args]"
 license: MIT

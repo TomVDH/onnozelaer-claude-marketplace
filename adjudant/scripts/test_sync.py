@@ -111,6 +111,18 @@ class TestMirrorHandoff(unittest.TestCase):
             r = mirror_handoff(proj, handoff, "p", "2026-05-27")
             self.assertEqual(r, "no-source")
 
+    def test_includes_freshness_header(self):
+        """Parity with the PreCompact hook: the verb writes the freshness block."""
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "remember.md", "NEXT: finish the thing\n\nstate body\n")
+            handoff = Path(tmp) / "_handoff.md"
+            mirror_handoff(proj, handoff, "p", "2026-05-27")
+            content = handoff.read_text()
+            self.assertIn("handoff age:", content)
+            self.assertIn("NEXT: finish the thing", content)
+            self.assertIn("state body", content)
+
 
 # ============================================================
 # Projects index row refresh
