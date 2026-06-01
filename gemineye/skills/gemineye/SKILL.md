@@ -163,28 +163,23 @@ pulling supporting context within the root, not a licence to crawl.
 never grant write tools, never drop `--sandbox`, never `--add-dir` outside the
 project root. The reviewer reads the building; it holds no keys.
 
-### Folder trust (one-time per project)
+### Folder trust
 
-A headless `agy -p` call in an **untrusted** folder can block on a trust
-prompt. Establish trust once, interactively, then headless calls work:
+**Confirmed on macOS:** a headless `agy --sandbox --add-dir "$ROOT" -p` call
+returns to stdout and can read files in the added dir **without a blocking
+trust prompt** — no setup needed. `--add-dir "$ROOT"` is sufficient.
+
+Fallback (other setups only): if a headless call ever hangs on a trust prompt,
+establish trust once interactively, then headless calls work:
 
 ```bash
 cd "$ROOT" && agy        # answer the trust prompt once; agy remembers it
 ```
 
-> **Verify on this machine** (decides whether the handshake is even needed):
-> ```bash
-> agy help                                              # look for a trust/settings subcommand
-> echo | agy --sandbox --add-dir "$PWD" -p "name one file you can see here"
-> ```
-> If it prints a filename, `--add-dir` is enough. If it hangs / asks to trust
-> the folder, run the one-time handshake above (or add the root to agy's
-> trusted-folders config).
-
 > **`agy -p` stdout note:** the non-interactive `--print` mode has a reported
-> non-TTY stdout bug ([#27466](https://github.com/google-gemini/gemini-cli/issues/27466)).
-> If a call returns empty stdout, re-run interactively or read the response
-> from agy's latest session transcript.
+> stdout bug **on Windows / non-TTY** ([#27466](https://github.com/google-gemini/gemini-cli/issues/27466));
+> macOS is unaffected (verified). If a call ever returns empty stdout, re-run
+> interactively or read the response from agy's latest session transcript.
 
 ---
 
