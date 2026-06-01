@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw}` for project-to-vault scaffolding, schema-enforced writes, and structural + content cleanup. Also fires when writing decisions/sessions/notes into a linked vault.
-version: 0.6.1
+version: 0.7.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw] [args]"
 license: MIT
@@ -80,7 +80,7 @@ This plugin registers 5 hooks (vault-aware only):
 | SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note |
 | UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords |
 | PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log |
-| PreCompact | `hooks/scripts/precompact.py` | Append `paused (compaction)` marker + sync handoff to vault |
+| PreCompact | `hooks/scripts/precompact.py` | Mechanical, no model calls (5s budget): append enriched pause tombstone (`— next: …`) + mirror handoff with a freshness header (traffic light · age · NEXT · stale flag) |
 | SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + sync handoff to vault |
 
 Universal drift-defense hooks (git safety, voice checks, etc.) live in hookify, not here.

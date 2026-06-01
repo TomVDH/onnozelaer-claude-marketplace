@@ -1,120 +1,45 @@
 #!/usr/bin/env python3
 """PreCompact hook for adjudant.
 
-1. Append a pause marker to today's session log.
-2. Optionally harvest 5 durable bullets from the CC transcript via Gemini.
-3. Mirror .remember/remember.md to vault _handoff.md (sync action).
+MECHANICAL ONLY — no model calls. Must finish well inside the 5s hook budget.
+Two lanes, both cheap on-disk reads:
+
+  1. Append an enriched pause tombstone to today's vault session log:
+       `- HH:MM · paused (compaction) — next: <NEXT line>`
+  2. Mirror `.remember/remember.md` (or `now.md`) → vault `_handoff.md`, with a
+     freshness header derived from on-disk signals:
+       <traffic light> handoff age: <age> · NEXT: <next or "(not set)">
+       (+ a STALE warning when session activity is newer than the handoff)
+
+SessionEnd reuses this with `--sync-only` (no pause marker).
+
+Design notes:
+  - Freshness is computed from REAL activity (latest `.remember/today-*.md`
+    timestamp), not `remember.md` mtime — so it can't be faked by an idle touch.
+  - There are NO model calls here. Anything needing judgment (e.g. a smart
+    handoff rewrite) belongs in a human-run verb, not this 5s hook.
+  - All vault I/O fails closed: an offline/unavailable iCloud vault must never
+    crash the compaction.
 """
 
-import json
 import os
 import re
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 
-HARVEST_PROMPT_TEMPLATE = """ROLE
-You are a session-end archivist for a Claude Code working session about to be compacted.
+# Traffic-light thresholds, in hours
+LIGHT_GREEN_MAX_H = 2.0
+LIGHT_YELLOW_MAX_H = 8.0
 
-DO
-- Extract concrete decisions, problems solved, blockers, and unresolved questions
-- One bullet per item, max 25 words
-- Reference specific files/commits/issues by name when possible
-
-DON'T
-- Summarise the chat
-- Include code blocks
-- Use softening language ("we discussed", "considered")
-- Output anything except the bullets
-
-SCOPE — IN
-- The most recent {n_msgs} messages of the transcript (provided below)
-
-SCOPE — OUT
-- Greetings, tool-call mechanics, status pings, hook output
-- Anything older than what's included
-
-OUTPUT
-- Exactly 5 bullets, no preamble, no trailing text. If fewer than 5 concrete items exist, output fewer.
-- Format: `- <bullet text>`
-
-CONTEXT
-{transcript_chunk}
-"""
-
-HARVEST_MAX_CHARS = 10_000
-HARVEST_TIMEOUT_SECS = 30
-HARVEST_N_MSGS = 30
-
-
-def read_payload() -> dict:
-    """Read the JSON payload CC sends on stdin. Returns {} on any failure."""
-    try:
-        if sys.stdin.isatty():
-            return {}
-        data = sys.stdin.read()
-        if not data.strip():
-            return {}
-        return json.loads(data)
-    except (json.JSONDecodeError, OSError):
-        return {}
-
-
-def extract_transcript_text(transcript_path: Path, n_msgs: int = HARVEST_N_MSGS) -> str:
-    """Read last n_msgs * 2 lines from the .jsonl transcript, strip tool internals.
-    Returns plain text suitable for a Gemini prompt, capped at HARVEST_MAX_CHARS."""
-    if not transcript_path.is_file():
-        return ""
-    try:
-        lines = transcript_path.read_text().splitlines()[-(n_msgs * 2):]
-    except OSError:
-        return ""
-    out = []
-    for line in lines:
-        try:
-            msg = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        role = msg.get("role") or msg.get("type", "")
-        content = msg.get("content", "")
-        if isinstance(content, list):
-            content = " ".join(
-                c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "text"
-            )
-        if not isinstance(content, str):
-            continue
-        content = re.sub(r"\s+", " ", content).strip()
-        if not content:
-            continue
-        out.append(f"[{role}] {content[:1000]}")
-    text = "\n".join(out)
-    return text[-HARVEST_MAX_CHARS:]
-
-
-def harvest_with_gemini(transcript_path: Path) -> str:
-    """Return bullet block on success, '' on any failure. Always fails closed."""
-    chunk = extract_transcript_text(transcript_path)
-    if not chunk:
-        return ""
-    prompt = HARVEST_PROMPT_TEMPLATE.format(n_msgs=HARVEST_N_MSGS, transcript_chunk=chunk)
-    try:
-        result = subprocess.run(
-            ["gemini", "--sandbox", "-m", "gemini-2.5-flash", "-p", prompt],
-            capture_output=True,
-            text=True,
-            timeout=HARVEST_TIMEOUT_SECS,
-        )
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        return ""
-    if result.returncode != 0:
-        return ""
-    output = result.stdout.strip()
-    # Sanity: only return if it looks like a bullet list
-    if not output.startswith("- ") and not output.startswith("• "):
-        return ""
-    return output
+TIME_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
+DATE_IN_NAME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+# `NEXT: ...` in any leading markup form: `NEXT:`, `- NEXT:`, `**NEXT:**`, `## NEXT —`
+NEXT_INLINE_RE = re.compile(r"^[\s>#*\-]*\**\s*NEXT\**\s*[:\-–—]\s*(.+?)\s*$", re.IGNORECASE)
+# Hook-written session markers — noise, not real activity
+SESSION_MARKER_RE = re.compile(r"paused \(compaction\)|session ended", re.IGNORECASE)
 
 
 def read_breadcrumb(project_dir: Path) -> dict:
@@ -139,14 +64,12 @@ def read_breadcrumb(project_dir: Path) -> dict:
     return info
 
 
-def find_remember_source(project_dir: Path) -> Path:
+def find_remember_source(project_dir: Path) -> Optional[Path]:
     """Locate the best `.remember/` file to mirror.
 
     Priority:
       1. `.remember/remember.md` (canonical per sync runbook)
       2. `.remember/now.md` (newer convention on some machines)
-
-    Returns the chosen Path or None.
     """
     canonical = project_dir / ".remember" / "remember.md"
     if canonical.is_file():
@@ -157,21 +80,184 @@ def find_remember_source(project_dir: Path) -> Path:
     return None
 
 
-def sync_handoff(
+# ============================================================
+# Freshness primitives (pure — no I/O except where noted)
+# ============================================================
+
+
+def parse_next_line(text: str) -> Optional[str]:
+    """Extract the handoff's single NEXT action. Priority:
+      1. an inline `NEXT: ...` line (any leading markup / bold)
+      2. the first non-empty line under a `## NEXT` heading
+    Returns the trimmed action text, or None if there's no NEXT.
+    """
+    lines = text.splitlines()
+    for ln in lines:
+        m = NEXT_INLINE_RE.match(ln)
+        if m:
+            val = m.group(1).strip().strip("*").strip()
+            if val:
+                return val[:200]
+    in_next = False
+    for ln in lines:
+        h = re.match(r"^#{1,6}\s+(.*\S)\s*$", ln)
+        if h:
+            in_next = h.group(1).strip().upper().startswith("NEXT")
+            continue
+        if in_next:
+            s = ln.strip()
+            if not s:
+                continue
+            s = re.sub(r"^[-*+]\s+", "", s)
+            s = re.sub(r"^\[[ xX]\]\s*", "", s)
+            if s:
+                return s[:200]
+    return None
+
+
+def _last_time(text: str) -> Optional[tuple]:
+    """The last HH:MM appearing in text, as (hour, minute)."""
+    times = TIME_RE.findall(text)
+    if not times:
+        return None
+    h, m = times[-1]
+    return int(h), int(m)
+
+
+def latest_today_activity(remember_dir: Path) -> Optional[datetime]:
+    """Most recent REAL activity time across `.remember/today-*.md`.
+
+    Date comes from the filename (`today-YYYY-MM-DD.md`) when present, else the
+    file mtime; time from the last HH:MM in the file, else the file mtime.
+    Returns None if there are no such files.
+    """
+    try:
+        candidates = sorted(remember_dir.glob("today-*.md"))
+    except OSError:
+        return None
+    best: Optional[datetime] = None
+    for f in candidates:
+        try:
+            text = f.read_text(errors="replace")
+            mtime = datetime.fromtimestamp(f.stat().st_mtime)
+        except OSError:
+            continue
+        dm = DATE_IN_NAME_RE.search(f.name)
+        year, month, day = (int(dm.group(1)), int(dm.group(2)), int(dm.group(3))) if dm else (mtime.year, mtime.month, mtime.day)
+        tm = _last_time(text)
+        if tm:
+            try:
+                dt = datetime(year, month, day, tm[0], tm[1])
+            except ValueError:
+                dt = mtime
+        else:
+            dt = mtime
+        if best is None or dt > best:
+            best = dt
+    return best
+
+
+def latest_session_activity(session_file: Path, day: datetime) -> Optional[datetime]:
+    """Latest non-marker `- HH:MM · …` time in the vault session note for `day`.
+
+    Hook tombstones (paused/ended) are skipped — they aren't real work.
+    """
+    try:
+        text = session_file.read_text(errors="replace")
+    except OSError:
+        return None
+    last = None
+    for ln in text.splitlines():
+        if SESSION_MARKER_RE.search(ln):
+            continue
+        tm = _last_time(ln)
+        if tm:
+            last = tm
+    if last is None:
+        return None
+    try:
+        return datetime(day.year, day.month, day.day, last[0], last[1])
+    except ValueError:
+        return None
+
+
+def age_hours(activity: Optional[datetime], now: datetime) -> Optional[float]:
+    if activity is None:
+        return None
+    return max((now - activity).total_seconds() / 3600.0, 0.0)
+
+
+def traffic_light(hours: Optional[float]) -> str:
+    if hours is None:
+        return "⚪"  # white circle — age unknown
+    if hours < LIGHT_GREEN_MAX_H:
+        return "\U0001f7e2"  # green
+    if hours < LIGHT_YELLOW_MAX_H:
+        return "\U0001f7e1"  # yellow
+    return "\U0001f534"  # red
+
+
+def fmt_age(hours: Optional[float]) -> str:
+    if hours is None:
+        return "unknown"
+    if hours < 1:
+        return f"{int(round(hours * 60))}m"
+    if hours < 48:
+        return f"{int(round(hours))}h"
+    return f"{int(round(hours / 24))}d"
+
+
+def freshness_header(light: str, age_str: str, next_line: Optional[str], stale: bool) -> str:
+    """The glanceable freshness block placed at the top of `_handoff.md`."""
+    next_disp = next_line if next_line else "(not set)"
+    block = f"{light} **handoff age: {age_str}** · NEXT: {next_disp}"
+    if stale:
+        block += (
+            "\n\n\U0001f534 **STALE** — session activity is newer than this "
+            "handoff. Rebuild it before trusting NEXT."
+        )
+    return block
+
+
+def compute_freshness(
     project_dir: Path,
-    vault: Path,
-    slug: str,
-    today: str,
-    ts: str,
-    harvest: str = "",
-) -> None:
+    source_body: str,
+    source: Optional[Path],
+    session_file: Path,
+    now: datetime,
+) -> tuple:
+    """Return (light, age_str, next_line, stale) from cheap on-disk signals."""
+    activity = latest_today_activity(project_dir / ".remember")
+    if activity is None and source is not None:
+        try:
+            activity = datetime.fromtimestamp(source.stat().st_mtime)
+        except OSError:
+            activity = None
+    hours = age_hours(activity, now)
+    next_line = parse_next_line(source_body)
+    sess = latest_session_activity(session_file, now)
+    stale = bool(activity and sess and sess > activity)
+    return traffic_light(hours), fmt_age(hours), next_line, stale
+
+
+# ============================================================
+# Actions
+# ============================================================
+
+
+def sync_handoff(project_dir: Path, vault: Path, slug: str, today: str, ts: str, now: datetime) -> None:
+    """Mirror the remember source → `_handoff.md` with a freshness header. Fails closed."""
     source = find_remember_source(project_dir)
     if source is None:
         return
+    try:
+        body = source.read_text(errors="replace")
+    except OSError:
+        return
+    source_name = source.name
 
-    handoff = vault / "projects" / slug / "_handoff.md"
-    body = source.read_text()
-    source_name = source.name  # 'remember.md' or 'now.md'
+    session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
+    light, age_str, next_line, stale = compute_freshness(project_dir, body, source, session_file, now)
 
     header = (
         "---\n"
@@ -184,28 +270,44 @@ def sync_handoff(
         "---\n"
     )
 
-    harvest_section = ""
-    if harvest:
-        harvest_section = (
-            f"\n## Gemini harvest — {today} {ts} (model: gemini-2.5-flash)\n\n"
-            f"{harvest}\n"
-        )
-
-    handoff.parent.mkdir(parents=True, exist_ok=True)
-    handoff.write_text(
+    content = (
         f"{header}\n"
         f"# Handoff — {slug}\n\n"
-        f"*Mirrored from `.remember/{source_name}` on {today} {ts}.*\n"
-        f"{harvest_section}\n"
+        f"{freshness_header(light, age_str, next_line, stale)}\n\n"
+        f"*Mirrored from `.remember/{source_name}` on {today} {ts}.*\n\n"
         f"---\n\n"
         f"{body}\n"
     )
 
+    try:
+        handoff = vault / "projects" / slug / "_handoff.md"
+        handoff.parent.mkdir(parents=True, exist_ok=True)
+        handoff.write_text(content)
+    except OSError:
+        return
+
+
+def append_pause_marker(project_dir: Path, session_file: Path, ts: str) -> None:
+    """Append the enriched `paused (compaction)` tombstone. Fails closed."""
+    next_line = None
+    source = find_remember_source(project_dir)
+    if source is not None:
+        try:
+            next_line = parse_next_line(source.read_text(errors="replace"))
+        except OSError:
+            next_line = None
+    marker = f"- {ts} · paused (compaction)"
+    if next_line:
+        marker += f" — next: {next_line}"
+    try:
+        if session_file.exists():
+            with session_file.open("a") as f:
+                f.write(marker + "\n")
+    except OSError:
+        return
+
 
 def main() -> int:
-    # Read stdin payload first (before any other reads consume stdin)
-    payload = read_payload()
-
     project_dir_str = os.environ.get("CLAUDE_PROJECT_DIR")
     if not project_dir_str:
         return 0
@@ -218,30 +320,19 @@ def main() -> int:
         return 0
 
     vault = Path(vault_path)
-    today = datetime.now().strftime("%Y-%m-%d")
-    ts = datetime.now().strftime("%H:%M")
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    ts = now.strftime("%H:%M")
 
-    # SessionEnd reuses this script for the handoff sync only. With --sync-only
-    # we skip the pause marker — the session ended, it did not pause for compaction.
+    # SessionEnd reuses this script with --sync-only: skip the pause marker
+    # (the session ended; it did not pause for compaction).
     sync_only = "--sync-only" in sys.argv[1:]
 
-    # 1. Append pause marker (PreCompact only)
     if not sync_only:
         session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
-        if session_file.exists():
-            with session_file.open("a") as f:
-                f.write(f"- {ts} · paused (compaction)\n")
+        append_pause_marker(project_dir, session_file, ts)
 
-    # 2. Harvest from Gemini (PreCompact only, fails closed)
-    harvest = ""
-    if not sync_only:
-        transcript_path_str = payload.get("transcript_path", "")
-        if transcript_path_str:
-            harvest = harvest_with_gemini(Path(transcript_path_str))
-
-    # 3. Sync handoff
-    sync_handoff(project_dir, vault, slug, today, ts, harvest=harvest)
-
+    sync_handoff(project_dir, vault, slug, today, ts, now)
     return 0
 
 
