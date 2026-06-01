@@ -10,7 +10,7 @@
 tidy    = surface mechanical sweep (tags, indexes, wikilink form). Routine.
 ramasse = deep STRUCTURAL clean — folders, schema, file types, naming, renames,
           broken-wikilink triage, doc/decision mismatches. THIS verb.
-dream   = content/knowledge/memory refresh (semantic, v0.4+). Not yet built.
+dream   = content/knowledge/memory refresh (semantic). Separate verb.
 ```
 
 Ramasse handles everything tidy refuses to auto-fix:
@@ -94,13 +94,13 @@ Default: current project (resolved from breadcrumb). `--vault` invoking is not c
 ## When NOT to use ramasse
 
 - For routine tidy: use `/adjudant tidy`
-- For semantic content cleanup (outdated decisions, redundant notes): wait for `/adjudant dream` (v0.4+)
+- For semantic content cleanup (outdated decisions, redundant notes): use `/adjudant dream`
 - For a single decision file rename: just rename it manually
 
 ## See also
 
 - `reference/tidy.md` — surface mechanical sweep
-- `reference/dream.md` — reserved name, v0.4+ semantic refresh
+- `reference/dream.md` — content/knowledge/memory refresh (semantic tier)
 - `scripts/ramasse_scan.py` — phase 1 analyser
 - `scripts/tidy.py` — phase 5 mechanical bits
 - `docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md` — design lock

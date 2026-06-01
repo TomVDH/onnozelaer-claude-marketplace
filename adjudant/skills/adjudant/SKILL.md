@@ -1,15 +1,15 @@
 ---
 name: adjudant
-description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|draw}` for project-to-vault scaffolding, schema-enforced writes, and structural cleanup. Also fires when writing decisions/sessions/notes into a linked vault.
-version: 0.5.2
+description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw}` for project-to-vault scaffolding, schema-enforced writes, and structural + content cleanup. Also fires when writing decisions/sessions/notes into a linked vault.
+version: 0.6.0
 user-invocable: true
-argument-hint: "[connect|port|sync|check|tidy|ramasse|draw] [args]"
+argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, seven verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
+Vault editor/writer and project initializer. One skill, one command, eight verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
@@ -21,6 +21,7 @@ Vault editor/writer and project initializer. One skill, one command, seven verbs
 | `check` | `reference/check.md` | Read-only project + vault summary (consumes `check.py` JSON) |
 | `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`) |
 | `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
+| `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic. Reads prose of decisions/notes/sessions; catches outdated info, contradictions, supersession, redundancy, stale refs, orphan threads. Judgment-heavy. Analysis via `dream.py`, judge + plan + execute via superpowers |
 | `draw` | `reference/draw.md` | Create canvas / base / diagram |
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
@@ -30,10 +31,10 @@ When a verb is invoked, load **only** the matching reference file. Do not bring 
 ```
 tidy    = surface mechanical    (routine, daily/weekly, never breaks)
 ramasse = deep structural clean (sparing, quarterly, deliberate)
-dream   = content/knowledge/memory refresh (semantic; NOT YET BUILT — v0.4+)
+dream   = content/knowledge/memory refresh (semantic; judgment-heavy)
 ```
 
-`dream` is reserved for the future content-refresh verb that reads actual prose and identifies outdated/stale/redundant ideas. The structural-drift detector previously named `dream.py` in v0.3.0 has been renamed `ramasse_scan.py` and now feeds ramasse's analysis phase.
+`dream` (v0.6.0) reads actual prose and surfaces outdated/contradictory/redundant/stale/orphaned content as *candidates* for Claude to judge. `dream.py` is its read-only analyser — net-new, not to be confused with the v0.3.0 file once named `dream.py` that did structural drift and was renamed `ramasse_scan.py` to feed ramasse's analysis phase.
 
 ## Python helper layer (v0.4.0)
 
@@ -46,6 +47,7 @@ Every file-touching verb is backed by a Python helper. Helpers follow the `.clau
 | `sync` | `sync.py` | brief refresh + handoff mirror + projects-index row refresh |
 | `tidy` | `tidy.py` + `_vault_walk.py` | preview/apply with backup |
 | `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase); planning + execute via superpowers |
+| `dream` | `dream.py` + `_vault_walk.py` | JSON content/staleness comparator catalog (analysis phase); judge + plan + execute via superpowers |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
 
 `_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.

@@ -16,7 +16,7 @@ NOTE: This module was originally named `dream.py` in v0.3.0. Renamed
 in v0.3.1 to align with the locked 3-tier model:
   - tidy    = surface mechanical sweep
   - ramasse = deep structural clean (this scanner is its analysis phase)
-  - dream   = content/knowledge/memory refresh (semantic; not yet built)
+  - dream   = content/knowledge/memory refresh (semantic; see dream.py)
 
 See docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md.
 """

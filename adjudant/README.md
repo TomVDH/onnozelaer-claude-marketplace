@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, seven verbs, Python helpers under each.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, eight verbs, Python helpers under each.
 
 ## Install
 
@@ -10,29 +10,28 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 /plugin install adjudant
 ```
 
-## Surface (v0.4.0)
+## Surface (v0.6.0)
 
 | | |
 |---|---|
 | Command | `/adjudant {verb}` |
-| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `draw` |
-| Reserved | `dream` (returns in v0.4+ as the semantic content/knowledge/memory refresh verb) |
+| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `dream`, `draw` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 (AGENTS.md, CLAUDE.md, project briefs × 4, session, decision, note, doc, handoff, source, iteration, release, dream-report, home, indexes × 2) |
-| Python helpers | `_vault_walk.py` (primitives), `port.py`, `connect.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `check.py` |
+| Python helpers | `_vault_walk.py` (primitives), `port.py`, `connect.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `check.py` |
 | Drift defense | `python3 scripts/validate.py` — 13 validators, runs via pre-commit |
-| Tests | 200+ unit tests across 8 modules; `python3 -m unittest discover -p 'test_*.py'` |
+| Tests | 240+ unit tests across 9 modules; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 
 ```
 tidy    = surface mechanical    (routine; tags, indexes, wikilink form, updated:)
 ramasse = deep structural clean (sparing; folders, schema, file types, naming, renames)
-dream   = content / knowledge / memory refresh  (v0.4+; semantic content audit)
+dream   = content / knowledge / memory refresh  (semantic; staleness, contradictions, redundancy)
 ```
 
-Risk tolerance is the dividing line: tidy never breaks anything; ramasse can break things deliberately under human supervision via the superpowers chain; dream (v0.4+) will be LLM-judgment heavy semantic cleanup.
+Risk tolerance is the dividing line: tidy never breaks anything; ramasse can break things deliberately under human supervision via the superpowers chain; dream is LLM-judgment-heavy semantic cleanup — `dream.py` emits a read-only comparator catalog, Claude judges, and a superpowers chain applies the refresh with backups for destructive content ops.
 
 ## Verbs
 
@@ -44,6 +43,7 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant check` | Read-only summary — project state, vault snapshot, schema compliance. | `check.py` |
 | `/adjudant tidy` | Surface mechanical sweep — rebuild indexes, normalise tags, fix wikilink form. Two-phase preview → apply. | `tidy.py` |
 | `/adjudant ramasse` | Deep structural clean — analysis phase via `ramasse_scan.py`, planning + execute via the superpowers chain. | `ramasse_scan.py` |
+| `/adjudant dream` | Content/knowledge/memory refresh — semantic. Analysis via `dream.py` (read-only comparator catalog), judge + plan + execute via the superpowers chain, backups for destructive content ops. | `dream.py` |
 | `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. | (runbook) |
 
 All helpers follow the breadcrumb: pass `--project-dir` pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.

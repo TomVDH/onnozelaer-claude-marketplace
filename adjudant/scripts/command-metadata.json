@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "verbs": [
     {
       "name": "connect",
@@ -37,6 +37,12 @@
       "description": "Deep structural clean — folder shape, schema, file types, naming, renames, broken-wikilink triage, doc/decision mismatches. Used sparingly (quarterly). Analysis phase via ramasse_scan.py; planning + execute via superpowers.",
       "argumentHint": "(no args)",
       "reference": "reference/ramasse.md"
+    },
+    {
+      "name": "dream",
+      "description": "Content/knowledge/memory refresh — semantic, the third cleanup tier. Reads prose of decisions/notes/sessions and surfaces outdated info, contradictions, supersession, redundancy, stale refs, and orphan threads as candidates for Claude to judge. Analysis via dream.py (read-only comparator catalog); judge + plan + execute via superpowers, with backups for destructive content ops.",
+      "argumentHint": "(no args)",
+      "reference": "reference/dream.md"
     },
     {
       "name": "draw",

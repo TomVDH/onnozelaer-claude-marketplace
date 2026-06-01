@@ -65,7 +65,7 @@ Default: current project resolved via `.claude/adjudant` breadcrumb (auto-follow
 
 ## See also
 
-- `reference/dream.md` — diagnostic crawl (read-only); use first to see what tidy would fix
+- `reference/dream.md` — content/knowledge/memory refresh (semantic tier); dream may spin fixable mechanical items back to tidy
 - `reference/ramasse.md` — heavy planning verb
 - `scripts/tidy.py`, `scripts/test_tidy.py`
 - `docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md`

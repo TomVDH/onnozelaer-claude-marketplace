@@ -1,43 +1,122 @@
-# /adjudant dream — RESERVED (v0.4+)
+# /adjudant dream
 
-This verb is **not yet implemented**. The name is reserved for the future content/knowledge/memory refresh verb.
+**Content/knowledge/memory refresh.** The third and deepest cleanup tier — semantic, not mechanical. Reads the actual prose of decisions, notes, and sessions; surfaces what's gone stale. Five-phase, judgment-heavy, human-in-the-loop. Mirrors `ramasse`'s shape on the content layer.
 
-## Why it's reserved, not deleted
+*Staleness is the enemy.* Dream catches "the doc says X but reality is now Y."
 
-The 2026-05-26 design lock defines three cleanup tiers:
+## What dream does (vs tidy and ramasse)
 
 ```
-tidy    = surface mechanical    (routine, daily/weekly)
-ramasse = deep structural clean (sparing, quarterly)
-dream   = content/knowledge/memory refresh (semantic, v0.4+)
+tidy    = surface mechanical sweep (tags, indexes, wikilink form). Routine.
+ramasse = deep STRUCTURAL clean (folders, schema, file types, naming, renames). Sparing.
+dream   = CONTENT/knowledge/memory refresh (semantic). THIS verb.
 ```
 
-Dream operates on the **content layer**, not the schema layer:
-- Read the actual prose of decisions, notes, sessions
-- Identify outdated info, contradictions between decisions, stale references
-- Detect redundancy (multiple notes saying the same thing)
-- Surface orphan threads (open questions from old sessions never resolved)
-- Clean up semantically — mark decisions as superseded, consolidate duplicates, archive stale sessions
+Dream operates on the **content layer**, where judgment — not regex — decides:
+- **Outdated info** — decisions/notes whose content no longer reflects reality
+- **Contradictions** — decision A says one thing, decision B (or a later note) says another
+- **Supersession** — a newer decision overrules an older one that was never marked superseded
+- **Redundancy** — multiple notes saying the same thing, ripe for consolidation
+- **Stale references** — links that still resolve but point to archived/old content
+- **Orphan threads** — open questions (TODO/OPEN/TBD) from old sessions, never resolved
 
-This is **LLM-judgment heavy**. The eventual `dream.py` will scan content and emit structured comparators ("decision A line 42 conflicts with decision B line 18"); Claude reads the data + judges semantically + writes the refresh plan.
+Dream cleans semantically: mark decisions superseded, consolidate duplicates, archive stale sessions, close or re-surface orphan threads.
 
-## What dream is NOT
+## Why it's LLM-judgment heavy
 
-- **Not** structural drift detection (that's `ramasse_scan.py`, feeding `/adjudant ramasse`)
-- **Not** schema conformance checking (that's part of `/adjudant ramasse`)
-- **Not** mechanical fixes (that's `/adjudant tidy`)
+`dream.py` **cannot decide semantics**. Where `ramasse_scan.py` decides a structural fact ("this filename violates §4"), `dream.py` only emits *candidates* — comparators with `file · line · excerpt` — and **Claude judges**. "Decision A line 42 may conflict with decision B line 18" is a candidate; whether it's a real contradiction is a read-and-reason call, not a pattern match.
 
-## v0.3.0 → v0.3.1 history
+## The 5-phase shape (superpowers chain)
 
-In v0.3.0, a verb called `dream` shipped that did structural drift detection. The 2026-05-26 design lock clarified that this work belongs to `ramasse`, not `dream`. The Python file was renamed `dream.py` → `ramasse_scan.py` in v0.3.1; the `/adjudant dream` verb was removed from the surface to free the name for the proper semantic dream.
+| Phase | Skill | Output |
+|---|---|---|
+| 1. Analyse | `dream.py` + Claude | Content/staleness comparator catalog (JSON → narrative) |
+| 2. Judge | Claude (judgment-heavy) | Which candidates are *real*: superseded / contradictory / redundant / stale / orphaned |
+| 3. Refresh plan | `superpowers:writing-plans` → `dream-report` | Concrete refresh plan (mark superseded, consolidate dupes, archive stale sessions, close orphan threads) |
+| 4. Review | (human checkpoint) | User reviews + approves plan; can edit or defer items |
+| 5. Execute | `superpowers:executing-plans` | Apply with checkpoints + backups; calls `tidy.py` for any mechanical follow-up |
 
-## When you invoke `/adjudant dream` today
+## Phase 1 — Run the scanner
 
-Tell the user: "Dream is reserved for v0.4+ (content/knowledge/memory refresh). For structural drift detection, use `/adjudant ramasse` — it consumes `ramasse_scan.py` for its analysis phase."
+```bash
+python3 "$(dirname "$0")/../../../scripts/dream.py" \
+  --project-dir "$PROJECT_ROOT" \
+  --vault-dir "$VAULT_PATH" \
+  --out /tmp/dream-scan-{slug}.json
+```
+
+Optional flags: `--today YYYY-MM-DD` (override "now" for age math — deterministic), `--stale-days N` (staleness threshold, default 180), `--include-legacy`.
+
+The JSON catalog (the **comparator catalog**) carries seven categories:
+
+| Key | What it surfaces |
+|---|---|
+| `staleness_candidates` | Content-type files older than the threshold (`updated:`/`date:`/filename date) |
+| `supersession_signals` | Same-topic decision pairs, older likely superseded (+ whether already marked) |
+| `contradiction_pairs` | Topically-overlapping files where a change/negation cue appears ("no longer", "switched from", "deprecated") |
+| `redundancy_clusters` | Near-duplicate notes/docs by token-set (Jaccard) similarity |
+| `stale_refs` | Refs that *resolve* but point to `_archive`/`_legacy` or old dated targets (broken links stay ramasse's job) |
+| `orphan_questions` | Aged open-loop markers (`TODO`/`OPEN:`/`TBD`/`follow-up`) never closed |
+| `orphan_threads` | Aged notes/docs with zero inbound wikilinks |
+
+Each entry carries enough context (`file`, `line`, `excerpt`/`shared_terms`) for Claude to judge without re-reading every file. `meta.summary` gives per-category counts.
+
+Claude reads the JSON, renders a content-state narrative, and judges each candidate before planning.
+
+## Phase 2 — Judge
+
+For each candidate, Claude reads the cited prose and decides:
+- **staleness** → is the content actually outdated, or just old-but-correct?
+- **supersession** → does the newer decision truly overrule the older? If so, the older needs a `superseded` marker.
+- **contradiction** → real conflict, or two compatible statements that merely share vocabulary?
+- **redundancy** → consolidate into one note, or are the duplicates intentionally distinct?
+- **stale_refs** → repoint, archive, or leave?
+- **orphan_questions / orphan_threads** → still open (re-surface), resolved-elsewhere (close), or archive?
+
+Discard false positives here. The catalog is deliberately generous — Phase 2 is where it gets cut down to truth.
+
+## Phase 3 — Write the refresh plan
+
+Invoke `superpowers:writing-plans` to produce a concrete content-refresh plan, and mirror it into a `dream-report` (see `templates/dream-report.md`) written to the project's `dreams/` folder as `{YYYY-MM-DD}-dream.md`:
+- Decisions to mark `superseded` (with the superseding file)
+- Note/doc consolidations (which files merge into which canonical target; which get archived)
+- Sessions to archive (move to `_archive/`)
+- Orphan threads to close or re-surface (as a fresh open question / decision)
+- Stale refs to repoint or remove
+- Plus any mechanical fixes spun off to `tidy`
+
+Plan written under `iterations/{YYYY-MM-DD}-iter-{id}-dream/` per the iteration-shelf convention.
+
+## Phase 4 — Human review
+
+User reviews the plan. May approve as-is, edit specific entries, reject and re-judge, or defer specific items (e.g., "archive the 2024 sessions in a separate pass").
+
+## Phase 5 — Execute
+
+Invoke `superpowers:executing-plans` to apply with checkpoints. Each plan step is its own commit-able unit. **Content operations are destructive — every one is backed up first** to `.adjudant-dream-backup/{ISO-8601-Z-timestamp}/<rel_path>.legacy` before the live edit. A `.adjudant-dream-{ts}/` workspace dir holds the plan + checkpoint state. For mechanical follow-up (index rebuilds after a consolidation, tag normalisation), call `tidy.py preview` then `tidy.py apply`.
+
+## Inputs
+
+Default: current project (resolved from the `.claude/adjudant` breadcrumb — `dream.py` auto-follows it, same as the other helpers). Vault-wide dream means a deliberate per-project loop; not a single invocation.
+
+## Fail conditions
+
+- No vault resolvable → stale-ref resolution is skipped (other detectors still run); the scan never hard-fails on a missing vault
+- `dream.py` exits non-zero → halt before phase 2
+- User aborts during phase 4 → leave `.adjudant-dream-{ts}/` for resume; no live changes
+- Phase 5 partial failure → halt at last checkpoint, leave `.adjudant-dream-backup/` for rollback
+
+## When NOT to use dream
+
+- For routine surface cleanup: use `/adjudant tidy`
+- For folder/schema/naming restructure: use `/adjudant ramasse`
+- For a single obviously-superseded decision: just add the `superseded` marker manually
 
 ## See also
 
-- `reference/ramasse.md` — the deep structural verb
-- `reference/tidy.md` — the surface mechanical verb
-- `scripts/ramasse_scan.py` — the structural drift detector (formerly `dream.py`)
+- `reference/tidy.md` — surface mechanical sweep
+- `reference/ramasse.md` — deep structural clean
+- `scripts/dream.py` — phase 1 analyser (this tier's scanner)
+- `scripts/ramasse_scan.py` — ramasse's structural analyser (formerly `dream.py` in v0.3.0)
+- `templates/dream-report.md` — phase 3 output scaffold
 - `docs/superpowers/2026-05-26-adjudant-tidy-ramasse-log.design.md` — design lock
