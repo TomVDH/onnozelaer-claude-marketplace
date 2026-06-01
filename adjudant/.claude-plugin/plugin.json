@@ -1,10 +1,20 @@
 {
   "name": "adjudant",
-  "version": "0.7.1",
-  "description": "Obsidian vault editor and project initializer. One command, /adjudant, with eight verbs (connect, port, sync, check, tidy, ramasse, dream, draw) — each backed by a Python helper that follows the .claude/adjudant breadcrumb automatically. Locked three-tier cleanup model: tidy = surface mechanical (routine), ramasse = deep structural (sparing), dream = content/knowledge/memory refresh (semantic, judgment-heavy — 10-category comparator catalog). The PreCompact hook is mechanical-only (no model calls, 5s budget) and writes a handoff freshness header — traffic light, real-activity age, NEXT, and a stale flag when session activity is newer than the handoff — plus an enriched pause tombstone carrying the NEXT action. v0.7.1 shares that freshness layer (scripts/_handoff_freshness.py) with the /adjudant sync verb so manual and auto-compaction syncs produce identical handoffs. Cross-machine portable via vault_name fallback resolution. Enforces vault standards; pairs with hookify and Gemineye.",
-  "author": { "name": "Onnozelaer" },
+  "version": "0.7.2",
+  "description": "v0.7.2 hardens the scanners so they no longer false-positive on a plugin's own templates/ scaffolds (exempt from naming, stub, and index-gap checks). Obsidian vault editor and project initializer. One command, /adjudant, with eight verbs (connect, port, sync, check, tidy, ramasse, dream, draw) — each backed by a Python helper that follows the .claude/adjudant breadcrumb automatically. Locked three-tier cleanup model: tidy = surface mechanical (routine), ramasse = deep structural (sparing), dream = content/knowledge/memory refresh (semantic, judgment-heavy — 10-category comparator catalog). The PreCompact hook is mechanical-only (no model calls, 5s budget) and writes a handoff freshness header — traffic light, real-activity age, NEXT, and a stale flag when session activity is newer than the handoff — plus an enriched pause tombstone carrying the NEXT action. v0.7.1 shares that freshness layer (scripts/_handoff_freshness.py) with the /adjudant sync verb so manual and auto-compaction syncs produce identical handoffs. Cross-machine portable via vault_name fallback resolution. Enforces vault standards; pairs with hookify and Gemineye.",
+  "author": {
+    "name": "Onnozelaer"
+  },
   "homepage": "https://github.com/TomVDH/onnozelaer-claude-marketplace/tree/main/adjudant",
   "repository": "https://github.com/TomVDH/onnozelaer-claude-marketplace",
   "license": "MIT",
-  "keywords": ["obsidian", "vault", "knowledge-management", "markdown", "frontmatter", "wikilinks", "adjudant"]
+  "keywords": [
+    "obsidian",
+    "vault",
+    "knowledge-management",
+    "markdown",
+    "frontmatter",
+    "wikilinks",
+    "adjudant"
+  ]
 }

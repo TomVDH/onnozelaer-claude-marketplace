@@ -387,6 +387,15 @@ class TestDetectDocumentationGaps(unittest.TestCase):
             out = detect_documentation_gaps(files, TODAY)
             self.assertFalse(any(g["kind"] == "session-without-decision" for g in out))
 
+    def test_template_scaffold_not_flagged_as_stub(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # canonical skeletal scaffold under templates/ — must NOT be a stub
+            _write_file(root / "templates" / "decision.md", "---\ntype: decision\n---\n\n## Decision\n")
+            files = list(walk_project(root))
+            out = detect_documentation_gaps(files, TODAY)
+            self.assertFalse(any(g["kind"] == "stub" for g in out))
+
     def test_brief_missing_sections_flagged(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
