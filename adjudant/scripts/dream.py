@@ -15,6 +15,9 @@ Catalog (the comparator catalog):
   - stale_refs             refs that resolve but point to archived/old targets
   - orphan_questions       aged open-loop markers (TODO/OPEN/TBD/…) never closed
   - orphan_threads         aged notes/docs with no inbound wikilinks
+  - unacted_decisions      active decisions whose stated consequence shows no action
+  - documentation_gaps     under-documentation (session w/o decision, stubs, brief gaps)
+  - dangling_scopes        brief milestones/questions never touched in any session
 
 CLI:
     python3 dream.py --project-dir PATH [--vault-dir PATH] [--out FILE]
@@ -53,6 +56,20 @@ from _vault_walk import (
 
 # File types whose prose dream reads (the content layer)
 CONTENT_TYPES: frozenset[str] = frozenset({"decision", "note", "session", "doc"})
+
+# Required brief body sections per project_type (mirrors templates/project-brief-*.md)
+REQUIRED_BRIEF_SECTIONS: dict[str, list[str]] = {
+    "coding": ["INTRO", "TECHNICAL STACK", "CONSTRAINTS", "WORK NOTES", "MILESTONES"],
+    "plugin": ["INTRO", "TECHNICAL STACK", "CONSTRAINTS", "WORK NOTES", "RELEASE NOTES"],
+    "knowledge": ["INTRO", "SOURCES", "OPEN QUESTIONS", "WORK NOTES"],
+    "tinkerage": ["INTRO", "WORK NOTES"],
+}
+
+# Brief sections whose bullet items represent declared-but-unstarted work
+SCOPE_SECTIONS: tuple[str, ...] = ("MILESTONES", "OPEN QUESTIONS", "SCOPE")
+
+# A session with this many substantive log lines but no decision = a doc gap
+DOC_GAP_SESSION_MIN_LINES = 5
 
 # Default age threshold (days) past which content is a staleness candidate
 DEFAULT_STALE_DAYS = 180
@@ -191,6 +208,57 @@ def _all_cue_lines(vf: VaultFile, pattern: re.Pattern) -> list[tuple[int, str]]:
         if pattern.search(line):
             out.append((lineno, line.strip()[:160]))
     return out
+
+
+def _split_sections(body: str) -> dict[str, str]:
+    """Map `## HEADING` / `### HEADING` (upper-cased key) → that section's text.
+
+    Skips fenced code. The level-1 `# Title` is not a section.
+    """
+    sections: dict[str, list[str]] = {}
+    current: Optional[str] = None
+    in_fenced = False
+    for line in body.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fenced = not in_fenced
+            if current is not None:
+                sections[current].append(line)
+            continue
+        if not in_fenced:
+            m = re.match(r"^#{2,3}\s+(.+?)\s*$", line)
+            if m:
+                current = m.group(1).strip().upper()
+                sections.setdefault(current, [])
+                continue
+        if current is not None:
+            sections[current].append(line)
+    return {k: "\n".join(v) for k, v in sections.items()}
+
+
+def _substantive_lines(text: str) -> list[str]:
+    """Body lines that carry content — excludes blanks, headings, and `>` quotes."""
+    out: list[str] = []
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s or s.startswith("#") or s.startswith(">"):
+            continue
+        out.append(s)
+    return out
+
+
+def _session_link_targets(files: list[VaultFile]) -> set[str]:
+    """Every wikilink target (full + basename forms) emitted by session files."""
+    targets: set[str] = set()
+    for f in files:
+        if f.file_type != "session":
+            continue
+        for wl in f.wikilinks:
+            if not wl.target:
+                continue
+            base = wl.target.replace("\\", "/").rstrip("/").split("/")[-1]
+            targets.add(wl.target)
+            targets.add(base)
+    return targets
 
 
 # ============================================================
@@ -456,6 +524,135 @@ def detect_orphan_threads(
     return out
 
 
+def detect_unacted_decisions(
+    files: list[VaultFile], today: _dt.date, *, min_age_days: int = 30
+) -> list[dict]:
+    """`status: active` decisions with a stated `## Consequence` but no evidence
+    of being acted on — i.e. no session references them, and they've aged.
+
+    Revives the OG cabinet dream's "unacted decisions" check. Mechanical signal
+    only; Claude judges whether the consequence was actually implemented.
+    """
+    session_targets = _session_link_targets(files)
+    out: list[dict] = []
+    for f in files:
+        if f.file_type != "decision":
+            continue
+        if f.frontmatter.fields.get("status") != "active":
+            continue
+        consequence = _split_sections(f.body).get("CONSEQUENCE", "")
+        conseq_lines = _substantive_lines(consequence)
+        if not conseq_lines:
+            continue  # no stated consequence → nothing to be "unacted"
+        age = _age_days(f, today)
+        if age is not None and age < min_age_days:
+            continue
+        stem = f.rel_path.name[:-3] if f.rel_path.name.endswith(".md") else f.rel_path.name
+        rel_no_ext = str(f.rel_path)[:-3] if str(f.rel_path).endswith(".md") else str(f.rel_path)
+        if stem in session_targets or rel_no_ext in session_targets or str(f.rel_path) in session_targets:
+            continue  # a session points at it → likely acted on
+        out.append({
+            "file": str(f.rel_path),
+            "date": str(_file_date(f)),
+            "age_days": age,
+            "consequence_excerpt": conseq_lines[0][:160],
+            "inbound_session_refs": 0,
+        })
+    out.sort(key=lambda x: (x["age_days"] or 0), reverse=True)
+    return out
+
+
+def detect_documentation_gaps(files: list[VaultFile], today: _dt.date) -> list[dict]:
+    """Under-documentation, the inverse of staleness. Three kinds:
+      - session-without-decision: a session with real work but no decision on its date
+      - stub: a note/doc/decision with < 3 substantive body lines
+      - brief-missing-sections: a brief missing required sections for its project_type
+    """
+    gaps: list[dict] = []
+
+    decision_dates = {d for d in (_file_date(f) for f in files if f.file_type == "decision") if d}
+    for f in files:
+        if f.file_type == "session":
+            d = _file_date(f)
+            if d and d not in decision_dates and len(_substantive_lines(f.body)) >= DOC_GAP_SESSION_MIN_LINES:
+                gaps.append({
+                    "file": str(f.rel_path),
+                    "kind": "session-without-decision",
+                    "detail": "substantial session log but no decision recorded on this date",
+                })
+
+    for f in files:
+        if f.file_type not in ("note", "doc", "decision"):
+            continue
+        if f.rel_path.name == "_index.md":
+            continue
+        n = len(_substantive_lines(f.body))
+        if n < 3:
+            gaps.append({
+                "file": str(f.rel_path),
+                "kind": "stub",
+                "detail": f"only {n} substantive body line(s)",
+            })
+
+    for f in files:
+        if f.file_type == "project" and f.rel_path == Path("brief.md"):
+            ptype = f.frontmatter.fields.get("project_type")
+            required = REQUIRED_BRIEF_SECTIONS.get(ptype, []) if isinstance(ptype, str) else []
+            present = set(_split_sections(f.body).keys())
+            missing = [s for s in required if s not in present]
+            if missing:
+                gaps.append({
+                    "file": str(f.rel_path),
+                    "kind": "brief-missing-sections",
+                    "detail": "missing: " + ", ".join(missing),
+                })
+
+    return gaps
+
+
+def detect_dangling_scopes(files: list[VaultFile], today: _dt.date) -> list[dict]:
+    """Brief items declared under MILESTONES / OPEN QUESTIONS / SCOPE whose key
+    terms never appear in any session — planned work that was never touched.
+
+    Revives the OG cabinet dream's "dangling scopes" check, adapted to the
+    adjudant brief schema (which has no explicit scope-in/out block).
+    """
+    sessions_text = "\n".join(f.body.lower() for f in files if f.file_type == "session")
+    out: list[dict] = []
+    for f in files:
+        if f.file_type != "project" or f.rel_path != Path("brief.md"):
+            continue
+        sections = _split_sections(f.body)
+        for sec_name in SCOPE_SECTIONS:
+            text = sections.get(sec_name)
+            if not text:
+                continue
+            for line in text.split("\n"):
+                s = line.strip()
+                if not re.match(r"^(?:[-*+]|\d+\.)\s+", s):
+                    continue
+                if re.match(r"^[-*+]\s+\[[xX]\]", s):
+                    continue  # completed checkbox
+                item = re.sub(r"^(?:[-*+]|\d+\.)\s+", "", s)
+                item = re.sub(r"^\[[ xX]\]\s*", "", item)
+                if not item or item.startswith("{"):  # skip template placeholders
+                    continue
+                tokens = {
+                    w for w in re.findall(r"[a-z0-9][a-z0-9'-]{3,}", item.lower())
+                    if w not in _STOPWORDS
+                }
+                if not tokens:
+                    continue
+                if not any(tok in sessions_text for tok in tokens):
+                    out.append({
+                        "file": str(f.rel_path),
+                        "section": sec_name,
+                        "item": item[:160],
+                        "reason": "declared in brief, never referenced in any session",
+                    })
+    return out
+
+
 # ============================================================
 # Top-level scan
 # ============================================================
@@ -468,6 +665,7 @@ def run_dream(
     today: Optional[_dt.date] = None,
     stale_days: int = DEFAULT_STALE_DAYS,
     orphan_question_days: int = DEFAULT_ORPHAN_QUESTION_DAYS,
+    unacted_min_age_days: int = 30,
     include_legacy: bool = False,
 ) -> dict[str, Any]:
     """Run all content/staleness detectors. Returns the full JSON report."""
@@ -487,6 +685,9 @@ def run_dream(
     stale_refs = detect_stale_refs(files, today, vault_index, stale_days=stale_days)
     orphan_questions = detect_orphan_questions(files, today, orphan_days=orphan_question_days)
     orphan_threads = detect_orphan_threads(files, today, stale_days=stale_days)
+    unacted = detect_unacted_decisions(files, today, min_age_days=unacted_min_age_days)
+    doc_gaps = detect_documentation_gaps(files, today)
+    dangling = detect_dangling_scopes(files, today)
 
     candidate_total = (
         len(staleness)
@@ -496,6 +697,9 @@ def run_dream(
         + len(stale_refs)
         + len(orphan_questions)
         + len(orphan_threads)
+        + len(unacted)
+        + len(doc_gaps)
+        + len(dangling)
     )
 
     return {
@@ -510,6 +714,7 @@ def run_dream(
             "thresholds": {
                 "stale_days": stale_days,
                 "orphan_question_days": orphan_question_days,
+                "unacted_min_age_days": unacted_min_age_days,
             },
         },
         "summary": {
@@ -521,6 +726,9 @@ def run_dream(
             "stale_refs": len(stale_refs),
             "orphan_questions": len(orphan_questions),
             "orphan_threads": len(orphan_threads),
+            "unacted_decisions": len(unacted),
+            "documentation_gaps": len(doc_gaps),
+            "dangling_scopes": len(dangling),
         },
         "staleness_candidates": staleness,
         "supersession_signals": supersession,
@@ -529,6 +737,9 @@ def run_dream(
         "stale_refs": stale_refs,
         "orphan_questions": orphan_questions,
         "orphan_threads": orphan_threads,
+        "unacted_decisions": unacted,
+        "documentation_gaps": doc_gaps,
+        "dangling_scopes": dangling,
     }
 
 
@@ -618,7 +829,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         f"({s['staleness']} stale, {s['supersession']} supersede, "
         f"{s['contradiction']} contra, {s['redundancy_clusters']} dup-clusters, "
         f"{s['stale_refs']} stale-refs, {s['orphan_questions']} open-loops, "
-        f"{s['orphan_threads']} orphans)",
+        f"{s['orphan_threads']} orphans, {s['unacted_decisions']} unacted, "
+        f"{s['documentation_gaps']} doc-gaps, {s['dangling_scopes']} dangling)",
         file=sys.stderr,
     )
     return 0

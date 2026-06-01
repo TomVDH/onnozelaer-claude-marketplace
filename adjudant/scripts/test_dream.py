@@ -8,12 +8,15 @@ from pathlib import Path
 
 from dream import (
     detect_contradiction_candidates,
+    detect_dangling_scopes,
+    detect_documentation_gaps,
     detect_orphan_questions,
     detect_orphan_threads,
     detect_redundancy_clusters,
     detect_stale_refs,
     detect_staleness,
     detect_supersession_signals,
+    detect_unacted_decisions,
     run_dream,
 )
 from _vault_walk import build_vault_index, walk_project
@@ -26,14 +29,25 @@ def _write_file(path: Path, content: str) -> None:
     path.write_text(content)
 
 
+_CODING_BRIEF_SECTIONS = (
+    "# Test Project\n\n"
+    "## INTRO\nReal intro prose here.\n\n"
+    "## TECHNICAL STACK\nPython.\n\n"
+    "## CONSTRAINTS\nNone notable.\n\n"
+    "## WORK NOTES\nOngoing.\n\n"
+    "## MILESTONES\n- {first milestone}\n"   # template placeholder — skipped by dangling-scope
+)
+
+
 def _make_minimal_project(root: Path, slug: str = "test", project_type: str = "coding") -> None:
+    body = _CODING_BRIEF_SECTIONS if project_type == "coding" else "# Test Project\n\n## INTRO\nx\n\n## WORK NOTES\ny\n"
     _write_file(root / "brief.md", (
         "---\n"
         "type: project\n"
         f"project_type: {project_type}\n"
         f"slug: {slug}\n"
         "tags:\n  - project\n"
-        "---\n\n# Test Project\n"
+        f"---\n\n{body}"
     ))
     _write_file(root / "_handoff.md", "---\ntype: handoff\nupdated: 2026-05-26\n---\n\nbody")
     (root / "sessions").mkdir()
@@ -289,6 +303,142 @@ class TestDetectOrphanThreads(unittest.TestCase):
 
 
 # ============================================================
+# Unacted decisions
+# ============================================================
+
+
+class TestDetectUnactedDecisions(unittest.TestCase):
+
+    def test_aged_active_decision_with_consequence_unreferenced_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "decisions" / "2026-01-01-migrate.md",
+                        "---\ntype: decision\nstatus: active\ndate: 2026-01-01\n---\n\n"
+                        "## Decision\nMigrate to vite.\n\n## Consequence\nRewrite the build config.\n")
+            files = list(walk_project(root))
+            out = detect_unacted_decisions(files, TODAY)
+            self.assertEqual(len(out), 1)
+            self.assertIn("Rewrite", out[0]["consequence_excerpt"])
+
+    def test_referenced_by_session_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "decisions" / "2026-01-01-migrate.md",
+                        "---\ntype: decision\nstatus: active\ndate: 2026-01-01\n---\n\n"
+                        "## Decision\nMigrate.\n\n## Consequence\nRewrite config.\n")
+            _write_file(root / "sessions" / "2026-02-01.md",
+                        "---\ntype: session\n---\n\nDid the [[2026-01-01-migrate]] rewrite today.")
+            files = list(walk_project(root))
+            self.assertEqual(detect_unacted_decisions(files, TODAY), [])
+
+    def test_recent_decision_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "decisions" / "2026-05-25-x.md",
+                        "---\ntype: decision\nstatus: active\ndate: 2026-05-25\n---\n\n"
+                        "## Consequence\nDo the thing.\n")
+            files = list(walk_project(root))
+            self.assertEqual(detect_unacted_decisions(files, TODAY), [])
+
+    def test_superseded_decision_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "decisions" / "2026-01-01-x.md",
+                        "---\ntype: decision\nstatus: superseded\ndate: 2026-01-01\n---\n\n"
+                        "## Consequence\nWould have done the thing.\n")
+            files = list(walk_project(root))
+            self.assertEqual(detect_unacted_decisions(files, TODAY), [])
+
+
+# ============================================================
+# Documentation gaps
+# ============================================================
+
+
+class TestDetectDocumentationGaps(unittest.TestCase):
+
+    def test_stub_note_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "notes" / "thin.md", "---\ntype: note\n---\n\none line only")
+            files = list(walk_project(root))
+            out = detect_documentation_gaps(files, TODAY)
+            self.assertTrue(any(g["kind"] == "stub" for g in out))
+
+    def test_session_with_work_no_decision_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "sessions" / "2026-05-01.md",
+                        "---\ntype: session\n---\n\n## Log\n"
+                        "- 09:00 a\n- 09:10 b\n- 09:20 c\n- 09:30 d\n- 09:40 e\n- 09:50 f\n")
+            files = list(walk_project(root))
+            out = detect_documentation_gaps(files, TODAY)
+            self.assertTrue(any(g["kind"] == "session-without-decision" for g in out))
+
+    def test_session_with_decision_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "sessions" / "2026-05-01.md",
+                        "---\ntype: session\n---\n\n## Log\n"
+                        "- 09:00 a\n- 09:10 b\n- 09:20 c\n- 09:30 d\n- 09:40 e\n")
+            _write_file(root / "decisions" / "2026-05-01-x.md",
+                        "---\ntype: decision\nstatus: active\ndate: 2026-05-01\n---\n\n## Decision\nx\n## Context\ny\n## Consequence\nz\n")
+            files = list(walk_project(root))
+            out = detect_documentation_gaps(files, TODAY)
+            self.assertFalse(any(g["kind"] == "session-without-decision" for g in out))
+
+    def test_brief_missing_sections_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "brief.md",
+                        "---\ntype: project\nproject_type: coding\nslug: t\n---\n\n# T\n\n## INTRO\nhi\n")
+            files = list(walk_project(root))
+            out = detect_documentation_gaps(files, TODAY)
+            gap = next(g for g in out if g["kind"] == "brief-missing-sections")
+            self.assertIn("MILESTONES", gap["detail"])
+
+
+# ============================================================
+# Dangling scopes
+# ============================================================
+
+
+class TestDetectDanglingScopes(unittest.TestCase):
+
+    def test_untouched_milestone_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "brief.md",
+                        "---\ntype: project\nproject_type: coding\nslug: t\n---\n\n# T\n\n"
+                        "## MILESTONES\n- build the scheduler dashboard\n")
+            _write_file(root / "sessions" / "2026-05-01.md", "---\ntype: session\n---\n\nworked on auth")
+            files = list(walk_project(root))
+            out = detect_dangling_scopes(files, TODAY)
+            self.assertEqual(len(out), 1)
+            self.assertIn("scheduler", out[0]["item"])
+
+    def test_milestone_mentioned_in_session_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "brief.md",
+                        "---\ntype: project\nproject_type: coding\nslug: t\n---\n\n# T\n\n"
+                        "## MILESTONES\n- build the scheduler dashboard\n")
+            _write_file(root / "sessions" / "2026-05-01.md",
+                        "---\ntype: session\n---\n\nstarted the scheduler dashboard work")
+            files = list(walk_project(root))
+            self.assertEqual(detect_dangling_scopes(files, TODAY), [])
+
+    def test_template_placeholder_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_file(root / "brief.md",
+                        "---\ntype: project\nproject_type: coding\nslug: t\n---\n\n# T\n\n"
+                        "## MILESTONES\n- {first milestone}\n")
+            files = list(walk_project(root))
+            self.assertEqual(detect_dangling_scopes(files, TODAY), [])
+
+
+# ============================================================
 # End-to-end run_dream
 # ============================================================
 
@@ -301,7 +451,8 @@ class TestRunDream(unittest.TestCase):
             _make_minimal_project(root)
             (root / "decisions").mkdir()
             _write_file(root / "decisions" / "2026-05-20-fresh.md",
-                        "---\ntype: decision\ndate: 2026-05-20\n---\n\nrecent decision")
+                        "---\ntype: decision\nstatus: active\ndate: 2026-05-20\n---\n\n"
+                        "## Decision\nChose X.\n\n## Context\nBecause Y.\n\n## Consequence\nDo Z.\n")
             report = run_dream(root, root, today=TODAY)
             self.assertEqual(report["meta"]["project_slug"], "test")
             self.assertEqual(report["summary"]["candidates"], 0)

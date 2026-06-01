@@ -58,8 +58,11 @@ The JSON catalog (the **comparator catalog**) carries seven categories:
 | `stale_refs` | Refs that *resolve* but point to `_archive`/`_legacy` or old dated targets (broken links stay ramasse's job) |
 | `orphan_questions` | Aged open-loop markers (`TODO`/`OPEN:`/`TBD`/`follow-up`) never closed |
 | `orphan_threads` | Aged notes/docs with zero inbound wikilinks |
+| `unacted_decisions` | `status: active` decisions whose stated `## Consequence` shows no action (unreferenced by any session, aged) |
+| `documentation_gaps` | Under-documentation — sessions with real work but no decision, stub files, briefs missing required sections |
+| `dangling_scopes` | Brief `MILESTONES`/`OPEN QUESTIONS` items whose terms never appear in any session |
 
-Each entry carries enough context (`file`, `line`, `excerpt`/`shared_terms`) for Claude to judge without re-reading every file. `meta.summary` gives per-category counts.
+The last three revive the original cabinet `/dream`'s content checks (see *Lineage* below). Each entry carries enough context (`file`, `line`, `excerpt`/`shared_terms`) for Claude to judge without re-reading every file. `meta.summary` gives per-category counts.
 
 Claude reads the JSON, renders a content-state narrative, and judges each candidate before planning.
 
@@ -72,6 +75,9 @@ For each candidate, Claude reads the cited prose and decides:
 - **redundancy** → consolidate into one note, or are the duplicates intentionally distinct?
 - **stale_refs** → repoint, archive, or leave?
 - **orphan_questions / orphan_threads** → still open (re-surface), resolved-elsewhere (close), or archive?
+- **unacted_decisions** → was the consequence actually implemented (mark `status: implemented`), still pending (leave / re-surface), or abandoned (mark `reversed`)?
+- **documentation_gaps** → real gap worth backfilling, or intentionally terse?
+- **dangling_scopes** → still planned (keep), silently done (record it), or dropped (strike from brief)?
 
 Discard false positives here. The catalog is deliberately generous — Phase 2 is where it gets cut down to truth.
 
@@ -105,6 +111,22 @@ Default: current project (resolved from the `.claude/adjudant` breadcrumb — `d
 - `dream.py` exits non-zero → halt before phase 2
 - User aborts during phase 4 → leave `.adjudant-dream-{ts}/` for resume; no live changes
 - Phase 5 partial failure → halt at last checkpoint, leave `.adjudant-dream-backup/` for rollback
+
+## Personality layer — the Chroniclers (optional)
+
+`dream` is **dry standalone** — no voice, just the report. But when `cabinet-of-imd` is installed, narrate the Phase 1–2 findings in the Chroniclers' voices, by detection axis (the bridge↔cabinet contract from the 2026-04-30 obsidian-bridge spec §13):
+
+| Chronicler | Owns |
+|---|---|
+| **Bostrol** | contradictions + supersession |
+| **Jonasty** | staleness + stale refs + unacted decisions |
+| **Kevijntje** | dangling scopes + orphan threads/questions + documentation gaps |
+
+Voice wraps the *presentation* only — it never changes the judgment or the plan. Without cabinet, skip it entirely.
+
+## Lineage — the original cabinet `/dream`
+
+This verb is the descendant of cabinet-of-imd's `/dream` (extracted to obsidian-bridge in v2.3.0, then re-homed here). The original was **two-pass**: a structural-sanitation pass (now split across `tidy` + `ramasse`) and a content-analysis pass — contradictions, stale info, dangling scopes, **unacted decisions**, **documentation gaps**. adjudant `dream` is the content pass, modernised into a read-only comparator catalog. The full historical design is preserved in `docs/superpowers/specs/2026-04-30-obsidian-bridge-design.md` §13.
 
 ## When NOT to use dream
 
