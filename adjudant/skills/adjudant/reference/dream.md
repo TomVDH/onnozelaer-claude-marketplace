@@ -62,7 +62,7 @@ The JSON catalog (the **comparator catalog**) carries seven categories:
 | `documentation_gaps` | Under-documentation — sessions with real work but no decision, stub files, briefs missing required sections |
 | `dangling_scopes` | Brief `MILESTONES`/`OPEN QUESTIONS` items whose terms never appear in any session |
 
-The last three revive the original cabinet `/dream`'s content checks (see *Lineage* below). Each entry carries enough context (`file`, `line`, `excerpt`/`shared_terms`) for Claude to judge without re-reading every file. `meta.summary` gives per-category counts.
+The last three revive the original `/dream`'s content checks (see *Lineage* below). Each entry carries enough context (`file`, `line`, `excerpt`/`shared_terms`) for Claude to judge without re-reading every file. `meta.summary` gives per-category counts.
 
 Claude reads the JSON, renders a content-state narrative, and judges each candidate before planning.
 
@@ -112,21 +112,9 @@ Default: current project (resolved from the `.claude/adjudant` breadcrumb — `d
 - User aborts during phase 4 → leave `.adjudant-dream-{ts}/` for resume; no live changes
 - Phase 5 partial failure → halt at last checkpoint, leave `.adjudant-dream-backup/` for rollback
 
-## Personality layer — the Chroniclers (optional)
+## Lineage — the original `/dream`
 
-`dream` is **dry standalone** — no voice, just the report. But when `cabinet-of-imd` is installed, narrate the Phase 1–2 findings in the Chroniclers' voices, by detection axis (the bridge↔cabinet contract from the 2026-04-30 obsidian-bridge spec §13):
-
-| Chronicler | Owns |
-|---|---|
-| **Bostrol** | contradictions + supersession |
-| **Jonasty** | staleness + stale refs + unacted decisions |
-| **Kevijntje** | dangling scopes + orphan threads/questions + documentation gaps |
-
-Voice wraps the *presentation* only — it never changes the judgment or the plan. Without cabinet, skip it entirely.
-
-## Lineage — the original cabinet `/dream`
-
-This verb is the descendant of cabinet-of-imd's `/dream` (extracted to obsidian-bridge in v2.3.0, then re-homed here). The original was **two-pass**: a structural-sanitation pass (now split across `tidy` + `ramasse`) and a content-analysis pass — contradictions, stale info, dangling scopes, **unacted decisions**, **documentation gaps**. adjudant `dream` is the content pass, modernised into a read-only comparator catalog. The full historical design is preserved in `docs/superpowers/specs/2026-04-30-obsidian-bridge-design.md` §13.
+This verb's content checks descend from an earlier `/dream` (its historical two-pass design is preserved in `docs/superpowers/specs/2026-04-30-obsidian-bridge-design.md` §13): a structural-sanitation pass — now split across `tidy` + `ramasse` — and a content-analysis pass (contradictions, stale info, dangling scopes, unacted decisions, documentation gaps). adjudant `dream` is that content pass, modernised into a read-only comparator catalog. **It is fully standalone** — it has no dependency on, and no interoperation with, any other plugin; the report is always dry, with no personality layer.
 
 ## When NOT to use dream
 

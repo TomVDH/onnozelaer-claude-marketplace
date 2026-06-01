@@ -530,7 +530,7 @@ def detect_unacted_decisions(
     """`status: active` decisions with a stated `## Consequence` but no evidence
     of being acted on — i.e. no session references them, and they've aged.
 
-    Revives the OG cabinet dream's "unacted decisions" check. Mechanical signal
+    Revives the original /dream's "unacted decisions" check. Mechanical signal
     only; Claude judges whether the consequence was actually implemented.
     """
     session_targets = _session_link_targets(files)
@@ -614,7 +614,7 @@ def detect_dangling_scopes(files: list[VaultFile], today: _dt.date) -> list[dict
     """Brief items declared under MILESTONES / OPEN QUESTIONS / SCOPE whose key
     terms never appear in any session — planned work that was never touched.
 
-    Revives the OG cabinet dream's "dangling scopes" check, adapted to the
+    Revives the original /dream's "dangling scopes" check, adapted to the
     adjudant brief schema (which has no explicit scope-in/out block).
     """
     sessions_text = "\n".join(f.body.lower() for f in files if f.file_type == "session")

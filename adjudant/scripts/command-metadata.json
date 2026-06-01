@@ -40,7 +40,7 @@
     },
     {
       "name": "dream",
-      "description": "Content/knowledge/memory refresh — semantic, the third cleanup tier. Reads prose of decisions/notes/sessions and surfaces a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphan questions/threads, unacted decisions, documentation gaps, dangling scopes) for Claude to judge. Analysis via dream.py (read-only); judge + plan + execute via superpowers, with backups for destructive content ops. Optional Chronicler voice when cabinet-of-imd is installed.",
+      "description": "Content/knowledge/memory refresh — semantic, the third cleanup tier. Reads prose of decisions/notes/sessions and surfaces a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphan questions/threads, unacted decisions, documentation gaps, dangling scopes) for Claude to judge. Analysis via dream.py (read-only); judge + plan + execute via superpowers, with backups for destructive content ops. Fully standalone — no dependency on other plugins.",
       "argumentHint": "(no args)",
       "reference": "reference/dream.md"
     },
