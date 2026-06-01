@@ -26,9 +26,9 @@
     },
     {
       "name": "gemineye",
-      "version": "0.3.1",
+      "version": "0.5.0",
       "source": "./gemineye",
-      "description": "A sandboxed second opinion from Gemini \u2014 review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. Gemini proposes edits as code blocks; Claude applies them. harvest extracts 5 durable bullets from any file (transcript, doc, code) \u2014 the manual surface for the same pattern adjudant uses automatically at PreCompact. Pairs with adjudant for vault context."
+      "description": "A sandboxed second opinion from a Gemini-family model via the Antigravity CLI (agy) \u2014 review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. The reviewer is read-trusted to the project root (--add-dir) and write-sandboxed (--sandbox); it proposes edits as code blocks, Claude applies them. v0.5.0 migrates the backend off the deprecated gemini CLI (sunset 2026-06-18 for AI Pro/Ultra and free users) to agy, via a dual-CLI adapter that prefers agy and keeps a temporary gemini fallback; a follow-up release will drop gemini entirely. agy exposes no per-call model flag, so the plugin pins no model IDs. Also clears drift: removes the dead cabinet-of-imd/Bostrol coupling, retires the non-existent --file flag, and corrects the stale claim that adjudant auto-harvests at PreCompact (false since adjudant v0.7.0). Pairs with adjudant for vault context."
     },
     {
       "name": "adjudant",

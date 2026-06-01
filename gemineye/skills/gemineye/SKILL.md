@@ -1,8 +1,8 @@
 ---
 name: gemineye
-description: Sandboxed second opinion from Gemini. `/gemineye {review|megareview|wip|sanity|name|compare|save|harvest}` or phrases like "ask Gemini" / "second opinion". Review-only — Claude applies any proposed edits.
+description: Sandboxed second opinion from a Gemini-family model via the Antigravity CLI (`agy`). `/gemineye {review|megareview|wip|sanity|name|compare|save|harvest}` or phrases like "ask Gemini" / "second opinion". Review-only — Claude applies any proposed edits.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.3.2
+version: 0.5.0
 user-invocable: true
 argument-hint: "[review|megareview|wip|sanity|name|compare|save|harvest] [args]"
 ---
@@ -31,12 +31,12 @@ reads what's prepared, writes notes, leaves. No drawings on the walls.
 | `/gemineye save [topic]` | last review | — (file write) |
 | `/gemineye harvest <path>` | extract 5 durable bullets from any file | fast |
 
-Tiers, not model IDs:
-
-- **fast** (Fast/Light) — omit `-m`; CLI picks its current default model. Used by everything except `megareview`.
-- **pro** (Pro/Slow) — `-m gemini-2.5-pro`. Used only by `megareview` for deeper architectural passes.
-
-Update the pro-tier model string here when Gemini publishes a new Pro rev; nothing else in the plugin pins a version.
+**Tier under `agy` is informational.** The Antigravity CLI exposes **no
+per-invocation model flag** — model tier is governed by your Antigravity
+account/config, not by gemineye. So all subcommands use the same `agy`
+invocation; `megareview` differs only in prompt scope and depth, not in a
+model string. The plugin pins **no model IDs** under `agy`. (Legacy `gemini`
+fallback still honours `-m gemini-2.5-pro` for `pro` — see CLI backend below.)
 
 Natural-language triggers ("ask Gemini", "second opinion", "Gemini
 take") default to `review` if a target is named, otherwise ask for
@@ -49,10 +49,13 @@ For the filled-in prompt templates per subcommand, read
 
 ## Core rules
 
-1. **Sandboxed.** Every Gemini call passes `--sandbox`. The folder
-   is not trusted yet. Gemini cannot run tools outside the sandbox.
-2. **Review-only.** Gemini never writes project files. Never call it
-   with `--yolo` or write-permission flags.
+1. **Write-sandboxed, read-trusted.** Every call passes `--sandbox`
+   (terminal/write restrictions) and `--add-dir "$ROOT"` (read access
+   to the project root only). The reviewer can read the project; it
+   cannot write the host or reach outside the root.
+2. **Review-only.** The CLI never writes project files. Never pass
+   `--dangerously-skip-permissions` (agy) or `--yolo` (gemini), and
+   never grant write tools. Edits come back as code blocks; Claude applies.
 3. **Edits as code blocks.** When Gemini proposes a change, the
    change appears in an elaborate code block (file, language, before
    / after, full surrounding context). Claude reviews and applies.
@@ -99,30 +102,89 @@ The rigidity is the point. Loose prompts produce loose reviews.
 
 ---
 
-## Pre-flight
+## CLI backend — `agy` (Antigravity), with deprecated `gemini` fallback
+
+Gemineye drives a sandboxed CLI as its review oracle. **Antigravity CLI
+(`agy`) is the backend.** The old `gemini` CLI is **deprecated** — Google
+sunsets it for AI Pro/Ultra and free users on **2026-06-18** (it survives
+only on paid Gemini Code Assist Standard/Enterprise + API keys). gemineye
+keeps a `gemini` fallback **only as a transition crutch**.
+
+> ⚠️ **The `gemini` fallback is temporary.** Once you're on `agy`, a follow-up
+> gemineye release will remove the `gemini` path entirely. Do not build new
+> behaviour on it.
+
+**Backend detection (every invocation):**
 
 ```bash
-command -v gemini >/dev/null 2>&1 || {
-  echo "gemini CLI not found. Install: https://github.com/google-gemini/gemini-cli"
+if command -v agy >/dev/null 2>&1; then
+  GEMEYE_CLI=agy
+elif command -v gemini >/dev/null 2>&1; then
+  GEMEYE_CLI=gemini
+  echo "⚠️  gemineye: using DEPRECATED 'gemini' CLI. Install Antigravity CLI" \
+       "(agy) before 2026-06-18 — a future gemineye update will drop gemini." >&2
+else
+  echo "gemineye: no review CLI found. Install Antigravity CLI (agy): https://antigravity.google" >&2
   exit 1
-}
+fi
 ```
 
-If missing, stop. Don't fall back. Tell Tom.
+If neither is present, stop. Don't improvise. Tell Tom.
+
+---
+
+## Pre-flight
+
+Run the backend-detection block above. On `agy`, no version pinning is needed
+(no model flag). On the `gemini` fallback, the pro tier still uses
+`-m gemini-2.5-pro` — update that one string if ever needed.
 
 ---
 
 ## Standard invocation
 
 ```bash
-# Fast tier (review, wip, sanity, name, compare, harvest) — no -m, CLI picks default
-gemini --sandbox -p "$(cat prompt.txt)"
+# Antigravity CLI (agy) — all subcommands. Read-trusted to the project root,
+# write-sandboxed. $ROOT is the project/repo root being reviewed.
+agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
 
-# Pro tier (megareview only)
-gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
+# Deprecated gemini fallback (transition only):
+#   fast tier — gemini --sandbox -p "$(cat prompt.txt)"
+#   pro tier  — gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
 ```
 
-Never pass `--yolo`, never grant write tools, never drop `--sandbox`.
+**The posture: read-trusted, write-sandboxed.** `--add-dir "$ROOT"` lets the
+reviewer *read* adjacent files inside the project root when a finding needs
+them; `--sandbox` keeps it from writing the host fs or escaping. The prepared
+bundle (see Context sourcing) stays the **primary** feed — `--add-dir` is for
+pulling supporting context within the root, not a licence to crawl.
+
+**Never pass `--dangerously-skip-permissions`** (agy) or `--yolo` (gemini),
+never grant write tools, never drop `--sandbox`, never `--add-dir` outside the
+project root. The reviewer reads the building; it holds no keys.
+
+### Folder trust (one-time per project)
+
+A headless `agy -p` call in an **untrusted** folder can block on a trust
+prompt. Establish trust once, interactively, then headless calls work:
+
+```bash
+cd "$ROOT" && agy        # answer the trust prompt once; agy remembers it
+```
+
+> **Verify on this machine** (decides whether the handshake is even needed):
+> ```bash
+> agy help                                              # look for a trust/settings subcommand
+> echo | agy --sandbox --add-dir "$PWD" -p "name one file you can see here"
+> ```
+> If it prints a filename, `--add-dir` is enough. If it hangs / asks to trust
+> the folder, run the one-time handshake above (or add the root to agy's
+> trusted-folders config).
+
+> **`agy -p` stdout note:** the non-interactive `--print` mode has a reported
+> non-TTY stdout bug ([#27466](https://github.com/google-gemini/gemini-cli/issues/27466)).
+> If a call returns empty stdout, re-run interactively or read the response
+> from agy's latest session transcript.
 
 ---
 
@@ -224,8 +286,6 @@ When `adjudant` is active:
 2. **Write** — persisted reviews go to `${VAULT}/projects/{slug}/gemineye/`.
 3. **Cross-link** — append a line under `## Gemini reviews` in the
    current session note.
-4. **Bostrol** — if `cabinet-of-imd` is also active, treat persisted
-   reviews as documentation artefacts under Bostrol's indexing.
 
 Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
@@ -235,8 +295,11 @@ Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| `gemini: command not found` | CLI not installed | Tell Tom, link install docs, stop |
-| `--sandbox: unknown option` | Older CLI version | Tell Tom to upgrade; do not run without sandbox |
+| Neither `agy` nor `gemini` on PATH | No review CLI installed | Tell Tom, link Antigravity install, stop |
+| Using `gemini` fallback | `agy` not installed | Works, but warn: gemini is deprecated (sunset 2026-06-18); install `agy` |
+| `agy -p` prints nothing | Non-TTY stdout bug (#27466) | Re-run interactively, or read the latest agy session transcript |
+| `agy -p` hangs / asks to trust folder | Folder not trusted | Run one-time `cd "$ROOT" && agy` handshake, or add root to trusted-folders config |
+| `--sandbox: unknown option` | Older/odd CLI build | Tell Tom to update (`agy update`); do not run without sandbox |
 | Empty / very short response | Template missing fields or context too thin | Re-run with the template fully filled |
 | Response contradicts Claude | Genuine disagreement | Surface both views to Tom; do not auto-resolve |
 | Response wants to scaffold | Gemini ignored the constraint | Filter in "Claude's read" |
@@ -247,6 +310,6 @@ Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
 ## Dependencies
 
-- `gemini` CLI on `PATH`, recent enough to support `--sandbox`.
+- **Antigravity CLI (`agy`) on `PATH`** — the review backend. Install: <https://antigravity.google>
+- Deprecated fallback: `gemini` CLI (transition only; sunset 2026-06-18).
 - Optional: `adjudant` (vault context auto-loading).
-- Optional: `cabinet-of-imd` (Bostrol-mediated indexing).

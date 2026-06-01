@@ -15,36 +15,40 @@ the `gemineye` skill activates on the `/gemineye` command, its
 subcommands, or natural-language phrases ("ask Gemini", "second
 opinion", "Gemini review").
 
-**Requires:** the `gemini` CLI on `PATH`, recent enough to support
-`--sandbox`. Install: <https://github.com/google-gemini/gemini-cli>
+**Requires:** the **Antigravity CLI (`agy`)** on `PATH`. Install:
+<https://antigravity.google>. The old `gemini` CLI works as a **deprecated
+fallback** (Google sunsets it for AI Pro/Ultra and free users on 2026-06-18);
+once you're on `agy`, a follow-up release will drop the `gemini` path.
 
 **Pairs with (optional but recommended):**
 - `adjudant` — auto-loads project context from the Obsidian
   vault and routes outputs into the project's `gemineye/` subfolder.
-- `cabinet-of-imd` — when active, Bostrol indexes Gemineye outputs
-  as documentation artefacts.
 
 ## Subcommands
 
 ```
-/gemineye review <target>              Focused review of one artefact — flash
-/gemineye megareview <scope>           Broad sweep across module / feature / plugin — pro
-/gemineye wip                          Review uncommitted + current branch work — flash
-/gemineye sanity <topic>               Steel-man + failure modes + alternative — flash
-/gemineye name <thing(s)>              Naming bikeshed — flash
-/gemineye compare <A> <B> [<C>...]     Head-to-head ranking — flash
+/gemineye review <target>              Focused review of one artefact
+/gemineye megareview <scope>           Broad sweep across module / feature / plugin (deepest)
+/gemineye wip                          Review uncommitted + current branch work
+/gemineye sanity <topic>               Steel-man + failure modes + alternative
+/gemineye name <thing(s)>              Naming bikeshed
+/gemineye compare <A> <B> [<C>...]     Head-to-head ranking
 /gemineye save [topic]                 Persist last in-line review to gemineye/ folder
+/gemineye harvest <path>               Extract 5 durable bullets from any file
 ```
+
+`megareview` is the deepest pass; the rest are lighter. Under `agy` there's no
+per-call model flag, so "tier" is about prompt scope, not a model switch.
 
 ## Behaviour at a glance
 
 | Aspect | Default |
 |---|---|
 | Trigger | Explicit phrases or `/gemineye` subcommand |
-| Sandbox | Always (`--sandbox`). Folder is not trusted by Gemini |
-| Permissions | Review-only. No `--yolo`. No write tools |
-| Default tier | `fast` (omits `-m`; CLI picks its current default model) |
-| `megareview` tier | `pro` (`-m gemini-2.5-pro`) |
+| Backend | `agy` (Antigravity CLI); deprecated `gemini` fallback during transition |
+| Containment | Write-sandboxed (`--sandbox`), read-trusted to the project root (`--add-dir "$ROOT"`) |
+| Permissions | Review-only. Never `--dangerously-skip-permissions` / `--yolo`. No write tools |
+| Model | No per-call flag under `agy` (account/config governs); legacy `gemini` pro uses `-m gemini-2.5-pro` |
 | Prompt shape | Rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT |
 | Edits | Returned as elaborate code blocks; Claude applies |
 | Context | Claude-prepared bundle, project Markdown, vault if available |

@@ -6,6 +6,50 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-06-01
+
+Migrate the review backend from the deprecated `gemini` CLI to Google's
+Antigravity CLI (`agy`), and clear accumulated cross-plugin drift.
+
+### Added
+- **Antigravity CLI (`agy`) as the primary backend.** Invocation is
+  `agy --sandbox --add-dir "$ROOT" -p` — write-sandboxed, read-trusted to the
+  project root. Backend-detection block prefers `agy`, falls back to `gemini`.
+- **Folder-trust guidance** — read-trust scoped to the project root via
+  `--add-dir`; one-time interactive `agy` handshake documented for the case
+  where a headless `-p` call would block on a trust prompt.
+- Failure-mode rows for the `agy -p` non-TTY stdout bug (#27466) and the
+  untrusted-folder hang.
+
+### Changed
+- **Tier model collapses under `agy`.** `agy` exposes no per-invocation model
+  flag, so the plugin pins **no model IDs**; `megareview` now differs by prompt
+  scope, not a model string. (Legacy `gemini` fallback still honours
+  `-m gemini-2.5-pro` for the pro tier.)
+- Containment reframed: `--sandbox` + `--add-dir` (read-trust) replaces the old
+  "folder is not trusted" stance; forbidden flag is now
+  `--dangerously-skip-permissions` (agy) / `--yolo` (gemini).
+
+### Deprecated
+- **`gemini` CLI fallback is temporary.** Google sunsets `gemini` for AI
+  Pro/Ultra and free users on **2026-06-18**. The fallback exists only for the
+  transition; a follow-up release will remove the `gemini` path entirely.
+
+### Removed
+- **Dead `cabinet-of-imd` / Bostrol coupling.** cabinet v3.0.0 sunset all
+  functionality (character-only), so "Bostrol indexes Gemineye outputs" no
+  longer holds — dropped from SKILL.md and README.
+- The non-existent `--file` flag throughout `invocation-patterns.md` (it was
+  flagged broken in 0.3.2). Multi-file context is `--add-dir` + inline bundle.
+
+### Fixed
+- Stale claim that adjudant auto-harvests at PreCompact — false since adjudant
+  v0.7.0 made the hook mechanical-only. `/gemineye harvest` is the harvest
+  surface; reframed as historical note.
+- README subcommand list was missing `harvest`; added.
+- `marketplace.json` version drift (registry was 0.3.1 vs plugin 0.3.2) — now
+  synced at 0.5.0.
+
 ## [0.3.2] — 2026-05-27
 
 ### Fixed

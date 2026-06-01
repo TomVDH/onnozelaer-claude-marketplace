@@ -39,29 +39,33 @@ free", "consider"). Loose prompts get loose reviews.
 
 ---
 
-## CLI invocation — sandboxed only
+## CLI invocation — sandboxed, read-trusted
+
+Backend is **`agy`** (Antigravity CLI). The `gemini` fallback is shown for the
+transition only — it's deprecated (sunset 2026-06-18). Detect the backend per
+SKILL.md → "CLI backend". `$ROOT` is the project/repo root under review.
 
 ```bash
-# Fast tier (review, wip, sanity, name, compare, harvest) — no -m, CLI picks default
-gemini --sandbox -p "$(cat prompt.txt)"
+# Antigravity CLI (agy) — read-trusted to the project root, write-sandboxed
+agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
 
-# Pro tier (megareview only)
-gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
+# Long prompt via stdin
+cat prompt.txt | agy --sandbox --add-dir "$ROOT" -p
 
-# Multi-file context (fast tier)
-gemini --sandbox \
-       --file path/to/file.ts \
-       --file docs/architecture.md \
-       -p "$(cat prompt.txt)"
-
-# Long prompt via stdin (fast tier)
-cat prompt.txt | gemini --sandbox --file path/to/file.ts -
+# Deprecated gemini fallback (transition only):
+gemini --sandbox -p "$(cat prompt.txt)"                     # fast
+gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"   # pro (megareview)
 ```
 
-Pin the pro-tier model string in SKILL.md; update there when a new Pro rev ships. Fast tier intentionally omits `-m` so the CLI's current default applies — no plugin edits needed when Google rotates fast models.
+`agy` exposes **no per-call model flag** — tier is governed by your Antigravity
+config, so the plugin pins no model IDs (`megareview` differs by prompt scope,
+not model). **There is no `--file` flag** in either CLI — `--add-dir "$ROOT"`
+grants read access to the project root, and Claude still inlines the focused
+bundle into CONTEXT.
 
-**Never** pass `--yolo`. **Never** drop `--sandbox`. **Never** grant
-write tools. The folder is not trusted yet — Gemini reviews only.
+**Never** pass `--dangerously-skip-permissions` (agy) / `--yolo` (gemini).
+**Never** drop `--sandbox`. **Never** `--add-dir` outside `$ROOT`. **Never**
+grant write tools. The reviewer reads the building; Claude applies edits.
 
 ---
 
@@ -244,8 +248,8 @@ git diff --cached >> /tmp/gemineye-wip.diff   # staged
 git log --oneline "$BASE"..HEAD > /tmp/gemineye-wip.log
 ```
 
-Pass both via `--file`. Default base is `origin/main` unless Tom
-specifies otherwise.
+**Inline** both files into the prompt's CONTEXT (there is no `--file`
+flag). Default base is `origin/main` unless Tom specifies otherwise.
 
 ### `/gemineye sanity <topic>`
 
@@ -385,12 +389,12 @@ CONTEXT
 ### `/gemineye harvest <path>`
 
 Extract 5 durable bullets from any file — transcript, doc, or code.
-Tier: fast. Same prompt template that adjudant's PreCompact hook
-uses automatically; this is the on-demand, user-initiated surface.
+Tier: fast. This is gemineye's on-demand harvest surface.
 
-This is the canonical prompt. Adjudant's `precompact.py` inlines its
-own copy for hook performance (no cross-plugin runtime dependency at
-compaction time). The two plugins share the discipline, not the code path.
+(Historical note: adjudant's PreCompact hook once auto-harvested via this
+same prompt, but as of adjudant v0.7.0 the hook is mechanical-only — no model
+calls — so `/gemineye harvest` is now the harvest surface. No cross-plugin
+runtime dependency either way.)
 
 ```
 ROLE
@@ -427,7 +431,7 @@ Claude's prep for `harvest`: read the named file, pass its content
 to the approximate number of message turns included. Run:
 
 ```bash
-gemini --sandbox -p "$(cat prompt.txt)"
+agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
 ```
 
 ---
@@ -487,8 +491,9 @@ Required: frontmatter (with `subcommand` and `model` fields), Prompt
   call.
 - **Don't** soften DO / DON'T. Imperative voice. No "try to", "feel
   free to", "consider".
-- **Don't** pipe the entire repo through `--file`. Noisy context
-  degrades the answer.
+- **Don't** `--add-dir` the whole world or crawl the repo. Read-trust is
+  scoped to the project root; the focused bundle is still primary. Noisy
+  context degrades the answer.
 - **Don't** ask Gemini to "implement X end-to-end". Review and
   second-opinion only.
 - **Don't** drop `--sandbox`. The folder is not trusted yet.
