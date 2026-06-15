@@ -63,7 +63,7 @@ cleanup_fifo() { rm -f "$fifo"; rmdir "$fifo_dir" 2>/dev/null || true; }
 trap cleanup_fifo EXIT INT TERM
 
 count=0
-some_producer > "$fifo" 2>&1 &
+some_producer > "$fifo" 2>&1 &   # 2>&1 merges stderr into the data stream — only do this when the producer's stderr is meaningful progress you want the loop to render; otherwise drop 2>&1 so errors don't arrive as fake data lines
 producer_pid=$!
 
 while IFS= read -r -t 1 line || kill -0 "$producer_pid" 2>/dev/null; do
@@ -76,7 +76,7 @@ printf "  ${COLOR_SUCCESS}✓${RESET} %s\n" "Processed ${count} lines"
 
 The `read -t 1` timeout also gives the breathing animation a clock tick on each second the producer is idle — the frame counter advances in the main shell and the display stays live. See `components.md` → *Breathing that survives a read loop* for the full animation pattern.
 
-**Why mkfifo beats process substitution:** `while IFS= read -r line; do … done < <(producer_cmd)` uses bash process substitution, which also avoids the subshell problem — but it requires bash 4+ on some platforms and is less legible when the producer needs a background PID to manage. FIFO + background PID is explicit, portable to bash 3.2, and trivially cleaned up via trap.
+**Why mkfifo beats process substitution:** `while IFS= read -r line; do … done < <(producer_cmd)` uses bash process substitution, which also avoids the subshell problem. Process substitution `< <(...)` also keeps the read loop in the main shell and works on bash 3.2 — but there is no reliable way to capture the background producer's PID from it, so you cannot do `kill -0` liveness checks or clean shutdown. The FIFO + explicit background PID is the portable, manageable choice when the loop must track a long-lived producer.
 
 *Seen in the wild: a watch loop that counted uploaded files and fed a live counter to the scroll region — piped version always showed 0; FIFO version worked.*
 
@@ -123,7 +123,7 @@ done
 
 ## printf, never echo -e
 
-`echo -e` is not portable. On bash 3.2 / macOS `/bin/sh`, `echo -e` may print the literal `-e` flag as text rather than interpreting escape sequences, depending on which `echo` binary resolves first.
+`echo -e` is not portable across shells. On POSIX `/bin/sh` (dash, macOS `sh`), `echo -e` prints the literal `-e` flag instead of interpreting escape sequences. bash's builtin `echo -e` happens to work, but relying on it ties your script to bash and hides portability bugs the moment it's sourced or run under `/bin/sh`. Use `printf` — it behaves identically everywhere.
 
 ```bash
 # BROKEN on some systems — may print: -e  \033[32mGreen text\033[0m
@@ -174,7 +174,7 @@ trunc() {
 }
 ```
 
-`trunc` pads short strings to exactly `max` characters and truncates long ones, appending `…` (a single-byte-width ellipsis in UTF-8). The `${#str}` length test measures raw character count, which is correct as long as the input is uncolored.
+`trunc` pads short strings to exactly `max` characters and truncates long ones, appending `…` (a single terminal-column ellipsis (U+2026, 3 bytes in UTF-8)). `${#str}` counts bytes in bash 3.2 (not Unicode characters), which is correct for plain ASCII input. Non-ASCII field values are measured in bytes and may truncate early — normalize data to ASCII before it reaches `trunc()`.
 
 **Rule:** raw text in, raw text out of `trunc()`. Apply color in the `printf` format string, not in the value being truncated:
 
