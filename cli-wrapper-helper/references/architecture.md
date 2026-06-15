@@ -32,9 +32,9 @@ project-root/
     ├── README.md                  # Script documentation
     ├── UI-SPEC.md                 # Terminal UI decisions and rules
     ├── tools/                     # Individual tool scripts
-    │   ├── export-contacts.sh
-    │   ├── export-companies.sh
-    │   ├── export-deals.sh
+    │   ├── export-records.sh
+    │   ├── export-reports.sh
+    │   ├── export-snapshots.sh
     │   └── api-test.sh
     ├── data/                      # Static data (column definitions, etc.)
     │   ├── contact-columns.sh
@@ -155,7 +155,7 @@ source _lib.sh
 parse_flags "$@"
 
 if $SHOW_HELP; then
-  show_usage "Export contacts to CSV" \
+  show_usage "Export records to CSV" \
     "--force    Re-export all, ignore cache"
   exit 0
 fi

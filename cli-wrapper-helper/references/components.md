@@ -75,7 +75,7 @@ Chevron focus. `››` = focused, `›` = unfocused:
 ```bash
 draw_menu_single() {
   local sel="$1"
-  local opts=("Contacts" "Companies" "Deals" "Tickets")
+  local opts=("Records" "Reports" "Snapshots" "Logs")
   for i in "${!opts[@]}"; do
     if [[ $i -eq $sel ]]; then
       printf "  ${TEAL}›› ${BOLD}%s${RESET}\n" "${opts[$i]}"
@@ -88,10 +88,10 @@ draw_menu_single() {
 
 Output:
 ```
-  ›  Contacts
-  ›› Companies
-  ›  Deals
-  ›  Tickets
+  ›  Records
+  ›› Reports
+  ›  Snapshots
+  ›  Logs
 ```
 
 ### Boolean Toggle
@@ -101,7 +101,7 @@ Chevrons for focus, fillable circles for state:
 ```bash
 draw_menu_toggle() {
   local sel="$1"
-  local opts=("Export contacts" "Export companies" "Export deals" "Include archived")
+  local opts=("Export records" "Export reports" "Export snapshots" "Include archived")
   local states=(true false true false)
   for i in "${!opts[@]}"; do
     local marker="○"
@@ -117,9 +117,9 @@ draw_menu_toggle() {
 
 Output:
 ```
-  ›› ● Export contacts
-  ›  ○ Export companies
-  ›  ● Export deals
+  ›› ● Export records
+  ›  ○ Export reports
+  ›  ● Export snapshots
   ›  ○ Include archived
 ```
 
@@ -130,7 +130,7 @@ Chevrons for focus, checkboxes for persistent selection:
 ```bash
 draw_menu_multi() {
   local sel="$1"
-  local opts=("Contacts" "Companies" "Deals" "Tickets")
+  local opts=("Records" "Reports" "Snapshots" "Logs")
   local states=(true false true false)
   for i in "${!opts[@]}"; do
     local marker="[ ]"
@@ -193,8 +193,8 @@ printf "\n  ${DIM}Goodbye.${RESET}\n\n"
 Add section headings and parenthetical hints to menu items:
 
 ```bash
-LABELS=("Watch & upload" "File Manager" "Export contacts" "Export companies" "Exit")
-HINTS=("cms-watch" "fm-upload" "export-contacts" "export-companies" "")
+LABELS=("Watch & upload" "File Manager" "Export records" "Export reports" "Exit")
+HINTS=("sync-watch" "bulk-upload" "export-records" "export-reports" "")
 
 # In draw_menu:
 # Print group header at specific indices
@@ -202,7 +202,7 @@ if [[ $i -eq 0 ]]; then
   printf "  ${BOLD}DESIGN MANAGER${RESET}\n"
 elif [[ $i -eq 2 ]]; then
   echo ""
-  printf "  ${BOLD}CRM EXPORTS${RESET}\n"
+  printf "  ${BOLD}DATA EXPORTS${RESET}\n"
 fi
 
 # Append hint if present
@@ -839,10 +839,10 @@ Consistent markers for all informational output:
 
 ```bash
 # Success
-printf "  ${GREEN}✓${RESET} %-14s ${BOLD}%s${RESET} records\n" "Contacts" "1,234"
+printf "  ${GREEN}✓${RESET} %-14s ${BOLD}%s${RESET} records\n" "Records" "1,234"
 
 # Error
-printf "  ${RED}✗${RESET} %-14s ${DIM}%s${RESET}\n" "Tickets" "403 — scope not granted"
+printf "  ${RED}✗${RESET} %-14s ${DIM}%s${RESET}\n" "Logs" "403 — scope not granted"
 
 # Warning
 printf "  ${YELLOW}⚠${RESET}  ${BOLD}%d${RESET} of ${BOLD}%d${RESET} tools found  ${DIM}(%d missing)${RESET}\n" 5 6 1
@@ -853,5 +853,5 @@ printf "  ${CYAN}ℹ${RESET}  ${DIM}%s${RESET}\n" "Using token from .token-file"
 # Diagnostic with fixed-width label column
 printf "  ${GREEN}✓${RESET} %-16s ${DIM}%s${RESET}\n" "Python" "Python 3.12.1"
 printf "  ${GREEN}✓${RESET} %-16s ${DIM}%s${RESET}\n" "curl" "curl 8.4.0"
-printf "  ${YELLOW}⚠${RESET} %-16s ${DIM}%s${RESET}\n" "hs CLI" "Not installed"
+printf "  ${YELLOW}⚠${RESET} %-16s ${DIM}%s${RESET}\n" "vendor CLI" "Not installed"
 ```
