@@ -23,6 +23,8 @@ fi
 
 Define all mutating helpers before this block so the redefinitions take effect before any are called. The names `remote_create`, `remote_delete`, `remote_upload` are placeholders — name them after the actual operations (e.g. `record_create`, `file_upload`, `row_delete`).
 
+**Every state-mutating helper must appear in this block.** A mutating helper added later but not stubbed here will execute for real while `--dry` is active — there is no safety net. Re-audit this block whenever you add a new write/upload/delete operation.
+
 **When to apply:** every tool whose `--dry` trace should be safe to run in production without side effects. Wire up after flag parsing, before the main work loop.
 
 `interaction.md` → *Dry-run UX* describes the user-facing output for this mode. The stub layer here is the mechanism that makes that output safe.
@@ -31,7 +33,7 @@ Define all mutating helpers before this block so the redefinitions take effect b
 
 ## PID single-instance lock
 
-Tools that upload, sync, or modify shared state are dangerous when two instances run concurrently — duplicate writes, race conditions on shared files, or split manifest entries. Use a portable PID lock (macOS ships bash 3.2 without `flock`; this pattern works everywhere).
+Tools that upload, sync, or modify shared state are dangerous when two instances run concurrently — duplicate writes, race conditions on shared files, or split manifest entries. Use a portable PID lock (macOS ships bash 3.2 without `flock`; this pattern is portable and requires no external dependencies).
 
 ```bash
 LOCK="${LOG_DIR}/${TOOL_NAME}.lock"
@@ -51,6 +53,10 @@ acquire_lock
 ```
 
 The `kill -0` probe checks liveness without sending a signal — it succeeds only if the process with that PID is running *and* owned by the same user. A stale lock (file present, PID gone) is silently reclaimed; the comment makes this explicit so reviewers do not mistake it for a bug.
+
+**This lock is cooperative, not atomic.** The `[[ -f "$LOCK" ]]` check and the `printf … > "$LOCK"` write are two steps, not one — two processes that probe at the same instant can both find no lock and both proceed, the second write simply winning. For tools where a simultaneous race is genuinely dangerous, layer in an atomic primitive (`mkdir "$LOCK.d"` succeeds for exactly one racer, or `flock` where available). For most upload/sync tools the cooperative lock is enough: the race window is tiny and the worst case is a second instance running, not corrupted state.
+
+`trap … EXIT INT TERM` releases the lock on normal exit and on Ctrl-C/termination, but **SIGKILL cannot be trapped** — if the process is killed hard, the lock file survives and is reclaimed as a stale lock (PID no longer alive) on the next run. That stale-lock reclaim is the crash-recovery path.
 
 **When to apply:** any tool that touches a shared resource — a remote API, a shared directory, a manifest file — where a second concurrent run would corrupt state or waste rate-limit budget. Place after the `LOG_DIR` setup and before the main work begins.
 
@@ -79,6 +85,8 @@ done
 **Key choice:** use the item's stable identity, not a generated id. A remote path, a local file path relative to the project root, or a content hash are all good keys. A random id from a previous run is not — it changes on re-upload and defeats idempotency.
 
 **`--force`:** always expose a `--force` flag that bypasses `already_done()` for the item being processed (but does not delete the manifest). This lets an operator re-process one failed item without blowing away the record of everything else.
+
+**The manifest is local-only.** It records what *this* working copy did on *this* machine. It knows nothing about operations performed from another machine, a CI run, a teammate's copy, or changes made directly in the remote service's UI. If external state has diverged, the manifest will still report those items as done — use `--force` (or delete the manifest) to force a full re-run when you know the remote has changed underneath you.
 
 **When to apply:** any tool that processes a list of items where each item's work is expensive or has remote side effects. Wire up after `acquire_lock`, before the loop.
 
@@ -173,5 +181,6 @@ printf "\nAll smoke checks passed.\n"
 - Do not write to shared manifests or lock files — the tool under test should handle its own locking; the test merely invokes it.
 - Assert on stdout/stderr content with `grep -qF` (fixed string, no regex footguns).
 - Assert on exit code, not on exact output lines — output wording changes; exit codes are a contract.
+- The `assert_contains` helper invokes the tool independently on each call, so a smoke run may launch the tool several times — this is fine because every invocation passes `--dry` and is read-only.
 
 **When to apply:** every tool in the kit should have a smoke test before it is considered complete. The smoke test is the minimum viable verification that the dry-run stub layer is wired up correctly and the tool exits cleanly. Run it before committing changes to the tool.
