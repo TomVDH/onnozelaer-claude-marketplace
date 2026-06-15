@@ -465,6 +465,8 @@ spin() {
 
 ### Breathing Spinner (Idle/Watch States)
 
+#### Simple case (no read loop)
+
 Infinite loop — run in background, kill when done:
 
 ```bash
@@ -487,6 +489,32 @@ SPIN_PID=$!
 kill $SPIN_PID 2>/dev/null
 wait $SPIN_PID 2>/dev/null
 ```
+
+#### Breathing that survives a read loop
+
+A `producer | while read` loop runs in a SUBSHELL — the breathing animation's
+frame counter and any other state variables die with it. Route the producer
+through a named pipe (FIFO) and read in the **main shell** instead, so state
+persists and the frame advances on each 1 s read timeout:
+
+```bash
+# A `producer | while read` loop runs in a SUBSHELL — counters and the
+# breathing redraw die with it. Route the producer through a FIFO and read
+# in the MAIN shell so state persists and the frame advances on each timeout.
+fifo_dir="$(mktemp -d)"; fifo="$fifo_dir/pipe"; mkfifo "$fifo"
+cleanup_fifo() { rm -f "$fifo"; rmdir "$fifo_dir" 2>/dev/null || true; }
+trap cleanup_fifo EXIT INT TERM
+
+producer_cmd > "$fifo" 2>&1 &
+producer_pid=$!
+
+while IFS= read -r -t 1 line || kill -0 "$producer_pid" 2>/dev/null; do
+  [[ -n "${line:-}" ]] && handle_line "$line"
+  draw_breathing_frame      # advances once per 1s read timeout
+done < "$fifo"
+```
+
+Why the FIFO (not a pipe): see `bash-safety.md` → Subshell-eats-state.
 
 ---
 
@@ -651,6 +679,157 @@ printf "\n    ${GREEN}${BOLD}All systems ready${RESET}\n"
 sleep 0.8
 transition_pixel_scatter
 ```
+
+---
+
+## Bootloader (depth-shaded rotating logo)
+
+A retro POST-style boot animation: a block-character glyph spins through a
+full Y-axis rotation while diagnostic lines build up below it. Runs once on
+first launch; a timestamp gate skips it on subsequent runs within a cooldown
+window.
+
+### Frame construction
+
+Define **12 frames** as bash arrays, each 6 lines of exactly 20 display
+columns. The glyph compresses toward an edge (frames 0–5), crosses through a
+thin silhouette, then expands back out (frames 6–11). Depth is simulated with
+block-shade characters: `░ ▒ ▓ █` — full-density `█` for the lit face,
+lighter shades (`▓ ▒ ░`) for the receding edge, with the trail appearing on
+the opposite side after the midpoint flip.
+
+Replace the glyph with the tool's mark. The 6×20-character grid below shows
+the neutral placeholder `▣`; swap it for any block-character logotype:
+
+```
+Frame 0 (front face — full width)   Frame 5 (edge — thinnest)
+  ████████████                              ██
+          ████                              █▒
+        ████                               █
+      ████                                ▒█
+    ████                                   █
+  ████████████                              ██
+
+Frame 6 (depth flips — leading edge now LEFT)
+       ██
+      ▒█
+       █
+      ▒█
+       █
+       ██
+```
+
+```bash
+# Depth-shading rule:
+#   Frames 0–4  (right face visible): trail chars appear on the RIGHT  →  █▓▒░
+#   Frames 5–6  (edge):               minimal silhouette, no tail
+#   Frames 7–11 (left face visible):  trail chars appear on the LEFT   →  ░▒▓█
+#
+# Example: frame 8 (expanding left face, w=6)
+BL_F8=(
+  '     ▒▓████         '
+  '         ██         '
+  '       ██           '
+  '      ██            '
+  '     ▒█             '
+  '     ▒▓████         '
+)
+```
+
+Draw each frame by moving the cursor to a fixed row and printing all lines
+with a single neutral colour role (e.g. `COLOR_MUTED`):
+
+```bash
+FRAME_COUNT=12
+
+draw_frame() {
+  local fi="$1" start_row="${2:-8}"
+  printf "\033[${start_row};1H"
+  local frame_var="BL_F${fi}[@]"
+  for line in "${!frame_var}"; do
+    printf "    ${COLOR_MUTED}%s${RESET}\n" "$line"
+  done
+}
+```
+
+*Swap the glyph for the tool's mark.*
+
+### POST diagnostic lines
+
+Interleave "hardware check" lines below the animation. Each line prints a
+`label ── value` pair in `COLOR_SUCCESS` as the spin progresses:
+
+```bash
+POST_ITEMS=("Memory" "Processor" "Module registry" "API endpoints" "Auth tokens" "CLI version")
+POST_VALUES=("256K OK" "1 core OK" "6 modules loaded" "3 endpoints resolved" "valid" "v1.0.0")
+POST_ROW=16
+post_idx=0
+
+draw_post_line() {
+  [[ $post_idx -ge ${#POST_ITEMS[@]} ]] && return
+  local row=$((POST_ROW + post_idx))
+  printf "\033[${row};1H"
+  printf "    ${DIM}%-18s${RESET} ${COLOR_MUTED}──${RESET} ${COLOR_SUCCESS}%s${RESET}   " \
+    "${POST_ITEMS[$post_idx]}" "${POST_VALUES[$post_idx]}"
+  post_idx=$((post_idx + 1))
+}
+```
+
+### Main sequence
+
+```bash
+cls; hide_cur
+
+# BIOS header
+printf "\n  ${DIM}ToolName International, Inc.${RESET}\n"
+printf "  ${DIM}BIOS v1.84 — 1984${RESET}\n"
+
+# 2–3 full rotations, POST lines appearing at even intervals
+spin_frames=$((FRAME_COUNT * 2))
+post_interval=$((spin_frames / ${#POST_ITEMS[@]}))
+post_idx=0
+
+for ((i=0; i<spin_frames; i++)); do
+  draw_frame $((i % FRAME_COUNT))
+  if (( i > 0 && i % post_interval == 0 && post_idx < ${#POST_ITEMS[@]} )); then
+    draw_post_line
+  fi
+  sleep 0.12
+done
+
+# Flush any remaining POST lines
+while [[ $post_idx -lt ${#POST_ITEMS[@]} ]]; do draw_post_line; sleep 0.08; done
+
+sleep 0.2
+ready_row=$((POST_ROW + ${#POST_ITEMS[@]}))
+printf "\033[${ready_row};1H\n    ${COLOR_SUCCESS}${BOLD}All systems ready${RESET}\n"
+sleep 0.35
+
+transition_pixel_scatter   # hand off to caller's splash
+```
+
+### Boot-skip gate (optional)
+
+Running a 2 s animation on every invocation becomes tedious. Guard with a
+timestamp file:
+
+```bash
+LAST_BOOT_FILE="${STATE_DIR}/.last-boot"
+now_ts=$(date -u +%s)
+last_ts=$(cat "$LAST_BOOT_FILE" 2>/dev/null || echo 0)
+
+if (( now_ts - last_ts < 7200 )); then
+  date -u +%s > "$LAST_BOOT_FILE"
+  exit 0   # skip — too soon
+fi
+
+# ... run animation ...
+date -u +%s > "$LAST_BOOT_FILE"
+```
+
+Pass `--boot` (or equivalent) to force the animation regardless.
+
+*seen in the wild: a spinning "Z" boot logo used as the tool's identity mark in a retro POST sequence*
 
 ---
 
