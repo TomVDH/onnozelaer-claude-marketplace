@@ -122,9 +122,9 @@ Every line the user sees starts with at least two spaces. This creates a
 visual margin and room for status markers:
 
 ```
-  ✓ Contacts         1,234 records
-  ✗ Tickets          403 — scope not granted
-  ⚠ hs CLI           Not installed
+  ✓ Records          1,234 records
+  ✗ Logs             403 — scope not granted
+  ⚠ vendor CLI       Not installed
 ```
 
 ### 6. Status markers (every script that reports results)
@@ -162,7 +162,7 @@ visual differentiator of the toolkit.
 ```bash
 draw_menu() {
   local sel="$1"
-  local opts=("Contacts" "Companies" "Deals" "Exit")
+  local opts=("Records" "Reports" "Snapshots" "Exit")
   for i in "${!opts[@]}"; do
     if [[ $i -eq $sel ]]; then
       printf "  ${TEAL}›› ${BOLD}%s${RESET}\n" "${opts[$i]}"
