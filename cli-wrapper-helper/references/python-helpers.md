@@ -252,3 +252,80 @@ if args.json:
 - No `except: pass` — catch specifically, print clearly, `sys.exit(1)`
 - No `os.path` — use `pathlib` exclusively
 - No f-strings with SQL values — always `?` placeholders
+
+---
+
+## python3 as a JSON-parse sidecar for bash
+
+When a bash tool must parse API JSON without `jq`, pipe the response to a
+one-line `python3 -c` that reads `sys.stdin`, walks the structure, and prints
+tab- or CSV-ready rows — one row per object, ready for `while IFS=$'\t' read`
+in the calling script.
+
+**stdlib only** — `json` module, nothing else required.
+
+### Concrete example
+
+Suppose an API returns a list of objects, each with `id`, `name`, and `status`
+fields. Extract those three fields, one tab-separated row per object:
+
+```bash
+curl -s "$API_URL/items" | python3 -c "
+import json, sys
+for item in json.load(sys.stdin):
+    print(item['id'], item.get('name', ''), item.get('status', ''), sep='\t')
+"
+```
+
+Consume in bash:
+
+```bash
+while IFS=$'\t' read -r id name status; do
+    echo "  $id  $name  [$status]"
+done < <(curl -s "$API_URL/items" | python3 -c "
+import json, sys
+for item in json.load(sys.stdin):
+    print(item['id'], item.get('name', ''), item.get('status', ''), sep='\t')
+")
+```
+
+For nested values, chain attribute access normally:
+
+```bash
+python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+for item in data['results']:
+    owner = item.get('owner', {}).get('email', '')
+    print(item['id'], item['label'], owner, sep='\t')
+"
+```
+
+### Single-quote caveat
+
+The `-c` literal sits inside bash single-quotes — **never interpolate shell
+variables directly into it**. Shell expansion does not happen inside `'...'`,
+so this is a non-issue for the Python code itself; but if you need to pass a
+runtime value from bash into the Python one-liner, use `sys.argv` or an
+environment variable instead of string-building the `-c` argument:
+
+```bash
+# ✅ safe — value passed via argv, not spliced into the Python source
+python3 -c "
+import json, sys
+target = sys.argv[1]
+for item in json.load(sys.stdin):
+    if item.get('type') == target:
+        print(item['id'], item['name'], sep='\t')
+" "$FILTER_TYPE"
+
+# ❌ unsafe — injecting an untrusted shell value into the -c literal
+python3 -c "
+for item in ...:
+    if item['type'] == '$FILTER_TYPE':   # shell expands here — injection risk
+        ...
+"
+```
+
+The safe pattern works for any scalar: pass it as a positional arg (`sys.argv[N]`)
+or export it as an env var and read with `os.environ['VAR']`.
