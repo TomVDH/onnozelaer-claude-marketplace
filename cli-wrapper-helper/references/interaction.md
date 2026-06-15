@@ -122,7 +122,7 @@ see `data-cli.md` for the catalog file format.
 **Globals:**
 
 ```bash
-# Caller sets before calling ex_parse_catalog:
+# Caller sets before calling parse_catalog:
 CATALOG=()          # array of "value|Label" and "HEADER|Category" strings
 DEFAULTS=",val1,val2,"   # comma-wrapped CSV of pre-selected values
 ```

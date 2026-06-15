@@ -213,6 +213,8 @@ print(json.load(sys.stdin).get('paging', {}).get('next', {}).get('after', ''))
 | Rate-limit recovery | Retry on 429 after `sleep 10` |
 | Hard abort on other errors | `rm -f "$tmpfile"; exit 1` |
 
+**Why this is interrupt-safe:** the real CSV path is only ever written by the final `mv`, which sits *after* the loop. A Ctrl-C runs the INT handler, which calls `exit 0` *before* control can reach the `mv` — so the destination file is never half-written. The `EXIT` trap then removes the temp file. The invariant is "the `mv` is the last thing that runs on the success path, and every interrupt path exits before it." If you adapt this function, keep `mv` last and keep the interrupt handlers exiting before it.
+
 **Cursor pagination:** the service's `paging.next.after` field holds the opaque
 cursor for the next page. When absent (last page), the loop exits. Services that
 use `offset` or `page` integers instead follow the same shape — replace the
@@ -439,6 +441,8 @@ run() {
 
 Call as `run weekly-active`. The TUI menu can list saved recipes and call `run
 <name>` on selection — no re-entering of parameters required.
+
+**Recipe names must be shell-and-Python-safe** (alphanumerics, dashes, underscores — no single quotes or path separators). They become filenames and are interpolated into a `python3 -c` literal; a stray quote breaks the parse. Validate names on save, or use the env-var passing pattern (as `recipe_save` does for its data) if you must accept arbitrary names.
 
 **Catalog ↔ picker contract:** the catalog format defined above (`value|Label` rows
 and `HEADER|Category Name` separators) is the exact format consumed by
