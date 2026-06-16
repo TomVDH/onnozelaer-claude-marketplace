@@ -108,7 +108,7 @@ consistent regardless of how the operator typed the path.
 printf "  ${COLOR_MUTED}Output:${RESET} %s\n" "$OUT_DIR"
 ```
 
-Show the resolved path in the summary screen (see `interaction.md` → *Dry-run UX*)
+Show the resolved path in the summary screen (see `interaction.md` → *Dry-run as a UX surface*)
 so the operator can verify before confirming.
 
 **Persist a preferred directory:**
@@ -227,7 +227,7 @@ Use `\r\033[K` on the final line to clear the spinner before printing the summar
 so `--dry` shows what would be fetched without writing anything.
 
 ```bash
-if $DRY; then
+if $DRY_RUN; then
   fetch_to_csv() {
     local object_type="$1" props_csv="$2" outfile="$3"
     local field_count; field_count=$(printf '%s' "$props_csv" | awk -F',' '{print NF}')

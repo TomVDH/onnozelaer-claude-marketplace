@@ -272,7 +272,7 @@ preview listing affected folders with count, size, and age scope*
 
 `--dry` / `--dry-run` activates a preview mode: the tool runs its full flow
 (pickers, summaries, confirmations) but stubs out every write. The stub-layer
-mechanics live in `operations.md` (created later); this section covers the
+mechanics live in `operations.md`; this section covers the
 visual contract.
 
 ### Banner

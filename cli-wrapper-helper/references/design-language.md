@@ -92,6 +92,8 @@ printf "  ${COLOR_INFO}ℹ${RESET}  %s\n" "Dry-run mode active"
 **No emoji in headers or status output.** `✓ ✗ ⚠ ℹ` are Unicode punctuation,
 not emoji — they render consistently in every terminal. Emoji do not.
 
+This no-emoji rule governs **bash** tools. Python helper scripts use an emoji marker set instead (see `python-helpers.md`) — a deliberate, separate aesthetic for the read-and-report tier.
+
 ---
 
 ## Motion & speed tiers

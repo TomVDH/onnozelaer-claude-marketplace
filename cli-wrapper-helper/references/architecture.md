@@ -350,6 +350,8 @@ print(writer.getvalue())
 }
 ```
 
+For the interrupt-safe variant (temp-file + atomic `mv`, Ctrl-C never leaves a half-written CSV), see `data-cli.md` → *Paginated fetch → CSV (Ctrl+C-safe)*.
+
 ---
 
 ## Dry Run Convention

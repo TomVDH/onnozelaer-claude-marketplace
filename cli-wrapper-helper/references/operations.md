@@ -11,9 +11,9 @@ Read `design-language.md` first for the visual grammar. This file covers what ha
 Any tool that mutates remote or local state must support a `--dry` flag. When dry mode is active, redefine the *mutating* helpers as no-ops that log what they would have done and return a plausible fake id. Leave read-only helpers live — they are safe to call for real, and their output keeps the dry trace realistic (the preview shows real data, not fabricated placeholders).
 
 ```bash
-# When DRY=true, redefine the MUTATING helpers to log + return a plausible
+# When DRY_RUN=true, redefine the MUTATING helpers to log + return a plausible
 # fake id; leave read-only helpers live so the dry trace stays realistic.
-if $DRY; then
+if $DRY_RUN; then
   remote_create() { log "DRY would create: $*"; printf 'fake-%s' "$RANDOM"; }
   remote_delete() { log "DRY would delete: $*"; }
   remote_upload() { log "DRY would upload: $*"; printf 'fake-file-%s' "$RANDOM"; }
@@ -27,7 +27,7 @@ Define all mutating helpers before this block so the redefinitions take effect b
 
 **When to apply:** every tool whose `--dry` trace should be safe to run in production without side effects. Wire up after flag parsing, before the main work loop.
 
-`interaction.md` → *Dry-run UX* describes the user-facing output for this mode. The stub layer here is the mechanism that makes that output safe.
+`interaction.md` → *Dry-run as a UX surface* describes the user-facing output for this mode. The stub layer here is the mechanism that makes that output safe.
 
 ---
 
