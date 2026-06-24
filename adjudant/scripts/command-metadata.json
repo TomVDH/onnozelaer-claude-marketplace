@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "verbs": [
     {
       "name": "connect",
@@ -49,6 +49,12 @@
       "description": "Create visual artefacts — canvas, base, or mermaid diagram.",
       "argumentHint": "<canvas|base|diagram> <name|type>",
       "reference": "reference/draw.md"
+    },
+    {
+      "name": "board",
+      "description": "Scaffold a self-hosted work-order kanban board (drag-to-move, disk-persisted via the File System Access API) seeded from tasks/. Generates board-data.json + a self-contained board.html. Helper: board.py (scaffold|serve).",
+      "argumentHint": "[scaffold|serve] [--from-tasks] [--dest DIR]",
+      "reference": "reference/board.md"
     }
   ]
 }

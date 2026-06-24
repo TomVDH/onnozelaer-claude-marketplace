@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Work-Order Board</title>
+<style>
+  /* ── Neutral tokens (OKLCH; mirrors the adjudant / campaign-request scale) ── */
+  :root{
+    color-scheme: light dark;
+    --bg:           oklch(98% 0.003 280);
+    --surface:      oklch(100% 0 0);
+    --surface-2:    oklch(96% 0.003 280);
+    --border:       oklch(91% 0.003 280);
+    --border-strong:oklch(82% 0.005 280);
+    --text:         oklch(22% 0.01 280);
+    --text-dim:     oklch(45% 0.008 280);
+    --text-faint:   oklch(62% 0.005 280);
+    --ok:   oklch(55% 0.14 155);
+    --park: oklch(62% 0.005 280);
+
+    /* spacing — deliberately uneven: tight inside a docket, generous between stages */
+    --sp-1:4px; --sp-2:6px; --sp-3:10px; --sp-4:14px; --sp-5:20px; --sp-6:32px;
+    --rad:8px; --rad-sm:6px; --rad-xs:4px;
+    /* type — three steps, ≥1.27 ratio; hierarchy also carried by weight + mono/sans */
+    --fs-micro:11px; --fs-body:14px; --fs-lead:21px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans: -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:oklch(10% 0.005 280); --surface:oklch(13% 0.005 280); --surface-2:oklch(16% 0.005 280);
+      --border:oklch(22% 0.005 280); --border-strong:oklch(34% 0.005 280);
+      --text:oklch(94% 0.002 280); --text-dim:oklch(70% 0.003 280); --text-faint:oklch(52% 0.005 280);
+      --ok:oklch(80% 0.14 155); --park:oklch(52% 0.005 280);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--text);font-family:var(--sans);font-size:var(--fs-body);line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    background-image:repeating-linear-gradient(transparent 0 31px, color-mix(in oklch,var(--text) 4%,transparent) 31px 32px);
+  }
+
+  /* ── Masthead: a printed work-order document header ── */
+  header.masthead{
+    background:var(--bg);position:sticky;top:0;z-index:20;
+    border-bottom:2px solid var(--text);
+    padding:var(--sp-5) var(--sp-6) 0;
+  }
+  .masthead-row{display:flex;align-items:flex-end;gap:var(--sp-5);flex-wrap:wrap;padding-bottom:var(--sp-3)}
+  .brandblock{display:flex;flex-direction:column;gap:3px}
+  .brandblock .t{font-family:var(--mono);font-weight:700;font-size:var(--fs-lead);letter-spacing:.14em;text-transform:uppercase;line-height:1}
+  .brandblock .s{font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.3em;text-transform:uppercase;color:var(--text-dim)}
+  .spacer{flex:1}
+  .controls{display:flex;align-items:center;gap:var(--sp-4);font-family:var(--mono);font-size:var(--fs-micro)}
+  .controls button{
+    font:inherit;background:none;border:none;color:var(--text-dim);cursor:pointer;padding:0;
+    letter-spacing:.04em;text-transform:uppercase;border-bottom:1px dashed var(--border-strong)
+  }
+  .controls button:hover{color:var(--text);border-bottom-color:var(--text)}
+  .conn{display:inline-flex;align-items:center;gap:6px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.1em}
+  .conn::before{content:"";width:7px;height:7px;border:1.5px solid currentColor;border-radius:50%}
+  .conn.on{color:var(--ok)} .conn.on::before{background:currentColor;border-color:currentColor}
+
+  /* ledger field strip: stats (left) + category key (right), inner rule of the double-rule */
+  .fields{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-5);flex-wrap:wrap;
+    border-top:1px solid var(--text);padding:7px 0;
+    font-family:var(--mono);font-size:var(--fs-micro);letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim)}
+  .stats{display:flex;align-items:center;gap:var(--sp-3)}
+  .stats b{color:var(--text);font-weight:700}
+  .stats .sep{color:var(--border-strong)}
+  .legend{display:flex;gap:var(--sp-4);flex-wrap:wrap}
+  .legend .k{display:inline-flex;align-items:center;gap:7px}
+  .legend .k i{width:9px;height:9px;background:var(--c);outline:1px solid color-mix(in oklch,var(--text) 28%,transparent);outline-offset:-1px}
+
+  /* ── Board: ruled manifest columns ── */
+  .board{display:flex;gap:0;padding:0 var(--sp-6) var(--sp-6);overflow-x:auto;align-items:flex-start}
+  .lane{flex:0 0 256px;width:256px;border-right:1px solid var(--border);padding:var(--sp-5) var(--sp-5) var(--sp-6)}
+  .lane:first-child{padding-left:0}
+  .lane:last-child{border-right:none}
+  .lane.muted{opacity:.86}
+  .lane-head{display:flex;align-items:baseline;gap:9px;padding-bottom:var(--sp-2);margin-bottom:var(--sp-4);
+    border-bottom:1.5px solid var(--text)}
+  .lane.muted .lane-head{border-bottom-color:var(--border-strong)}
+  .lane-head .nm{font-family:var(--mono);font-weight:700;font-size:var(--fs-micro);letter-spacing:.18em;text-transform:uppercase}
+  .lane-head .ct{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint)}
+  .lane-body{display:flex;flex-direction:column;gap:var(--sp-3);min-height:48px}
+  .lane.drop .lane-body{outline:1.5px dashed var(--border-strong);outline-offset:6px}
+  .lane-empty{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint);letter-spacing:.08em;padding:5px 0}
+
+  /* ── Ticket: a flat work-order docket (full border, no shadow, no side-stripe) ── */
+  .ticket{
+    position:relative;background:var(--surface);border:1px solid var(--border);border-radius:var(--rad-xs);
+    padding:var(--sp-3) var(--sp-3) var(--sp-4);cursor:grab;
+    transition:border-color .15s var(--ease),background .15s var(--ease),transform .15s var(--ease);
+  }
+  .ticket:hover{border-color:var(--border-strong);background:color-mix(in oklch,var(--surface) 92%,var(--surface-2))}
+  .ticket:active{cursor:grabbing}
+  .ticket.dragging{transform:rotate(-1.4deg) scale(1.02);border-color:var(--text-dim);
+    box-shadow:0 8px 22px -10px color-mix(in oklch,var(--text) 45%,transparent);z-index:5}
+  .ticket:focus-visible{outline:2px solid var(--c);outline-offset:2px}
+
+  .t-top{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:var(--sp-2)}
+  .t-id{font-family:var(--mono);font-weight:700;font-size:var(--fs-body);letter-spacing:.02em;color:var(--text)}
+  /* category = squared stamp tag (hue darkened to pass contrast; never a dot) */
+  .t-cat{font-family:var(--mono);font-size:var(--fs-micro);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 6px;border-radius:var(--rad-xs);
+    color:color-mix(in oklch,var(--c) 52%,var(--text));
+    background:color-mix(in oklch,var(--c) 13%,var(--surface));
+    border:1px solid color-mix(in oklch,var(--c) 38%,var(--border))}
+  .t-title{font-size:var(--fs-body);line-height:1.36;color:var(--text);text-wrap:pretty}
+  .t-refs{margin-top:var(--sp-3);font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-dim);letter-spacing:.02em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .t-refs .lead{color:var(--text-faint)}
+  .t-note{margin-top:var(--sp-2);font-size:var(--fs-micro);font-style:italic;color:var(--text-dim);line-height:1.35}
+
+  /* rubber-stamp overprint for terminal lanes (receipt motif) */
+  .stamp{position:absolute;right:9px;bottom:9px;font-family:var(--mono);font-weight:700;font-size:var(--fs-micro);
+    letter-spacing:.14em;padding:2px 7px;border:1.5px solid currentColor;border-radius:var(--rad-xs);
+    transform:rotate(-7deg);opacity:.5;pointer-events:none}
+  .stamp.built{color:var(--ok)} .stamp.parked{color:var(--park)}
+
+  .foot{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint);letter-spacing:.04em;
+    padding:var(--sp-5) var(--sp-6) var(--sp-6);max-width:760px;line-height:1.8}
+  .foot kbd{font-family:var(--mono);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--rad-xs);padding:0 5px}
+
+  @media (prefers-reduced-motion: reduce){
+    .ticket{transition:none}
+    .ticket.dragging{transform:none}
+  }
+</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="masthead-row">
+    <div class="brandblock">
+      <span class="t" id="boardTitle">Work-order board</span>
+      <span class="s" id="boardSub">Work-order board</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="controls">
+      <span class="conn" id="conn">local</span>
+      <button id="connectBtn" type="button">connect file</button>
+      <button id="downloadBtn" type="button">download</button>
+    </div>
+  </div>
+  <div class="fields">
+    <div class="stats">
+      <span><b id="orderCount">0</b>&nbsp;orders</span>
+      <span class="sep">/</span>
+      <span>rev&nbsp;<b id="rev">—</b></span>
+      <span class="sep">/</span>
+      <span><b id="stageCount">0</b>&nbsp;stages</span>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+</header>
+<main class="board" id="board"></main>
+<p class="foot">
+  Drag an order between stages — saved to this browser instantly. Hit
+  <kbd>connect file</kbd> and pick <code>board-data.json</code> to auto-save to disk (Chromium).
+  Card ids and mono <code>ref ·</code> tags cross-link your codes (specs, handoffs, commits).
+</p>
+
+<script>
+"use strict";
+
+/* ── Board data. The scaffolder replaces this block with the project deck. ── */
+const SEED = /*BOARD_DATA_START*/{
+  "title":"Work-Order Board","updated":"",
+  "columns":[{"id":"backlog","name":"Backlog"},{"id":"next","name":"Next"},{"id":"doing","name":"Doing"},{"id":"review","name":"Review"},{"id":"done","name":"Done"},{"id":"icebox","name":"Icebox"}],
+  "categories":["build","docs","infra","chore"],
+  "cards":[
+    {"id":"EX-01","title":"Example order — drag me to another stage","column":"backlog","category":"build","related":["SPEC-000"],"notes":"Replace this deck via /adjudant board, or edit board-data.json."},
+    {"id":"EX-02","title":"Done orders get a BUILT stamp; icebox gets PARKED","column":"done","category":"docs","related":[],"notes":""}
+  ]
+}/*BOARD_DATA_END*/;
+
+/* category hue palette (OKLCH; assigned by index unless categories carries explicit colors) */
+const PALETTE=["oklch(78% 0.16 295)","oklch(82% 0.17 142)","oklch(82% 0.15 50)","oklch(78% 0.16 215)","oklch(80% 0.16 340)","oklch(80% 0.15 200)","oklch(80% 0.14 110)","oklch(78% 0.16 25)"];
+const LS_KEY="cf-board-state-v2";
+const STAMP={done:["built","BUILT"],icebox:["parked","PARKED"]};
+let state=null, fileHandle=null, catColors={};
+
+/* IndexedDB: persist the file handle across reloads */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("cf-board",1);r.onupgradeneeded=()=>r.result.createObjectStore("h");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function saveHandle(h){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction("h","readwrite");t.objectStore("h").put(h,"data");t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+async function loadHandle(){try{const db=await idb();return await new Promise((res,rej)=>{const t=db.transaction("h","readonly");const rq=t.objectStore("h").get("data");rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);});}catch(e){return null;}}
+async function ensurePerm(h,mode){const o={mode};if((await h.queryPermission(o))==="granted")return true;if((await h.requestPermission(o))==="granted")return true;return false;}
+
+async function connectFile(){
+  if(!window.showOpenFilePicker){alert("This browser has no File System Access API. Use a Chromium browser, or rely on the browser-saved copy + Download.");return;}
+  try{
+    const [h]=await window.showOpenFilePicker({types:[{description:"Board JSON",accept:{"application/json":[".json"]}}],multiple:false});
+    if(!(await ensurePerm(h,"readwrite"))){alert("Write permission denied.");return;}
+    fileHandle=h; await saveHandle(h);
+    const txt=await (await h.getFile()).text();
+    if(txt.trim()) state=normalize(JSON.parse(txt));
+    persistLocal(); render(); setConn(true);
+  }catch(e){ if(e&&e.name!=="AbortError") alert("Connect failed: "+e.message); }
+}
+function deckRev(){ return (SEED.updated||"")+"|"+(SEED.cards?SEED.cards.length:0); }
+function persistLocal(){ try{localStorage.setItem(LS_KEY,JSON.stringify(state));localStorage.setItem(LS_KEY+":rev",deckRev());}catch(e){} }
+async function writeDisk(){
+  if(!fileHandle) return false;
+  try{ if(!(await ensurePerm(fileHandle,"readwrite"))) return false;
+    const w=await fileHandle.createWritable(); await w.write(JSON.stringify(state,null,2)); await w.close(); return true;
+  }catch(e){ console.warn("disk write failed",e); return false; }
+}
+async function persist(){ persistLocal(); const ok=await writeDisk(); setConn(!!fileHandle && ok); }
+
+function setConn(on){
+  const el=document.getElementById("conn");
+  el.classList.toggle("on",!!on);
+  el.textContent= on ? "disk" : (fileHandle ? "reconnect" : "local");
+}
+function download(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="board-data.json"; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* categories may be an array of names (palette by index) or an object {name:color} */
+function normalize(d){
+  let names, colors={};
+  if(Array.isArray(d.categories)){ names=d.categories; }
+  else if(d.categories && typeof d.categories==="object"){ names=Object.keys(d.categories); colors=d.categories; }
+  else { names=[]; }
+  catColors={};
+  names.forEach((n,i)=>{ catColors[n]= colors[n] || PALETTE[i%PALETTE.length]; });
+  d.categoryNames=names;
+  return d;
+}
+function catColor(cat){ return catColors[cat] || "var(--border-strong)"; }
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+
+function ticketNode(card){
+  const t=el("div","ticket"); t.draggable=true; t.tabIndex=0; t.dataset.id=card.id;
+  t.style.setProperty("--c",catColor(card.category));
+  const top=el("div","t-top");
+  top.appendChild(el("span","t-id",card.id));
+  if(card.category) top.appendChild(el("span","t-cat",card.category));
+  t.appendChild(top);
+  t.appendChild(el("div","t-title",card.title));
+  if(card.related&&card.related.length){
+    const r=el("div","t-refs");
+    r.appendChild(el("span","lead","ref · "));
+    r.appendChild(document.createTextNode(card.related.join("  ·  ")));
+    t.appendChild(r);
+  }
+  if(card.notes) t.appendChild(el("div","t-note",card.notes));
+  if(STAMP[card.column]){ const [cls,label]=STAMP[card.column]; t.appendChild(el("span","stamp "+cls,label)); }
+  t.addEventListener("dragstart",ev=>{ev.dataTransfer.setData("text/plain",card.id);ev.dataTransfer.effectAllowed="move";t.classList.add("dragging");});
+  t.addEventListener("dragend",()=>t.classList.remove("dragging"));
+  return t;
+}
+
+function render(){
+  document.getElementById("boardTitle").textContent=state.title||"Work-order board";
+  document.getElementById("boardSub").textContent=state.subtitle||"Work-order board";
+  document.getElementById("orderCount").textContent=state.cards.length;
+  document.getElementById("rev").textContent=state.updated||"—";
+  document.getElementById("stageCount").textContent=state.columns.length;
+  const lg=document.getElementById("legend"); lg.innerHTML="";
+  (state.categoryNames||[]).forEach(cat=>{
+    const k=el("span","k"); k.style.setProperty("--c",catColor(cat));
+    k.appendChild(el("i")); k.appendChild(document.createTextNode(cat)); lg.appendChild(k);
+  });
+  const board=document.getElementById("board"); board.innerHTML="";
+  state.columns.forEach(col=>{
+    const cards=state.cards.filter(c=>c.column===col.id);
+    const lane=el("div","lane"+( (col.id==="done"||col.id==="icebox")?" muted":"" )); lane.dataset.col=col.id;
+    const head=el("div","lane-head");
+    head.appendChild(el("span","nm",col.name));
+    head.appendChild(el("span","ct",String(cards.length).padStart(2,"0")));
+    lane.appendChild(head);
+    const body=el("div","lane-body");
+    if(!cards.length) body.appendChild(el("div","lane-empty","—  empty"));
+    cards.forEach(c=>body.appendChild(ticketNode(c)));
+    lane.appendChild(body);
+    lane.addEventListener("dragover",ev=>{ev.preventDefault();ev.dataTransfer.dropEffect="move";lane.classList.add("drop");});
+    lane.addEventListener("dragleave",ev=>{ if(!lane.contains(ev.relatedTarget)) lane.classList.remove("drop"); });
+    lane.addEventListener("drop",ev=>{
+      ev.preventDefault(); lane.classList.remove("drop");
+      const id=ev.dataTransfer.getData("text/plain");
+      const card=state.cards.find(c=>c.id===id);
+      if(card && card.column!==col.id){ card.column=col.id; render(); persist(); }
+    });
+    board.appendChild(lane);
+  });
+}
+
+async function boot(){
+  try{
+    const h=await loadHandle();
+    if(h){ fileHandle=h;
+      if((await h.queryPermission({mode:"readwrite"}))==="granted"){
+        const txt=await (await h.getFile()).text();
+        if(txt.trim()) state=normalize(JSON.parse(txt));
+      }
+    }
+  }catch(e){ console.warn("handle restore failed",e); }
+  if(!state){
+    const ls=localStorage.getItem(LS_KEY);
+    // a re-scaffold (new deck rev) always wins over stale browser state
+    state= (ls && localStorage.getItem(LS_KEY+":rev")===deckRev()) ? normalize(JSON.parse(ls)) : normalize(JSON.parse(JSON.stringify(SEED)));
+  }
+  setConn(false); render();
+}
+document.getElementById("connectBtn").addEventListener("click",connectFile);
+document.getElementById("downloadBtn").addEventListener("click",download);
+boot();
+</script>
+</body>
+</html>

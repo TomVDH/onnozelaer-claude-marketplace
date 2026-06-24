@@ -1,15 +1,15 @@
 ---
 name: adjudant
-description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw}` for project-to-vault scaffolding, schema-enforced writes, and structural + content cleanup. Also fires when writing decisions/sessions/notes into a linked vault.
-version: 0.7.1
+description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw|board}` for project-to-vault scaffolding, schema-enforced writes, structural + content cleanup, and a self-hosted work-order kanban board. Also fires when writing decisions/sessions/notes into a linked vault.
+version: 0.8.0
 user-invocable: true
-argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw] [args]"
+argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw|board] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, eight verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
+Vault editor/writer and project initializer. One skill, one command, nine verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
@@ -23,6 +23,7 @@ Vault editor/writer and project initializer. One skill, one command, eight verbs
 | `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
 | `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic. Reads prose of decisions/notes/sessions; catches outdated info, contradictions, supersession, redundancy, stale refs, orphan threads. Judgment-heavy. Analysis via `dream.py`, judge + plan + execute via superpowers |
 | `draw` | `reference/draw.md` | Create canvas / base / diagram |
+| `board` | `reference/board.md` | Scaffold a self-hosted work-order kanban board for the project — drag-to-move, disk-persisted, seeded from `tasks/`. Generates `board-data.json` + a self-contained `board.html` |
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
 
@@ -49,6 +50,7 @@ Every file-touching verb is backed by a Python helper. Helpers follow the `.clau
 | `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase); planning + execute via superpowers |
 | `dream` | `dream.py` + `_vault_walk.py` | JSON content/staleness comparator catalog (analysis phase); judge + plan + execute via superpowers |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
+| `board` | `board.py` + `_vault_walk.py` | scaffold `board-data.json` + a self-contained `board.html` (idempotent: keeps card state, refreshes the template) |
 
 `_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
 
