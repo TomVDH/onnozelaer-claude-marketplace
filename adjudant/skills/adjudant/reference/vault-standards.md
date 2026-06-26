@@ -24,6 +24,43 @@ project: "[[projects/hubspot-nightly/brief|hubspot-nightly]]"
 
 Always this format — not bare slug, not unpiped wikilink. Clickable in Obsidian; alias displays as the slug.
 
+### Session traceability — `session_id` / `source_session`
+
+Every vault write made during a Claude Code conversation is stamped so the
+conversation that produced it is one wikilink hop away — not a grep through
+`~/.claude/projects/**/*.jsonl`.
+
+- **`session_id:`** (list, on session notes only) — every Claude Code
+  conversation UUID that touched that day's session note. Stamped by the
+  `SessionStart` hook on create and idempotently appended on resume.
+  Empty list (`session_id: []`) is fine and the canonical initial state.
+
+  ```yaml
+  session_id:
+    - 2ada03ff-687f-4a82-9e1f-1234567890ab
+    - 7b1c5e2d-4f93-4cba-9e02-fedcba987654
+  ```
+
+- **`source_session:`** (scalar, optional, on decisions / notes / docs /
+  sources / releases / iterations / dream-reports) — the conversation UUID
+  that authored the file. Stamped by the `PostToolUse` hook when a new file
+  appears under the project. Optional and omit-if-absent per the rule above.
+
+  ```yaml
+  source_session: 2ada03ff-687f-4a82-9e1f-1234567890ab
+  ```
+
+`_handoff.md`, `_index.md` / `_index-*`, `_iteration.md`, and session notes
+themselves are excluded from `source_session` stamping — they're system-managed
+or aggregate, so "which conversation authored this" doesn't apply.
+
+**Honest caveat.** Claude Code transcripts under `…-private-tmp/` are
+ephemeral, and `$HOME` can change across machines — so the stored UUID is a
+*pointer that can dangle*. That is by design: a dangling pointer still tells
+you which session and roughly when. The decision's *content* must land in the
+vault; the UUID is for retracing reasoning, not a substitute for capturing
+the conclusion.
+
 ---
 
 ## 2. Tag schema (locked 2026-05-25)

@@ -2,12 +2,28 @@
 # session-start.sh — SessionStart hook for adjudant
 # 1. Discover vault from .claude/adjudant breadcrumb
 # 2. Detect AGENTS.md + CLAUDE.md presence, warn if missing
-# 3. Create or resume today's session note
+# 3. Create or resume today's session note (stamping the Claude Code conversation UUID)
 set -euo pipefail
 
 main() {
   local project_dir="${CLAUDE_PROJECT_DIR:-}"
   [ -z "$project_dir" ] && return 0
+
+  # --- 0. Best-effort: read the Claude Code session UUID from stdin JSON.
+  # Hooks receive a JSON payload on stdin: { session_id, transcript_path, ... }.
+  # Stamping is advisory; this never blocks the hook.
+  local session_id=""
+  if [ ! -t 0 ]; then
+    local payload
+    payload=$(cat 2>/dev/null || true)
+    if [ -n "$payload" ]; then
+      session_id=$(printf '%s' "$payload" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("session_id",""))
+except Exception:
+    pass' 2>/dev/null || true)
+    fi
+  fi
 
   # --- 1. Read breadcrumb ---
   local breadcrumb="$project_dir/.claude/adjudant"
@@ -51,12 +67,21 @@ main() {
   mkdir -p "$session_dir" 2>/dev/null || true
 
   if [ ! -f "$session_file" ]; then
+    # Render the session_id block: list with the current UUID if we got one,
+    # empty list otherwise (the next SessionStart will append).
+    local sid_block
+    if [ -n "$session_id" ]; then
+      sid_block=$'session_id:\n  - '"$session_id"
+    else
+      sid_block="session_id: []"
+    fi
     cat > "$session_file" <<EOF
 ---
 type: session
 project: "[[projects/$slug/brief|$slug]]"
 date: $today
 started: $ts
+$sid_block
 tags:
   - session
 ---
@@ -72,6 +97,12 @@ EOF
     {
       printf '\n--- %s session resumed ---\n\n' "$ts"
     } >> "$session_file"
+    # Idempotently append this conversation's UUID to the session_id list.
+    if [ -n "$session_id" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+       && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" ]; then
+      python3 "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" \
+        session-id "$session_file" "$session_id" >/dev/null 2>&1 || true
+    fi
     printf -- '- Session note resumed: `projects/%s/sessions/%s.md`\n' "$slug" "$today"
   fi
 }
