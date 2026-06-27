@@ -10,13 +10,23 @@ The board is a *view*: cards carry short ids and mono `ref` tags that cross-link
 your own codes (specs, handoffs, commits). Category colour is data-driven —
 names get palette hues by index, or supply explicit `{name: oklch(...)}`.
 
+The board verb is a **standard project surface**: any project adjudant knows
+about can have its own board, addressed by slug. Targeting:
+
+    --project-dir PATH   the current breadcrumb-linked project (default)
+    --project SLUG       a named project under {vault}/projects/{slug}
+    --all                every project in the vault (one board each)
+
 CLI:
-    python3 board.py scaffold --project-dir PATH [--dest DIR] [--from-tasks]
+    python3 board.py scaffold [--project-dir PATH | --project SLUG | --all]
+                              [--vault PATH] [--dest DIR] [--from-tasks]
                               [--data board-data.json] [--title STR] [--force]
     python3 board.py serve --dir DIR [--port 8787]
 
-`scaffold` is idempotent: it never clobbers an existing `board-data.json`
-unless `--force`; `board.html` is always refreshed from the template.
+`scaffold` is idempotent and *refresh-without-clobber*: re-running with
+`--from-tasks` against an existing board merges the current task state into the
+deck while preserving the columns you dragged cards into (use `--force` for a
+full rebuild). `board.html` is always refreshed from the template.
 """
 
 from __future__ import annotations
@@ -26,13 +36,18 @@ import json
 import re
 import shutil
 import sys
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from _vault_walk import parse_frontmatter, smart_project_dir
+from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "skills" / "adjudant" / "templates" / "board.html"
 MARK_RE = re.compile(r"/\*BOARD_DATA_START\*/.*?/\*BOARD_DATA_END\*/", re.DOTALL)
+
+DECK_VERSION = 1
+DEFAULT_SUBTITLE = "Work-order board"
+DEFAULT_CATEGORIES = ["build", "docs", "infra", "chore"]
 
 DEFAULT_COLUMNS = [
     {"id": "backlog", "name": "Backlog"},
@@ -78,8 +93,16 @@ def _as_list(val: Any) -> list[str]:
     return out
 
 
+def _today() -> str:
+    return date.today().isoformat()
+
+
 def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
-    """Build cards from `{project}/tasks/*.md` frontmatter + first heading."""
+    """Build cards from `{project}/tasks/*.md` frontmatter + first heading.
+
+    One card per task note. `_index.md` and roadmap/index files (frontmatter
+    `type: tasks`) are skipped — they are not per-card task notes.
+    """
     tasks = project_dir / "tasks"
     if not tasks.is_dir():
         return []
@@ -89,6 +112,8 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
             continue
         fm, body = parse_frontmatter(f.read_text(errors="replace"))
         fields = fm.fields
+        if str(fields.get("type", "") or "").strip().lower() == "tasks":
+            continue  # roadmap/index file, not a per-card task note
         status = str(fields.get("status", "") or "").strip().lower()
         category = fields.get("category")
         if not category:
@@ -105,15 +130,108 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
     return cards
 
 
-def build_deck(project_dir: Path, *, from_tasks: bool, title: str) -> dict[str, Any]:
+def build_deck(
+    project_dir: Path,
+    *,
+    from_tasks: bool,
+    title: str,
+    subtitle: str = DEFAULT_SUBTITLE,
+    board_id: Optional[str] = None,
+) -> dict[str, Any]:
     cards = cards_from_tasks(project_dir) if from_tasks else []
     cats: list[str] = []
     for c in cards:
         if c["category"] and c["category"] not in cats:
             cats.append(c["category"])
     if not cats:
-        cats = ["build", "docs", "infra", "chore"]
-    return {"title": title, "updated": "", "columns": DEFAULT_COLUMNS, "categories": cats, "cards": cards}
+        cats = list(DEFAULT_CATEGORIES)
+    return {
+        "version": DECK_VERSION,
+        "boardId": board_id or project_dir.name,
+        "title": title,
+        "subtitle": subtitle,
+        "updated": _today(),
+        "columns": DEFAULT_COLUMNS,
+        "categories": cats,
+        "cards": cards,
+    }
+
+
+def enumerate_projects(vault: Path) -> list[tuple[str, Path]]:
+    """Every project under `{vault}/projects/` — filesystem truth.
+
+    A project is any `{vault}/projects/<slug>/` directory containing a
+    `brief.md`. Leading-underscore and dot dirs (`_index`, `_portfolio`,
+    `.obsidian`, …) are skipped. The fragile `_index.md` table is NOT consulted,
+    so malformed or duplicate index rows never affect discovery. Sorted by slug.
+    """
+    base = vault / "projects"
+    if not base.is_dir():
+        return []
+    out: list[tuple[str, Path]] = []
+    for d in sorted(base.iterdir(), key=lambda p: p.name):
+        if not d.is_dir() or d.name.startswith("_") or d.name.startswith("."):
+            continue
+        if (d / "brief.md").is_file():
+            out.append((d.name, d))
+    return out
+
+
+def merge_deck(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:
+    """Refresh-without-clobber merge of a freshly task-seeded deck into the deck
+    already on disk.
+
+    Per card id:
+      - card present in both → keep the on-disk ``column`` (the user's drag
+        state) and a non-empty on-disk ``notes`` (a board-local annotation),
+        but re-seed ``title``/``category``/``related`` from the task note.
+      - new task card → added in its status-derived column.
+      - on-disk card whose task disappeared → moved to ``icebox`` (never deleted).
+
+    Deck-level ``title``/``subtitle`` from disk are preserved (a re-scaffold does
+    not rename a board you titled); ``version``/``columns``/``updated``/
+    ``boardId`` come from the fresh deck. Categories are the union over the merged
+    cards (custom ``{name: colour}`` mappings on disk are preserved).
+    """
+    ex_cards = {str(c.get("id")): c for c in existing.get("cards", [])}
+    merged: list[dict[str, Any]] = []
+    fresh_ids: set[str] = set()
+    for fc in fresh.get("cards", []):
+        cid = str(fc.get("id"))
+        fresh_ids.add(cid)
+        ec = ex_cards.get(cid)
+        if ec is not None:
+            fc = dict(fc)
+            fc["column"] = ec.get("column", fc.get("column"))
+            if ec.get("notes"):
+                fc["notes"] = ec["notes"]
+        merged.append(fc)
+    for cid, ec in ex_cards.items():
+        if cid not in fresh_ids:
+            ec = dict(ec)
+            ec["column"] = "icebox"
+            merged.append(ec)
+
+    cats: list[str] = []
+    for c in merged:
+        cat = c.get("category")
+        if cat and cat not in cats:
+            cats.append(cat)
+    ex_cats = existing.get("categories")
+    categories: Any
+    if isinstance(ex_cats, dict):
+        categories = {name: ex_cats.get(name) for name in cats}
+    else:
+        categories = cats or list(DEFAULT_CATEGORIES)
+
+    out = dict(fresh)
+    out["cards"] = merged
+    out["categories"] = categories
+    if existing.get("title"):
+        out["title"] = existing["title"]
+    if existing.get("subtitle"):
+        out["subtitle"] = existing["subtitle"]
+    return out
 
 
 def emit_html(deck: dict[str, Any], dest_html: Path) -> None:
@@ -127,35 +245,121 @@ def emit_html(deck: dict[str, Any], dest_html: Path) -> None:
     dest_html.write_text(out)
 
 
-def cmd_scaffold(args: argparse.Namespace) -> int:
-    project_dir, _hint = smart_project_dir(args.project_dir)
+def _resolve_vault_root(args: argparse.Namespace) -> Optional[Path]:
+    """Vault root for --project / --all: explicit --vault, else breadcrumb at cwd."""
+    if getattr(args, "vault", None):
+        p = Path(args.vault).expanduser()
+        return p if p.is_dir() else None
+    return resolve_vault(Path.cwd())
+
+
+def scaffold_one(
+    project_dir: Path,
+    dest: Path,
+    *,
+    from_tasks: bool,
+    data: Optional[str],
+    force: bool,
+    title: Optional[str],
+    board_id: Optional[str],
+) -> int:
+    """Scaffold a single board into ``dest``. Returns a process exit code."""
     if not project_dir.is_dir():
-        print(f"error: project-dir not found: {project_dir} (run /adjudant connect first)", file=sys.stderr)
+        print(f"error: project not found: {project_dir} (run /adjudant connect first)", file=sys.stderr)
         return 1
-    dest = Path(args.dest).expanduser() if args.dest else (project_dir / "board")
     dest.mkdir(parents=True, exist_ok=True)
     data_path = dest / "board-data.json"
+    bid = board_id or project_dir.name
+    resolved_title = title or project_dir.name.replace("-", " ").title()
 
-    if args.data:
-        deck = json.loads(Path(args.data).expanduser().read_text())
+    if data:
+        deck = json.loads(Path(data).expanduser().read_text())
+        deck.setdefault("version", DECK_VERSION)
+        deck.setdefault("boardId", bid)
+        deck.setdefault("subtitle", DEFAULT_SUBTITLE)
         deck.setdefault("columns", DEFAULT_COLUMNS)
-        deck.setdefault("categories", ["build", "docs", "infra", "chore"])
+        deck.setdefault("categories", list(DEFAULT_CATEGORIES))
         deck.setdefault("cards", [])
-        if args.title:
-            deck["title"] = args.title
+        if title:
+            deck["title"] = title
         data_path.write_text(json.dumps(deck, indent=2) + "\n")
-    elif data_path.is_file() and not args.force:
-        deck = json.loads(data_path.read_text())  # keep the user's card state
+    elif data_path.is_file() and not force:
+        existing = json.loads(data_path.read_text())
+        if from_tasks:
+            # refresh-without-clobber: merge current task state into the deck
+            fresh = build_deck(project_dir, from_tasks=True, title=resolved_title, board_id=bid)
+            deck = merge_deck(existing, fresh)
+        else:
+            deck = existing            # keep the user's deck untouched
+            deck.setdefault("boardId", bid)   # backfill id for pre-0.9 decks
+        data_path.write_text(json.dumps(deck, indent=2) + "\n")
     else:
-        title = args.title or project_dir.name.replace("-", " ").title()
-        deck = build_deck(project_dir, from_tasks=args.from_tasks, title=title)
+        deck = build_deck(project_dir, from_tasks=from_tasks, title=resolved_title, board_id=bid)
         data_path.write_text(json.dumps(deck, indent=2) + "\n")
 
     emit_html(deck, dest / "board.html")
     print(f"[board] {dest}/board.html  ({len(deck.get('cards', []))} cards, {len(deck.get('columns', []))} stages)", file=sys.stderr)
-    print(f"[board] serve: python3 {Path(__file__).name} serve --dir \"{dest}\"  → http://localhost:8787/board.html", file=sys.stderr)
     print(str(dest / "board.html"))
     return 0
+
+
+def _serve_hint(dest: Path) -> None:
+    print(f"[board] serve: python3 {Path(__file__).name} serve --dir \"{dest}\"  → http://localhost:8787/board.html", file=sys.stderr)
+
+
+def cmd_scaffold(args: argparse.Namespace) -> int:
+    # ── Mode: --all / --project both operate at the vault level ──
+    if args.all or args.project:
+        vault = _resolve_vault_root(args)
+        if vault is None:
+            print("error: no vault resolved; pass --vault PATH or run from a connected project", file=sys.stderr)
+            return 1
+
+    if args.all:
+        if args.dest or args.data:
+            print("error: --dest/--data cannot be combined with --all (each board goes to {project}/board/)", file=sys.stderr)
+            return 1
+        if args.title:
+            print("warning: --title ignored with --all (each board self-titles from its slug)", file=sys.stderr)
+        projects = enumerate_projects(vault)
+        if not projects:
+            print(f"error: no projects found under {vault}/projects", file=sys.stderr)
+            return 1
+        rc, ok = 0, 0
+        for slug, pdir in projects:
+            try:
+                if scaffold_one(pdir, pdir / "board", from_tasks=args.from_tasks,
+                                data=None, force=args.force, title=None, board_id=slug) == 0:
+                    ok += 1
+                else:
+                    rc = 1
+            except Exception as e:  # one bad project must not abort the batch
+                print(f"error: board for '{slug}' failed: {e}", file=sys.stderr)
+                rc = 1
+        print(f"[board] scaffolded {ok}/{len(projects)} project boards under {vault}/projects", file=sys.stderr)
+        return rc
+
+    if args.project:
+        pdir = vault / "projects" / args.project
+        if not pdir.is_dir():
+            have = ", ".join(s for s, _ in enumerate_projects(vault)) or "(none)"
+            print(f"error: project '{args.project}' not found under {vault}/projects (have: {have})", file=sys.stderr)
+            return 1
+        dest = Path(args.dest).expanduser() if args.dest else (pdir / "board")
+        rc = scaffold_one(pdir, dest, from_tasks=args.from_tasks, data=args.data,
+                          force=args.force, title=args.title, board_id=args.project)
+        if rc == 0:
+            _serve_hint(dest)
+        return rc
+
+    # ── Default: --project-dir (the current breadcrumb-linked project) ──
+    project_dir, _hint = smart_project_dir(args.project_dir)
+    dest = Path(args.dest).expanduser() if args.dest else (project_dir / "board")
+    rc = scaffold_one(project_dir, dest, from_tasks=args.from_tasks, data=args.data,
+                      force=args.force, title=args.title, board_id=None)
+    if rc == 0:
+        _serve_hint(dest)
+    return rc
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
@@ -178,12 +382,16 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sc = sub.add_parser("scaffold", help="write board-data.json + a self-contained board.html")
+    mode = sc.add_mutually_exclusive_group()
+    mode.add_argument("--project", help="target a named project by slug under {vault}/projects (takes precedence over --project-dir)")
+    mode.add_argument("--all", action="store_true", help="scaffold a board for every project in the vault")
     sc.add_argument("--project-dir", default=".", help="project root (breadcrumb-resolved; default cwd)")
-    sc.add_argument("--dest", help="output dir (default: {project}/board)")
+    sc.add_argument("--vault", help="vault root for --project/--all (default: resolve from cwd breadcrumb)")
+    sc.add_argument("--dest", help="output dir (default: {project}/board); not allowed with --all")
     sc.add_argument("--from-tasks", action="store_true", help="seed cards from {project}/tasks/*.md")
-    sc.add_argument("--data", help="use this board-data.json as the deck (verbatim)")
+    sc.add_argument("--data", help="use this board-data.json as the deck (verbatim); not allowed with --all")
     sc.add_argument("--title", help="board title")
-    sc.add_argument("--force", action="store_true", help="overwrite an existing board-data.json")
+    sc.add_argument("--force", action="store_true", help="rebuild from tasks, discarding dragged card state")
     sc.set_defaults(func=cmd_scaffold)
 
     sv = sub.add_parser("serve", help="serve a board dir over localhost (so disk-save works)")

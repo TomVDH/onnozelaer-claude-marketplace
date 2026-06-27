@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "verbs": [
     {
       "name": "connect",
@@ -52,8 +52,8 @@
     },
     {
       "name": "board",
-      "description": "Scaffold a self-hosted work-order kanban board (drag-to-move, disk-persisted via the File System Access API) seeded from tasks/. Generates board-data.json + a self-contained board.html. Helper: board.py (scaffold|serve).",
-      "argumentHint": "[scaffold|serve] [--from-tasks] [--dest DIR]",
+      "description": "Scaffold a self-hosted work-order kanban board (drag-to-move, disk-persisted via the File System Access API) seeded from tasks/ — a standard surface any project can have. Target the current project, a named one (--project SLUG), or every project (--all). Refresh-without-clobber: re-seeding merges current tasks while preserving dragged columns (--force rebuilds). Generates board-data.json + a self-contained board.html. Helper: board.py (scaffold|serve).",
+      "argumentHint": "[scaffold|serve] [--project SLUG|--all] [--from-tasks] [--dest DIR] [--force]",
       "reference": "reference/board.md"
     }
   ]

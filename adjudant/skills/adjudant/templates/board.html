@@ -170,7 +170,7 @@
 
 /* ── Board data. The scaffolder replaces this block with the project deck. ── */
 const SEED = /*BOARD_DATA_START*/{
-  "title":"Work-Order Board","updated":"",
+  "version":1,"boardId":"example","title":"Work-Order Board","subtitle":"Work-order board","updated":"",
   "columns":[{"id":"backlog","name":"Backlog"},{"id":"next","name":"Next"},{"id":"doing","name":"Doing"},{"id":"review","name":"Review"},{"id":"done","name":"Done"},{"id":"icebox","name":"Icebox"}],
   "categories":["build","docs","infra","chore"],
   "cards":[
@@ -181,14 +181,19 @@ const SEED = /*BOARD_DATA_START*/{
 
 /* category hue palette (OKLCH; assigned by index unless categories carries explicit colors) */
 const PALETTE=["oklch(78% 0.16 295)","oklch(82% 0.17 142)","oklch(82% 0.15 50)","oklch(78% 0.16 215)","oklch(80% 0.16 340)","oklch(80% 0.15 200)","oklch(80% 0.14 110)","oklch(78% 0.16 25)"];
-const LS_KEY="cf-board-state-v2";
+/* per-board identity: each project's board namespaces its own browser + disk-handle
+   state, so multiple boards served from the same localhost origin never clobber
+   each other. Falls back to the title for pre-0.9 decks without a boardId. */
+function boardKey(){ return String(SEED.boardId||SEED.title||"default"); }
+const LS_KEY="adjudant-board:"+boardKey();
+const IDB_KEY=boardKey();
 const STAMP={done:["built","BUILT"],icebox:["parked","PARKED"]};
 let state=null, fileHandle=null, catColors={};
 
-/* IndexedDB: persist the file handle across reloads */
+/* IndexedDB: persist the file handle across reloads (keyed per board) */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("cf-board",1);r.onupgradeneeded=()=>r.result.createObjectStore("h");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
-async function saveHandle(h){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction("h","readwrite");t.objectStore("h").put(h,"data");t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
-async function loadHandle(){try{const db=await idb();return await new Promise((res,rej)=>{const t=db.transaction("h","readonly");const rq=t.objectStore("h").get("data");rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);});}catch(e){return null;}}
+async function saveHandle(h){const db=await idb();return new Promise((res,rej)=>{const t=db.transaction("h","readwrite");t.objectStore("h").put(h,IDB_KEY);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+async function loadHandle(){try{const db=await idb();return await new Promise((res,rej)=>{const t=db.transaction("h","readonly");const rq=t.objectStore("h").get(IDB_KEY);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);});}catch(e){return null;}}
 async function ensurePerm(h,mode){const o={mode};if((await h.queryPermission(o))==="granted")return true;if((await h.requestPermission(o))==="granted")return true;return false;}
 
 async function connectFile(){
@@ -202,7 +207,10 @@ async function connectFile(){
     persistLocal(); render(); setConn(true);
   }catch(e){ if(e&&e.name!=="AbortError") alert("Connect failed: "+e.message); }
 }
-function deckRev(){ return (SEED.updated||"")+"|"+(SEED.cards?SEED.cards.length:0); }
+/* rev = identity of the card SET (sorted ids), NOT the date or count — so a
+   re-scaffold that only moves cards between columns keeps your browser state,
+   while adding/removing a card refreshes it. */
+function deckRev(){ return (SEED.cards||[]).map(c=>String(c.id)).sort().join("|"); }
 function persistLocal(){ try{localStorage.setItem(LS_KEY,JSON.stringify(state));localStorage.setItem(LS_KEY+":rev",deckRev());}catch(e){} }
 async function writeDisk(){
   if(!fileHandle) return false;
