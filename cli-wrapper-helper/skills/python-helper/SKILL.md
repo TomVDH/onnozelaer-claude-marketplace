@@ -25,8 +25,10 @@ read-and-report tools, not interactive TUI applications.
 
 ## Reference
 
-Load `${CLAUDE_PLUGIN_ROOT}/references/python-helpers.md` before writing any
-Python helper script. It contains:
+Load these references before writing any Python helper script:
+
+- `${CLAUDE_PLUGIN_ROOT}/references/design-language.md` — inherit the shared visual language (palette, markers, two-space indent) — python helpers look the same as bash tools.
+- `${CLAUDE_PLUGIN_ROOT}/references/python-helpers.md` — python-specific patterns; it contains:
 
 - Emoji section header pattern
 - ANSI section header pattern (for structured tools)
@@ -35,6 +37,8 @@ Python helper script. It contains:
 - SQLite patterns: `row_factory`, parameterized queries, epoch conversion
 - `--json` output mode for piping
 - Rules and what-not-to-do list
+
+Python helpers share the same palette, status markers, and two-space indent law as bash tools — the design-language spine applies to both.
 
 ## Core Rules (enforced without reading the reference)
 

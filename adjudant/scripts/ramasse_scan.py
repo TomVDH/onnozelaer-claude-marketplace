@@ -231,6 +231,11 @@ def detect_naming_violations(files: list[VaultFile]) -> list[dict]:
     """Naming-rule violations per vault-standards §4."""
     out = []
     for f in files:
+        # templates/ holds canonical scaffolds (decision.md, doc.md, session.md) —
+        # they're named for their type, not for an instance, so the §4 instance
+        # naming rules don't apply.
+        if "templates" in f.rel_path.parts:
+            continue
         name = f.rel_path.name
         stem = name[:-3] if name.endswith(".md") else name
         t = f.file_type

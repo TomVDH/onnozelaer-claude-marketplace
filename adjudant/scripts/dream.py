@@ -586,6 +586,9 @@ def detect_documentation_gaps(files: list[VaultFile], today: _dt.date) -> list[d
             continue
         if f.rel_path.name == "_index.md":
             continue
+        # templates/ holds intentionally-skeletal scaffolds — not under-documented content.
+        if "templates" in f.rel_path.parts:
+            continue
         n = len(_substantive_lines(f.body))
         if n < 3:
             gaps.append({

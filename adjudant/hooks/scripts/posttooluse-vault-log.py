@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """PostToolUse hook for adjudant.
 
-Appends an entry to today's session log when a NEW file is written under
-{vault}/projects/{slug}/. Fires only on Write (not Edit/MultiEdit, which
-typically modify existing files).
+Two mechanical jobs on every new Write under {vault}/projects/{slug}/:
+
+  1. Append a `- HH:MM · Decision|Added: [[link]]` entry to today's session log.
+  2. Stamp `source_session: <uuid>` into the new file's frontmatter so the
+     conversation that authored it is one hop away — not a grep through
+     transcripts. Session notes / _handoff / _index files are excluded.
+
+Fires only on Write (not Edit/MultiEdit, which typically modify existing files).
+Both stamping passes are best-effort and fail-closed.
 """
 
 import json
@@ -11,6 +17,18 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# Shared stamping primitives live in <plugin>/scripts/. Mirror precompact's
+# bootstrap pattern; degrade gracefully so a missing helper never crashes the hook.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+    from _session_stamp import stamp_source_session
+    _STAMP = True
+except Exception:  # pragma: no cover - defensive
+    _STAMP = False
+
+    def stamp_source_session(*_a, **_k):  # type: ignore
+        return False
 
 
 def read_breadcrumb(project_dir: Path) -> dict:
@@ -57,6 +75,7 @@ def main() -> int:
     tool_name = payload.get("tool_name", "")
     tool_input = payload.get("tool_input", {})
     file_path_str = tool_input.get("file_path") or tool_input.get("path")
+    session_id = (payload.get("session_id") or "").strip()
     if not file_path_str:
         return 0
 
@@ -66,27 +85,37 @@ def main() -> int:
     except ValueError:
         return 0
 
-    # Only log NEW files (Write tool, not Edit/MultiEdit)
+    # Only act on NEW files (Write tool, not Edit/MultiEdit)
     if tool_name != "Write":
         return 0
 
     today = datetime.now().strftime("%Y-%m-%d")
     ts = datetime.now().strftime("%H:%M")
     session_file = project_root / "sessions" / f"{today}.md"
-    if not session_file.exists():
-        return 0
 
     parts = rel.parts
     if not parts:
         return 0
 
-    is_decision = parts[0] == "decisions"
-    label = "Decision" if is_decision else "Added"
-    link = f"[[projects/{slug}/{'/'.join(parts)}]]"
-    entry = f"- {ts} · {label}: {link}\n"
+    # --- Job 1: append a session-log entry (if a session note exists for today) ---
+    if session_file.exists():
+        is_decision = parts[0] == "decisions"
+        label = "Decision" if is_decision else "Added"
+        link = f"[[projects/{slug}/{'/'.join(parts)}]]"
+        try:
+            with session_file.open("a") as f:
+                f.write(f"- {ts} · {label}: {link}\n")
+        except OSError:
+            pass  # log-write failure must not block job 2
 
-    with session_file.open("a") as f:
-        f.write(entry)
+    # --- Job 2: stamp source_session on the new file. The stamping primitive
+    # itself decides what's eligible (skips session notes, _handoff, _index,
+    # files without frontmatter, files already stamped). Best-effort. ---
+    if session_id and _STAMP:
+        try:
+            stamp_source_session(file_path, session_id)
+        except Exception:
+            pass
 
     return 0
 

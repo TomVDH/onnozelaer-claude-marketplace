@@ -5,23 +5,34 @@ description: >
   tool, terminal utility, CLI launcher, or any interactive command-line
   application. Trigger phrases: "terminal UI", "TUI", "CLI menu", "progress bar",
   "spinner", "splash screen", "make it look nice in the terminal", "polished CLI",
-  "bash script", "shell tool". For Python helper scripts use the python-helper skill instead.
+  "bash script", "shell tool", "dry-run mode", "make it safe to re-run",
+  "single-instance lock", "grouped menu", "wrap a CLI", "wrap an API",
+  "idempotent script", "safe to re-run". For Python helper scripts use the
+  python-helper skill instead.
 ---
 
-# Bash TUI Toolkit
+# Bash TUI — Operating Language
 
-A pattern library for building professional, interactive bash CLI tools — menus,
-spinners, animations, splash screens, tables. Every script produced with this
-skill should look like it came from the same hand: consistent colors, consistent
-spacing, consistent motion.
+The complete operating language for agent-built bash helper CLIs. Covers the
+full stack: visual layer (colors, menus, animations, splash screens, tables),
+interaction layer (menus, pickers, confirmations, dry-run UX), and operational
+safety layer (idempotency, single-instance locks, manifests, structured logging,
+smoke tests). Every script produced with this skill should look and behave like
+it came from the same hand — consistent colors, consistent spacing, consistent
+motion, and consistent operational discipline.
 
 ## References
 
-Load these as needed — do not improvise implementations:
+Load these as needed — do not improvise implementations. Read in spine→detail order:
 
-- `${CLAUDE_PLUGIN_ROOT}/references/components.md` — complete copy-paste bash UI components
-- `${CLAUDE_PLUGIN_ROOT}/references/palette.md` — full extended ANSI color palette
-- `${CLAUDE_PLUGIN_ROOT}/references/architecture.md` — multi-file bash project patterns
+- `${CLAUDE_PLUGIN_ROOT}/references/design-language.md` — the shared spine (read first)
+- `${CLAUDE_PLUGIN_ROOT}/references/palette.md` — raw color reference
+- `${CLAUDE_PLUGIN_ROOT}/references/components.md` — draw-a-widget catalog
+- `${CLAUDE_PLUGIN_ROOT}/references/interaction.md` — menus, pickers, ceremonies, dry-run UX
+- `${CLAUDE_PLUGIN_ROOT}/references/bash-safety.md` — bash 3.2 correctness floor
+- `${CLAUDE_PLUGIN_ROOT}/references/operations.md` — dry-run, locks, manifest, logging, smoke tests
+- `${CLAUDE_PLUGIN_ROOT}/references/data-cli.md` — auth tiers, fetch→CSV, recipes, catalogs
+- `${CLAUDE_PLUGIN_ROOT}/references/architecture.md` — project shape, launcher, hooks, tool skeleton
 
 ---
 
@@ -29,6 +40,12 @@ Load these as needed — do not improvise implementations:
 
 Every bash script must include these elements. This is what separates
 a toolkit script from a generic bash script.
+
+> **Operational floor:** tools that **write, upload, or mutate** data must also
+> apply the operational layer (dry-run flag, single-instance lock, manifest,
+> structured logging) per `${CLAUDE_PLUGIN_ROOT}/references/operations.md`.
+> Tools that **talk to a service or API** apply the appropriate auth tier per
+> `${CLAUDE_PLUGIN_ROOT}/references/data-cli.md`.
 
 ### 1. Strict mode and cleanup (every script, no exceptions)
 
@@ -105,9 +122,9 @@ Every line the user sees starts with at least two spaces. This creates a
 visual margin and room for status markers:
 
 ```
-  ✓ Contacts         1,234 records
-  ✗ Tickets          403 — scope not granted
-  ⚠ hs CLI           Not installed
+  ✓ Records          1,234 records
+  ✗ Logs             403 — scope not granted
+  ⚠ vendor CLI       Not installed
 ```
 
 ### 6. Status markers (every script that reports results)
@@ -145,7 +162,7 @@ visual differentiator of the toolkit.
 ```bash
 draw_menu() {
   local sel="$1"
-  local opts=("Contacts" "Companies" "Deals" "Exit")
+  local opts=("Records" "Reports" "Snapshots" "Exit")
   for i in "${!opts[@]}"; do
     if [[ $i -eq $sel ]]; then
       printf "  ${TEAL}›› ${BOLD}%s${RESET}\n" "${opts[$i]}"

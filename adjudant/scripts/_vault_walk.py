@@ -604,7 +604,7 @@ PROJECT_TYPE_DEFAULT_FOLDERS: dict[str, dict[str, list[str]]] = {
 
 AUTO_CREATED_FOLDERS: frozenset[str] = frozenset({"dreams", "canvases", "bases"})
 INDEX_EXEMPT_FOLDERS: frozenset[str] = frozenset({
-    "sessions", "images", "assets", "previews", "iterations", "_archive",
+    "sessions", "images", "assets", "previews", "iterations", "_archive", "templates",
 })
 
 

@@ -1,22 +1,74 @@
 {
-  "skill_name": "bash-tui-toolkit",
+  "plugin_name": "cli-wrapper-helper",
   "evals": [
     {
       "id": 1,
+      "track": "bash-tui",
       "prompt": "I need a bash script that's a simple server health checker. It should have a menu where I can pick between checking disk usage, memory usage, or network connectivity (ping google.com). Show results in a nice table format. Make it look polished in the terminal — colors, a banner, the works. Save it as health-check.sh.",
       "expected_output": "A single bash script with: ANSI color palette with semantic tokens, ASCII art splash banner, arrow-key navigable menu using the chevron pattern, fixed-width table output for results, status markers (checkmark/x), proper cleanup trap, and a main loop that returns to menu after each check.",
       "files": []
     },
     {
       "id": 2,
+      "track": "bash-tui",
       "prompt": "Write me a bash script that monitors a directory for new CSV files and when it finds one, shows an animated loading bar while it counts the rows, then displays a summary table with filename, row count, and file size. It should keep watching until I hit Ctrl+C. Call it csv-watcher.sh.",
       "expected_output": "A bash script with: color palette, a breathing spinner for the idle watch state, animated loading bar (comet tail style) when processing a file, fixed-width table for the summary, proper Ctrl+C cleanup that restores cursor, and clear status output with checkmarks.",
       "files": []
     },
     {
       "id": 3,
+      "track": "bash-tui",
       "prompt": "Create a bash deployment script called deploy.sh that walks through 5 steps: check git status, run tests, build, upload artifacts, and update config. Each step should show a spinner while running, then a green checkmark or red X. Add a --dry-run flag that shows what would happen without doing anything. Include a splash banner at the top.",
       "expected_output": "A bash script with: set -euo pipefail, color palette with semantic tokens, flag parsing (--dry-run, --help), splash banner, sequential step execution with braille spinner per step, green/red status markers, dry-run mode that prints what would happen, proper error trap, and help text.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "track": "python-helper",
+      "prompt": "Write a Python script called mail-summary.py that reads my Apple Mail data from ~/Library/Mail. Show the 10 most recent emails with received date, sender, and subject in a clean table. Also list my mailboxes. Use the local sqlite envelope index — no IMAP.",
+      "expected_output": "A Python script with: dynamic Mail store path resolution (glob for V* directory), sqlite3 with row_factory, CoreData epoch conversion (+978307200), emoji section headers (📂 source, 📬 mailboxes, 📧 recent messages), fixed-width table with cell() truncation, die() if Mail directory is not accessible, --limit flag.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "track": "python-helper",
+      "prompt": "Create a Python script called contact-diff.py that compares two exported contacts CSV files — before.csv and after.csv — and shows what was added, removed, or changed. Match records on email address.",
+      "expected_output": "A Python script with: csv.DictReader for both files, keyed dicts by email field, three-bucket diff (added/removed/changed), section per bucket with appropriate marker (✅ ❌ ⚠️), cell() truncation for name and email columns, --json flag for machine-readable output, graceful die() if either file is missing.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "track": "python-helper",
+      "prompt": "Build a Python migration script called migrate-users.py that reads users from a sqlite database at ~/data/old.db (table: users, columns: id, name, email, created_at) and inserts them into ~/data/new.db (table: members, columns: id, full_name, email, joined_at). Add a --dry-run flag.",
+      "expected_output": "A Python script with: source sqlite connection with row_factory, destination sqlite connection, column mapping in transform step (name→full_name, created_at→joined_at), mandatory --dry-run gate on all writes, single transaction wrapping all inserts with rollback on error, row-level progress output, --limit flag for testing a subset.",
+      "files": []
+    },
+    {
+      "id": 7,
+      "track": "bash-tui",
+      "prompt": "Build a bash admin tool called fleet-admin.sh with an arrow-key menu organized into groups — a 'Services' group (restart, view logs) and a 'Danger Zone' group (wipe cache, reset database). The destructive actions should make me type a word to confirm before they run, and the reset-database item should be marked as destructive right in the menu.",
+      "expected_output": "A bash script with: a grouped ('wheelhouse') arrow-key menu with group headers and sub-items, per-item status tags (a destructive marker rendered in the error color), a typed-word confirmation ceremony (read a literal word, abort unless it matches) gating each destructive action, semantic color tokens, two-space indent, and a cleanup trap. Draws on interaction.md.",
+      "files": []
+    },
+    {
+      "id": 8,
+      "track": "bash-tui",
+      "prompt": "I have a bash script that uploads files from a folder to a remote bucket. Make it operationally safe: add a --dry-run mode, stop it from running twice at the same time, and skip files it already uploaded on a previous run unless I pass --force. Call it bucket-sync.sh.",
+      "expected_output": "A bash script with: a dry-run stub layer (mutating helpers redefined to log and return fake ids when --dry is set, read-only helpers left live), a PID single-instance lock with stale-lock reclaim and release on EXIT/INT/TERM, a manifest file recording completed items with skip-unless---force idempotency, logging to .logs/, and semantic tokens. Draws on operations.md.",
+      "files": []
+    },
+    {
+      "id": 9,
+      "track": "bash-tui",
+      "prompt": "My bash watcher pipes a long-running command into a `while read` loop and shows a breathing animation, but the animation freezes and my line counter resets to zero every time. Fix it. The tool is called tail-watch.sh.",
+      "expected_output": "Recognizes the subshell-eats-state problem: `cmd | while read` runs the loop in a subshell, so the counter and the breathing redraw are lost. Fixes it by routing the producer through a FIFO (mkfifo) read in the main shell, with a backgrounded producer PID, a read -t timeout to advance the breathing frame, and a cleanup trap that removes the FIFO. Draws on bash-safety.md and components.md.",
+      "files": []
+    },
+    {
+      "id": 10,
+      "track": "bash-tui",
+      "prompt": "Write a bash tool called api-pull.sh that pulls all records from a paginated REST API and writes them to a CSV on my Desktop. It should get its token from the vendor's CLI if that's installed, otherwise from a token file, and it must never leave a half-written CSV if I hit Ctrl+C.",
+      "expected_output": "A bash script with: tiered credential resolution (vendor CLI config first, then a token file, then a clean failure) followed by a validate step, output-directory resolution (env var → credentials file → ~/Desktop default), a pagination loop that runs until the cursor/page is empty, python3 used to parse the JSON without jq, and the CSV written to a temp file then mv'd into place only on success (Ctrl+C-safe). Draws on data-cli.md.",
       "files": []
     }
   ]

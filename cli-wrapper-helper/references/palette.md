@@ -139,6 +139,6 @@ CYAN="${MY_PREFIX_CYAN}"
 4. **Two-space indent for all output.** Every line the user sees starts with
    at least two spaces. This provides visual margin and room for status markers:
    ```
-     ✓ Contacts         1,234 records
-     ✗ Tickets           403 — scope not granted
+     ✓ Records          1,234 records
+     ✗ Logs              403 — scope not granted
    ```

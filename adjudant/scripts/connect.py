@@ -311,12 +311,15 @@ def write_session_note(
             "Session initiated by /adjudant connect.",
         )
     else:
+        # Template-less fallback. session_id starts empty; the SessionStart
+        # hook appends the live conversation UUID on the next session start.
         text = (
             "---\n"
             "type: session\n"
             f"project: \"[[projects/{slug}/brief|{slug}]]\"\n"
             f"date: {today}\n"
             f"started: \"{now_hhmm}\"\n"
+            "session_id: []\n"
             "tags:\n"
             "  - session\n"
             "---\n\n"

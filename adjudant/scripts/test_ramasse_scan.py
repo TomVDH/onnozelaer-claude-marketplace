@@ -253,6 +253,16 @@ class TestDetectNamingViolations(unittest.TestCase):
             v = detect_naming_violations(files)
             self.assertTrue(any("YYYY-MM-DD-" in x["issue"] for x in v))
 
+    def test_templates_folder_exempt_from_naming(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # template scaffolds are named for their type, not an instance — exempt
+            _write_file(root / "templates" / "decision.md", "---\ntype: decision\n---\n")
+            _write_file(root / "templates" / "session.md", "---\ntype: session\n---\n")
+            _write_file(root / "templates" / "doc.md", "---\ntype: doc\n---\n")
+            files = list(walk_project(root))
+            self.assertEqual(detect_naming_violations(files), [])
+
     def test_session_with_trailing_kebab_flagged(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
