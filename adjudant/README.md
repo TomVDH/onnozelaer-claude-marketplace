@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, eight verbs, Python helpers under each.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, nine verbs, Python helpers under each.
 
 ## Install
 
@@ -10,18 +10,18 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 /plugin install adjudant
 ```
 
-## Surface (v0.6.0)
+## Surface (v0.9.0)
 
 | | |
 |---|---|
 | Command | `/adjudant {verb}` |
-| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `dream`, `draw` |
+| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `dream`, `draw`, `board` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
-| Templates | 18 (AGENTS.md, CLAUDE.md, project briefs × 4, session, decision, note, doc, handoff, source, iteration, release, dream-report, home, indexes × 2) |
-| Python helpers | `_vault_walk.py` (primitives), `port.py`, `connect.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `check.py` |
+| Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `check.py` |
 | Drift defense | `python3 scripts/validate.py` — 13 validators, runs via pre-commit |
-| Tests | 240+ unit tests across 9 modules; `python3 -m unittest discover -p 'test_*.py'` |
+| Tests | 300+ unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 
@@ -45,6 +45,7 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant ramasse` | Deep structural clean — analysis phase via `ramasse_scan.py`, planning + execute via the superpowers chain. | `ramasse_scan.py` |
 | `/adjudant dream` | Content/knowledge/memory refresh — semantic. Analysis via `dream.py` (read-only comparator catalog), judge + plan + execute via the superpowers chain, backups for destructive content ops. | `dream.py` |
 | `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. | (runbook) |
+| `/adjudant board [--project <slug>\|--all]` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. One project, a named one, or the whole vault. Re-seeds without clobbering dragged cards. | `board.py` |
 
 All helpers follow the breadcrumb: pass `--project-dir` pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
 
