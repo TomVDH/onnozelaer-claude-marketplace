@@ -6,10 +6,11 @@ Personal collection of Claude Code plugins by Onnozelaer.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
+| [adjudant](./adjudant) | 0.10.1 | Obsidian vault editor/writer and project initializer. One command, `/adjudant`, with ten verbs (connect, port, sync, check, sitrep, tidy, ramasse, dream, draw, board) — each backed by a Python helper. Locked three-tier cleanup model (tidy / ramasse / dream), vault-aware hooks, drift-defense validators. Successor to the retired `obsidian-bridge`. |
 | [cabinet-of-imd](./cabinet-of-imd) | 3.0.0 | The Cabinet of IMD Agents — a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, and disciplines serve as specialised web-development agents. Flavour-only (characters, voices, pairings, working disciplines); persistence is delegated to `adjudant` when active. |
 | [iteration-shelf](./iteration-shelf) | 0.1.0 | Terminal-aesthetic review boards for in-browser design iteration — curated shelves and monster indexes with on-demand iframe loading, sidebar outliner, and browser-safety guards. Explicit invocation only. |
-| [cli-wrapper-helper](./cli-wrapper-helper) | 1.0.0 | Build polished CLI tools — interactive bash TUIs (menus, spinners, animations) and clean Python helper scripts (sqlite readers, data reporters). Two skills: `bash-tui` and `python-helper`. |
-| [gemineye](./gemineye) | 0.2.0 | Invoke Gemini as a review and coding partner from inside Claude Code. Vault-aware, context-disciplined, contained outputs — Gemini reviews land under `gemineye/` subfolders, never scattered across the codebase. |
+| [cli-wrapper-helper](./cli-wrapper-helper) | 2.0.0 | The shared operating language for agent-built helper CLIs — one visual + interaction + safety language across interactive bash TUIs and python helper scripts. Two skills: `bash-tui` and `python-helper`. |
+| [gemineye](./gemineye) | 0.5.0 | A sandboxed second opinion from a Gemini-family model via the Antigravity CLI (`agy`) — review-only, read-trusted, write-sandboxed. Eight subcommands from quick `wip` checks to `megareview`. Pairs with `adjudant` for vault context. |
 
 ### Iteration Shelf — Skill & Suggested Command
 
@@ -47,6 +48,12 @@ Personal collection of Claude Code plugins by Onnozelaer.
 ```
 ├── .claude-plugin/
 │   └── marketplace.json    # Marketplace manifest — lists all plugins with versions
+├── adjudant/               # Plugin: Adjudant (v0.10.1, 1 skill, ten verbs, 5 hooks)
+│   ├── .claude-plugin/     # Plugin metadata (plugin.json)
+│   ├── skills/adjudant/    # Canonical skill — SKILL.md + reference/ + templates/
+│   ├── scripts/            # Python helpers (connect, port, sync, check, sitrep, tidy, …) + validate.py
+│   ├── hooks/              # SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd
+│   └── README.md
 ├── cabinet-of-imd/         # Plugin: Cabinet of IMD Agents (v3.0.0)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)
 │   ├── skills/             # 1 invocable skill (crew-roster)

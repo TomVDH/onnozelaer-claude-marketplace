@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, nine verbs, Python helpers under each.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, ten verbs, Python helpers under each.
 
 ## Install
 
@@ -10,17 +10,17 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 /plugin install adjudant
 ```
 
-## Surface (v0.9.0)
+## Surface (v0.10.1)
 
 | | |
 |---|---|
 | Command | `/adjudant {verb}` |
-| Verbs | `connect`, `port`, `sync`, `check`, `tidy`, `ramasse`, `dream`, `draw`, `board` |
+| Verbs | `connect`, `port`, `sync`, `check`, `sitrep`, `tidy`, `ramasse`, `dream`, `draw`, `board` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
-| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `check.py` |
-| Drift defense | `python3 scripts/validate.py` — 13 validators, runs via pre-commit |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `check.py`, `sitrep.py` |
+| Drift defense | `python3 scripts/validate.py` — 15 validators, runs via pre-commit |
 | Tests | 300+ unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
@@ -41,6 +41,7 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant port` | Migrate a legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance. Two-phase preview → apply. | `port.py` |
 | `/adjudant sync` | Push project state to the vault: refresh brief, mirror handoff, refresh project-row counts. | `sync.py` |
 | `/adjudant check` | Read-only summary — project state, vault snapshot, schema compliance. | `check.py` |
+| `/adjudant sitrep` | ELI5 orientation briefing — where we were, what's done, where the vault is, where to start. Read-only. | `sitrep.py` |
 | `/adjudant tidy` | Surface mechanical sweep — rebuild indexes, normalise tags, fix wikilink form. Two-phase preview → apply. | `tidy.py` |
 | `/adjudant ramasse` | Deep structural clean — analysis phase via `ramasse_scan.py`, planning + execute via the superpowers chain. | `ramasse_scan.py` |
 | `/adjudant dream` | Content/knowledge/memory refresh — semantic. Analysis via `dream.py` (read-only comparator catalog), judge + plan + execute via the superpowers chain, backups for destructive content ops. | `dream.py` |
