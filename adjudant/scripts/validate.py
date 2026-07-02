@@ -293,10 +293,14 @@ def validate_tidy_backup_integrity(r: Result) -> None:
     for subdir in backup_root.iterdir():
         if subdir.is_dir():
             # walk recursively because tidy backup mirrors project structure
-            legacy_files = list(subdir.rglob("*.legacy"))
-            if not legacy_files:
+            files = [p for p in subdir.rglob("*") if p.is_file()]
+            if not files:
                 # Empty backup dirs are not failure (could be the initial mkdir before any copy)
                 continue
+            has_legacy = any(p.name.endswith(".legacy") for p in files)
+            if not has_legacy:
+                r.add_fail(name, f"tidy backup dir {subdir.name} has files but no .legacy: {[p.name for p in files]}")
+                return
     r.add_pass(name)
 
 
