@@ -37,6 +37,7 @@ from _vault_walk import (
     BUCKET_A_TYPES,
     BUCKET_B_MIGRATIONS,
     INDEX_EXEMPT_FOLDERS,
+    MD_LINK_RE,
     VaultFile,
     build_vault_index,
     is_bucket_b_migration,
@@ -134,13 +135,17 @@ def normalize_tags(tags: list[str], project_slug: Optional[str]) -> tuple[list[s
 # ============================================================
 
 
-_MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md(?:#[^)\s]*)?)\)")
+# Split-with-capture: odd segments are inline-code spans, left untouched
+_INLINE_CODE_SPLIT_RE = re.compile(r"(`[^`\n]+`)")
 
 
 def fix_wikilink_form(body: str, vault_index: set[str]) -> tuple[str, int]:
     """Rewrite `[text](path.md)` → `[[stem|text]]` IFF path resolves in vault.
 
-    Returns (new_body, fix_count). Skips code blocks.
+    Returns (new_body, fix_count). Skips fenced + 4-space-indented code blocks
+    and inline-code spans (mirrors what the detectors count). Preserves heading
+    anchors (`[t](n.md#Sec)` → `[[n#Sec|t]]`). Leaves `./`/`../` relative links
+    untouched — Obsidian resolves the markdown form, not a `[[../…]]` wikilink.
     """
     if not vault_index:
         return body, 0
@@ -155,23 +160,35 @@ def fix_wikilink_form(body: str, vault_index: set[str]) -> tuple[str, int]:
         if in_fenced:
             out_lines.append(line)
             continue
+        # Indented code block (same heuristic as extract_markdown_md_links)
+        if line.startswith("    ") and line.lstrip()[:1] not in ("-", "*", "+", "|", "["):
+            out_lines.append(line)
+            continue
         def _sub(m):
             nonlocal fixed_count
             text = m.group(1)
             path = m.group(2)
-            stem = path.split("#", 1)[0]
+            if path.startswith(("./", "../")):
+                return m.group(0)
+            stem, _, anchor = path.partition("#")
             if resolve_wikilink(stem, vault_index):
                 # Compute display stem without extension
                 no_ext = stem[:-3] if stem.endswith(".md") else stem
+                target = f"{no_ext}#{anchor}" if anchor else no_ext
                 stem_basename = no_ext.split("/")[-1]
                 # If display text matches the basename, skip the alias
                 if text.strip() == stem_basename or text.strip() == no_ext:
                     fixed_count += 1
-                    return f"[[{no_ext}]]"
+                    return f"[[{target}]]"
                 fixed_count += 1
-                return f"[[{no_ext}|{text}]]"
+                return f"[[{target}|{text}]]"
             return m.group(0)
-        out_lines.append(_MD_LINK_RE.sub(_sub, line))
+        segments = _INLINE_CODE_SPLIT_RE.split(line)
+        rebuilt = "".join(
+            seg if i % 2 else MD_LINK_RE.sub(_sub, seg)
+            for i, seg in enumerate(segments)
+        )
+        out_lines.append(rebuilt)
     return "\n".join(out_lines), fixed_count
 
 
@@ -463,7 +480,10 @@ def build_preview(
         existing_path = project_dir / parent / "_index.md"
 
         if existing_path.is_file():
-            existing = existing_path.read_text(errors="replace")
+            try:
+                existing = existing_path.read_text()  # strict: never write replaced bytes back
+            except UnicodeDecodeError:
+                continue
             proposed, mode = upsert_index_content(
                 existing,
                 folder_name=parent.name,
@@ -494,7 +514,12 @@ def build_preview(
 
     # --- Features 2-4: per-file edits ---
     for f in files:
-        original = f.path.read_text(errors="replace")
+        try:
+            # Strict decode: never round-trip errors="replace" text back to
+            # disk — that would silently bake U+FFFD into the vault file.
+            original = f.path.read_text()
+        except UnicodeDecodeError:
+            continue
         modified = original
 
         # Feature 3: tag normalisation

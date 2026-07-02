@@ -56,6 +56,7 @@ class TestRunSitrep(unittest.TestCase):
             self.assertEqual(rep["whats_done"]["last_session"], "2026-07-01")
             self.assertEqual(rep["whats_done"]["last_decision"], "2026-06-30")
             self.assertEqual(rep["whats_done"]["counts"]["notes"], 1)
+            self.assertEqual(rep["whats_done"]["total_files"], 3)  # session+decision+note
             # 30 minutes → green light
             self.assertEqual(rep["freshness"]["light"], "\U0001f7e2")
             self.assertEqual(rep["freshness"]["age"], "30m")

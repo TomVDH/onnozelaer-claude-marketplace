@@ -102,6 +102,43 @@ class TestNormalizeTags(unittest.TestCase):
 
 class TestFixWikilinkForm(unittest.TestCase):
 
+    def test_external_url_ending_in_md_untouched(self):
+        idx = {"README.md", "README"}
+        body = "see [x](https://github.com/a/b/blob/main/README.md) ok"
+        out, n = fix_wikilink_form(body, idx)
+        self.assertEqual(out, body)
+        self.assertEqual(n, 0)
+
+    def test_heading_anchor_preserved(self):
+        idx = {"notes/n.md", "notes/n", "n", "n.md"}
+        out, n = fix_wikilink_form("[Foo](n.md#Section)", idx)
+        self.assertEqual(out, "[[n#Section|Foo]]")
+        self.assertEqual(n, 1)
+
+    def test_relative_paths_untouched(self):
+        idx = {"bar.md", "bar"}
+        body = "[t](../foo/bar.md) and [u](./bar.md)"
+        out, n = fix_wikilink_form(body, idx)
+        self.assertEqual(out, body)
+        self.assertEqual(n, 0)
+
+    def test_inline_code_span_untouched(self):
+        idx = {"n.md", "n"}
+        body = "real [t](n.md) and code `[t](n.md)` here"
+        out, n = fix_wikilink_form(body, idx)
+        self.assertEqual(out, "real [[n|t]] and code `[t](n.md)` here")
+        self.assertEqual(n, 1)
+
+    def test_indented_code_block_untouched(self):
+        idx = {"n.md", "n"}
+        # Same heuristic as the detectors: 4-space indent skipped unless the
+        # first char is a list/table marker (hanging-indent continuation).
+        body = "para\n\n    x = [t](n.md) in code block\n\n[t](n.md) in prose"
+        out, n = fix_wikilink_form(body, idx)
+        self.assertIn("    x = [t](n.md) in code block", out)
+        self.assertIn("[[n|t]] in prose", out)
+        self.assertEqual(n, 1)
+
     def test_rewrites_resolvable(self):
         with tempfile.TemporaryDirectory() as tmp:
             vault = Path(tmp)

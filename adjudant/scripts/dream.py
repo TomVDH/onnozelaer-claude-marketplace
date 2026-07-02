@@ -90,12 +90,14 @@ CHANGE_VERB_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Open-loop / unresolved-thread markers
+# Open-loop / unresolved-thread markers. `??` is its own alternate with no
+# delimiter/\b requirements: the old trailing \b (only matching before a word
+# char) made the marker dead for the common `really??` / bare `??` forms.
 OPEN_LOOP_RE = re.compile(
-    r"(?:^|[\s(>\-*])("
+    r"(?:(?:^|[\s(>\-*])("
     r"TODO|FIXME|TBD|OPEN:|UNRESOLVED|open question|to decide|to-do|"
-    r"follow[ -]?up|needs decision|still unclear|\?\?"
-    r")\b",
+    r"follow[ -]?up|needs decision|still unclear"
+    r")\b)|(\?\?)",
     re.IGNORECASE,
 )
 

@@ -498,5 +498,20 @@ class TestRunDream(unittest.TestCase):
             self.assertEqual(run_dream(root, root, today=dt.date(2025, 12, 15))["summary"]["staleness"], 0)
 
 
+class TestOpenLoopMarkers(unittest.TestCase):
+
+    def test_double_question_mark_detected(self):
+        from dream import OPEN_LOOP_RE
+        # Regression: the trailing \b made `??` dead for these common forms
+        self.assertTrue(OPEN_LOOP_RE.search("does this even work??"))
+        self.assertTrue(OPEN_LOOP_RE.search("??"))
+        self.assertTrue(OPEN_LOOP_RE.search("- ?? unresolved thing"))
+
+    def test_word_markers_still_bounded(self):
+        from dream import OPEN_LOOP_RE
+        self.assertTrue(OPEN_LOOP_RE.search("there is a TODO here"))
+        self.assertFalse(OPEN_LOOP_RE.search("TODOS are plural"))  # \b intact
+
+
 if __name__ == "__main__":
     unittest.main()

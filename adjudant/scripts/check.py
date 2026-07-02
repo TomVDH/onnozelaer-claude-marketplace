@@ -86,14 +86,17 @@ def _handoff_info(project_dir: Path) -> dict[str, Any]:
     info: dict[str, Any] = {"present": True, "updated": updated}
     if updated:
         try:
-            # Accept YYYY-MM-DD or full ISO
+            # Accept YYYY-MM-DD or full ISO. `updated:` is written with local
+            # dates (sync/hooks use datetime.now()), so bare dates and naive
+            # timestamps are interpreted as LOCAL time — not UTC midnight,
+            # which skewed staleness by the UTC offset (even negative).
             if re.match(r"^\d{4}-\d{2}-\d{2}$", str(updated)):
-                dt = datetime.fromisoformat(str(updated) + "T00:00:00").replace(tzinfo=timezone.utc)
+                dt = datetime.fromisoformat(str(updated) + "T00:00:00")
             else:
                 dt = datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-            stale_hours = (datetime.now(timezone.utc) - dt).total_seconds() / 3600.0
+            if dt.tzinfo is not None:
+                dt = dt.astimezone().replace(tzinfo=None)  # aware → local naive
+            stale_hours = (datetime.now() - dt).total_seconds() / 3600.0
             info["stale_hours"] = round(stale_hours, 1)
         except (ValueError, TypeError):
             info["stale_hours"] = None

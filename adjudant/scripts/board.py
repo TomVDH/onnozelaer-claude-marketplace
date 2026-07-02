@@ -126,6 +126,7 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
             "category": category or "task",
             "related": _as_list(fields.get("related")),
             "notes": str(fields.get("note") or ""),
+            "source": "task",  # provenance: merge_deck iceboxes only task-seeded cards
         })
     return cards
 
@@ -186,7 +187,10 @@ def merge_deck(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any
         state) and a non-empty on-disk ``notes`` (a board-local annotation),
         but re-seed ``title``/``category``/``related`` from the task note.
       - new task card → added in its status-derived column.
-      - on-disk card whose task disappeared → moved to ``icebox`` (never deleted).
+      - on-disk TASK-SEEDED card (``source: task``) whose task disappeared →
+        moved to ``icebox`` (never deleted).
+      - on-disk card WITHOUT task provenance (hand-added via the board UI, or
+        from a pre-provenance deck) → kept in its current column untouched.
 
     Deck-level ``title``/``subtitle`` from disk are preserved (a re-scaffold does
     not rename a board you titled); ``version``/``columns``/``updated``/
@@ -209,7 +213,9 @@ def merge_deck(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any
     for cid, ec in ex_cards.items():
         if cid not in fresh_ids:
             ec = dict(ec)
-            ec["column"] = "icebox"
+            if ec.get("source") == "task":
+                # Task genuinely disappeared from tasks/ — park it
+                ec["column"] = "icebox"
             merged.append(ec)
 
     cats: list[str] = []

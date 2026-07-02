@@ -173,14 +173,33 @@ class TestMergeDeck(unittest.TestCase):
         self.assertEqual(by_id["X-1"]["column"], "doing")   # preserved
         self.assertEqual(by_id["X-2"]["column"], "next")    # new, task-derived
 
-    def test_orphan_goes_to_icebox_not_deleted(self):
-        existing = self._deck([{"id": "X-9", "column": "done", "category": "build", "notes": "keep"}])
+    def test_task_seeded_orphan_goes_to_icebox_not_deleted(self):
+        # source: task ⇒ the backing tasks/ note disappeared → park in icebox
+        existing = self._deck([{"id": "X-9", "column": "done", "category": "build",
+                                "notes": "keep", "source": "task"}])
         fresh = self._deck([{"id": "X-1", "column": "backlog", "category": "build", "notes": ""}])
         out = merge_deck(existing, fresh)
         by_id = {c["id"]: c for c in out["cards"]}
         self.assertIn("X-9", by_id)
         self.assertEqual(by_id["X-9"]["column"], "icebox")
         self.assertEqual(by_id["X-9"]["notes"], "keep")
+
+    def test_hand_added_card_keeps_its_column_on_reseed(self):
+        # No task provenance ⇒ a card added via the board UI — refresh must
+        # NOT drag it to icebox (regression: it was relocated every re-seed).
+        existing = self._deck([{"id": "hand-1", "column": "doing", "category": "build", "notes": ""}])
+        fresh = self._deck([{"id": "X-1", "column": "backlog", "category": "build", "notes": ""}])
+        out = merge_deck(existing, fresh)
+        by_id = {c["id"]: c for c in out["cards"]}
+        self.assertIn("hand-1", by_id)
+        self.assertEqual(by_id["hand-1"]["column"], "doing")
+
+    def test_cards_from_tasks_stamp_provenance(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            _write(proj / "tasks" / "x-1.md", "---\ntype: task\nstatus: next\n---\n\n# Do X\n")
+            cards = cards_from_tasks(proj)
+            self.assertEqual(cards[0]["source"], "task")
 
     def test_preserves_board_title_and_local_notes(self):
         existing = self._deck([{"id": "X-1", "column": "doing", "category": "b", "notes": "my annotation"}],

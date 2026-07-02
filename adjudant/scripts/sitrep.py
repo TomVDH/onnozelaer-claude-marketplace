@@ -29,7 +29,7 @@ from _handoff_freshness import (
     parse_next_line,
     traffic_light,
 )
-from _vault_walk import smart_project_dir, VaultUnresolvableError
+from _vault_walk import resolve_vault, smart_project_dir, VaultUnresolvableError
 from check import (
     _folder_counts,
     _latest_dream_signal,
@@ -78,6 +78,7 @@ def run_sitrep(
         "last_session": _most_recent_dated(project_dir / "sessions"),
         "last_decision": _most_recent_dated(project_dir / "decisions"),
         "counts": counts,
+        "total_files": sum(counts.values()),
     }
 
     return {
@@ -119,7 +120,14 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
             print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
         return 1
 
-    vault_path = Path(args.vault_dir).expanduser() if args.vault_dir else vault_hint
+    if args.vault_dir:
+        vault_path = Path(args.vault_dir).expanduser()
+    elif vault_hint is not None:
+        vault_path = vault_hint
+    else:
+        # Direct vault-project-dir mode: walk up for Home.md (same fallback
+        # check/dream/tidy use) so the briefing can still name the vault.
+        vault_path = resolve_vault(project_dir)
     code_root = Path(args.project_dir).expanduser().resolve()
     report = run_sitrep(project_dir, vault_path, code_root=code_root)
 
