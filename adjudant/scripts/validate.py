@@ -161,10 +161,8 @@ def validate_template_coverage(r: Result) -> None:
 
 def validate_command_metadata_coherence(r: Result) -> None:
     name = "command-metadata-coherence"
-    meta_file = ROOT / "adjudant" / "scripts" / "command-metadata.json"
-    if not meta_file.exists():
-        # Try local-relative if running inside adjudant/
-        meta_file = ROOT / "scripts" / "command-metadata.json"
+    # ROOT is the plugin dir, so the metadata lives at ROOT/scripts/ directly
+    meta_file = ROOT / "scripts" / "command-metadata.json"
     skill_file = CANONICAL / "SKILL.md"
     if not meta_file.exists() or not skill_file.exists():
         r.add_fail(name, f"missing {meta_file} or {skill_file}")
@@ -243,6 +241,17 @@ def validate_port_backup_integrity(r: Result) -> None:
     r.add_pass(name)
 
 
+def _gitignore_active_entries(gi: Path) -> set[str]:
+    """Active .gitignore lines — comments and `!` negations don't count as
+    covering an entry (the old substring check was fooled by both)."""
+    entries: set[str] = set()
+    for ln in gi.read_text().splitlines():
+        s = ln.strip()
+        if s and not s.startswith("#") and not s.startswith("!"):
+            entries.add(s)
+    return entries
+
+
 def validate_gitignore_includes_port_dirs(r: Result) -> None:
     name = "gitignore-includes-port-dirs"
     preview = ROOT / ".adjudant-port-preview"
@@ -252,15 +261,18 @@ def validate_gitignore_includes_port_dirs(r: Result) -> None:
         return
     gi = ROOT / ".gitignore"
     if not gi.is_file():
+        # Fall back to the repo-root .gitignore (ROOT is the plugin dir)
+        gi = ROOT.parent / ".gitignore"
+    if not gi.is_file():
         r.add_fail(name, "port directories exist but .gitignore is missing")
         return
-    text = gi.read_text()
+    entries = _gitignore_active_entries(gi)
     required = []
     if preview.is_dir():
         required.append(".adjudant-port-preview/")
     if backup.is_dir():
         required.append(".adjudant-port-backup/")
-    missing = [e for e in required if e not in text]
+    missing = [e for e in required if e not in entries]
     if missing:
         r.add_fail(name, f".gitignore missing entries: {missing}")
         return
@@ -320,17 +332,35 @@ def validate_gitignore_includes_tidy_dirs(r: Result) -> None:
     if not gi.is_file():
         r.add_fail(name, "tidy directories exist but .gitignore is missing")
         return
-    text = gi.read_text()
+    entries = _gitignore_active_entries(gi)
     required = []
     if preview.is_dir():
         required.append(".adjudant-tidy-preview/")
     if backup.is_dir():
         required.append(".adjudant-tidy-backup/")
-    missing = [e for e in required if e not in text]
+    missing = [e for e in required if e not in entries]
     if missing:
         r.add_fail(name, f".gitignore missing entries: {missing}")
         return
     r.add_pass(name)
+
+
+def _skill_frontmatter_version(skill_file: Path) -> str:
+    """`version:` from the SKILL.md frontmatter BLOCK only — a body line that
+    happens to start with `version:` must not be picked up."""
+    if not skill_file.exists():
+        return ""
+    lines = skill_file.read_text().split("\n")
+    if not lines or lines[0].rstrip() != "---":
+        return ""
+    close = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None)
+    if close is None:
+        return ""
+    for ln in lines[1:close]:
+        m = re.match(r"^version:\s*(\S+)", ln)
+        if m:
+            return m.group(1)
+    return ""
 
 
 def validate_version_consistency(r: Result) -> None:
@@ -344,8 +374,7 @@ def validate_version_consistency(r: Result) -> None:
         r.add_fail(name, f"could not read a version source: {e}")
         return
     skill_file = CANONICAL / "SKILL.md"
-    m = re.search(r"^version:\s*(\S+)", skill_file.read_text(), re.M) if skill_file.exists() else None
-    versions["SKILL.md"] = m.group(1) if m else ""
+    versions["SKILL.md"] = _skill_frontmatter_version(skill_file)
     # marketplace.json lives in the parent repo — only check when present (standalone installs won't have it)
     mk = ROOT.parent / ".claude-plugin" / "marketplace.json"
     if mk.is_file():
@@ -366,11 +395,8 @@ def validate_version_consistency(r: Result) -> None:
 
 
 def _load_command_metadata() -> Path:
-    """Locate command-metadata.json (same two-path logic as coherence check)."""
-    meta_file = ROOT / "adjudant" / "scripts" / "command-metadata.json"
-    if not meta_file.exists():
-        meta_file = ROOT / "scripts" / "command-metadata.json"
-    return meta_file
+    """Locate command-metadata.json. ROOT is the plugin dir."""
+    return ROOT / "scripts" / "command-metadata.json"
 
 
 def validate_reference_files_exist(r: Result) -> None:

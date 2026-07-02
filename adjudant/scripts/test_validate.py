@@ -191,5 +191,199 @@ class TestCommandMetadataCoherence(_PatchedTree):
         self.assertTrue(any("command-metadata-coherence" in f for f in r.failures))
 
 
+class TestTemplatesTagSchema(_PatchedTree):
+
+    def test_passes_when_no_deprecated_tags(self):
+        (validate.TEMPLATES / "note.md").write_text("---\ntags:\n  - note\n---\n")
+        r = Result()
+        validate.validate_templates_tag_schema(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_on_deprecated_ob_tag(self):
+        (validate.TEMPLATES / "note.md").write_text("---\ntags:\n  - ob/note\n---\n#ob/note\n")
+        r = Result()
+        validate.validate_templates_tag_schema(r)
+        self.assertTrue(any("templates-tag-schema" in f for f in r.failures))
+
+
+class TestClaudeMdImportsAgents(_PatchedTree):
+
+    def test_passes_when_first_line_is_import(self):
+        (validate.TEMPLATES / "CLAUDE.md").write_text("\n@AGENTS.md\n\n# Overrides\n")
+        r = Result()
+        validate.validate_claude_md_imports_agents(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_on_wrong_first_line(self):
+        (validate.TEMPLATES / "CLAUDE.md").write_text("# CLAUDE\n@AGENTS.md\n")
+        r = Result()
+        validate.validate_claude_md_imports_agents(r)
+        self.assertTrue(any("claude-md-imports-agents" in f for f in r.failures))
+
+    def test_fails_when_missing(self):
+        r = Result()
+        validate.validate_claude_md_imports_agents(r)
+        self.assertTrue(any("claude-md-imports-agents" in f for f in r.failures))
+
+
+class TestTemplateCoverage(_PatchedTree):
+
+    def _provision_all(self):
+        for template in validate.FILE_TYPES_REQUIRING_TEMPLATE.values():
+            for t in (template if isinstance(template, list) else [template]):
+                (validate.TEMPLATES / t).write_text("---\n---\n")
+
+    def test_passes_when_all_templates_present(self):
+        self._provision_all()
+        r = Result()
+        validate.validate_template_coverage(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_one_missing(self):
+        self._provision_all()
+        (validate.TEMPLATES / "decision.md").unlink()
+        r = Result()
+        validate.validate_template_coverage(r)
+        self.assertTrue(any("decision" in f for f in r.failures))
+
+
+class TestPluginVersionSet(_PatchedTree):
+
+    def test_passes_with_version(self):
+        r = Result()
+        validate.validate_plugin_version_set(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_on_empty_version(self):
+        pj = self.plugin / ".claude-plugin" / "plugin.json"
+        pj.write_text(json.dumps({"name": "adjudant", "version": ""}) + "\n")
+        r = Result()
+        validate.validate_plugin_version_set(r)
+        self.assertTrue(any("plugin-version-set" in f for f in r.failures))
+
+
+class TestPortPreviewCoherence(_PatchedTree):
+
+    def test_passes_when_no_preview_dir(self):
+        r = Result()
+        validate.validate_port_preview_coherence(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_preview_incomplete(self):
+        d = self.plugin / ".adjudant-port-preview"
+        d.mkdir()
+        (d / "summary.md").write_text("x")
+        r = Result()
+        validate.validate_port_preview_coherence(r)
+        self.assertTrue(any("port-preview-coherence" in f for f in r.failures))
+
+    def test_passes_when_preview_complete(self):
+        d = self.plugin / ".adjudant-port-preview"
+        d.mkdir()
+        for f in validate.PORT_PREVIEW_REQUIRED:
+            (d / f).write_text("x")
+        r = Result()
+        validate.validate_port_preview_coherence(r)
+        self.assertEqual(r.failures, [])
+
+
+class TestPortBackupIntegrity(_PatchedTree):
+
+    def test_passes_with_legacy_files(self):
+        d = self.plugin / ".adjudant-port-backup" / "20260101T000000Z"
+        d.mkdir(parents=True)
+        (d / "AGENTS.md.legacy").write_text("x")
+        r = Result()
+        validate.validate_port_backup_integrity(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_on_non_legacy_only_dir(self):
+        d = self.plugin / ".adjudant-port-backup" / "20260101T000000Z"
+        d.mkdir(parents=True)
+        (d / "stray.md").write_text("x")
+        r = Result()
+        validate.validate_port_backup_integrity(r)
+        self.assertTrue(any("port-backup-integrity" in f for f in r.failures))
+
+
+class TestGitignoreValidators(_PatchedTree):
+
+    def test_port_dirs_require_active_entries(self):
+        (self.plugin / ".adjudant-port-preview").mkdir()
+        # Commented-out entry must NOT satisfy the check (old substring bug)
+        (self.plugin / ".gitignore").write_text("# .adjudant-port-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_port_dirs(r)
+        self.assertTrue(any("gitignore-includes-port-dirs" in f for f in r.failures))
+
+    def test_port_dirs_pass_with_entry(self):
+        (self.plugin / ".adjudant-port-preview").mkdir()
+        (self.plugin / ".gitignore").write_text(".adjudant-port-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_port_dirs(r)
+        self.assertEqual(r.failures, [])
+
+    def test_port_dirs_fall_back_to_parent_gitignore(self):
+        (self.plugin / ".adjudant-port-preview").mkdir()
+        (self.plugin.parent / ".gitignore").write_text(".adjudant-port-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_port_dirs(r)
+        self.assertEqual(r.failures, [])
+
+    def test_tidy_dirs_negated_entry_fails(self):
+        (self.plugin / ".adjudant-tidy-preview").mkdir()
+        (self.plugin / ".gitignore").write_text("!.adjudant-tidy-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_tidy_dirs(r)
+        self.assertTrue(any("gitignore-includes-tidy-dirs" in f for f in r.failures))
+
+    def test_tidy_dirs_pass_with_entry(self):
+        (self.plugin / ".adjudant-tidy-preview").mkdir()
+        (self.plugin / ".gitignore").write_text(".adjudant-tidy-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_tidy_dirs(r)
+        self.assertEqual(r.failures, [])
+
+
+class TestTidyPreviewCoherence(_PatchedTree):
+
+    def test_passes_when_no_dir(self):
+        r = Result()
+        validate.validate_tidy_preview_coherence(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_incomplete(self):
+        d = self.plugin / ".adjudant-tidy-preview"
+        d.mkdir()
+        (d / "summary.md").write_text("x")
+        r = Result()
+        validate.validate_tidy_preview_coherence(r)
+        self.assertTrue(any("tidy-preview-coherence" in f for f in r.failures))
+
+    def test_passes_when_complete(self):
+        d = self.plugin / ".adjudant-tidy-preview"
+        d.mkdir()
+        (d / "summary.md").write_text("x")
+        (d / "changes.json").write_text("{}")
+        (d / "files").mkdir()
+        r = Result()
+        validate.validate_tidy_preview_coherence(r)
+        self.assertEqual(r.failures, [])
+
+
+class TestSkillFrontmatterVersion(_PatchedTree):
+
+    def test_body_version_line_not_picked_up(self):
+        # A body line starting `version:` must not shadow the frontmatter value
+        skill = self.plugin / "skills" / "adjudant" / "SKILL.md"
+        skill.write_text(
+            "---\nname: adjudant\nversion: 1.0.0\n---\n\n"
+            "# adjudant\n\nversion: 9.9.9 is mentioned in prose here\n"
+            "| `connect` | `reference/connect.md` | d |\n"
+            "| `check` | `reference/check.md` | d |\n"
+        )
+        self.assertEqual(validate._skill_frontmatter_version(skill), "1.0.0")
+
+
 if __name__ == "__main__":
     unittest.main()

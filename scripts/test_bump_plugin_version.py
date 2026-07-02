@@ -109,6 +109,46 @@ class TestBump(unittest.TestCase):
                 bump("nonexistent", "0.2.0", root=root)
 
 
+class TestSkillMdCoverage(unittest.TestCase):
+
+    def test_bumps_skill_dir_not_named_after_plugin(self):
+        # cabinet-of-imd's skill dir is crew-roster — the old hard-coded
+        # skills/<plugin>/SKILL.md path silently missed it.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_tree(root, plugin="demo", version="0.1.0")
+            other = root / "demo" / "skills" / "other-skill" / "SKILL.md"
+            other.parent.mkdir(parents=True)
+            other.write_text("---\nname: other-skill\nversion: 0.1.0\n---\n\n# other\n")
+            changed = bump("demo", "0.2.0", root=root)
+            self.assertIn("version: 0.2.0", other.read_text())
+            self.assertIn(str(other.relative_to(root)), changed)
+
+    def test_skill_without_frontmatter_version_untouched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_tree(root, plugin="demo", version="0.1.0")
+            nover = root / "demo" / "skills" / "no-version" / "SKILL.md"
+            nover.parent.mkdir(parents=True)
+            before = "---\nname: no-version\n---\n\n# nv\n"
+            nover.write_text(before)
+            bump("demo", "0.2.0", root=root)
+            self.assertEqual(nover.read_text(), before)
+
+    def test_body_version_line_never_rewritten(self):
+        # Frontmatter-scoped: a prose line starting `version:` stays intact.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_tree(root, plugin="demo", version="0.1.0")
+            skill = root / "demo" / "skills" / "demo" / "SKILL.md"
+            skill.write_text(
+                "---\nname: demo\nversion: 0.1.0\n---\n\n# demo\n\nversion: 9.9.9 in prose\n")
+            bump("demo", "0.2.0", root=root)
+            text = skill.read_text()
+            self.assertIn("version: 0.2.0", text.split("---")[1])  # frontmatter bumped
+            self.assertIn("version: 9.9.9 in prose", text)          # body untouched
+
+
 class TestSetJsonVersion(unittest.TestCase):
 
     def test_absent_file_returns_false(self):

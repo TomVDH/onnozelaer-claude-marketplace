@@ -44,15 +44,27 @@ def _set_json_version(path: Path, version: str) -> bool:
 
 
 def _set_skill_version(path: Path, version: str) -> bool:
-    """Replace the `version:` line in SKILL.md frontmatter. Returns True if changed."""
+    """Replace the `version:` line inside SKILL.md's frontmatter BLOCK only
+    (a body line starting with `version:` must not be touched). Returns True
+    if changed; False when absent/unchanged/no frontmatter version."""
     if not path.is_file():
         return False
     text = path.read_text()
-    new = re.sub(r"(?m)^version:\s*\S+\s*$", f"version: {version}", text, count=1)
-    if new == text:
+    lines = text.split("\n")
+    if not lines or lines[0].rstrip() != "---":
         return False
-    path.write_text(new)
-    return True
+    close = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None)
+    if close is None:
+        return False
+    for i in range(1, close):
+        m = re.match(r"^version:\s*(\S+)\s*$", lines[i])
+        if m:
+            if m.group(1) == version:
+                return False
+            lines[i] = f"version: {version}"
+            path.write_text("\n".join(lines))
+            return True
+    return False
 
 
 def _set_marketplace_version(path: Path, plugin: str, version: str) -> bool:
@@ -93,8 +105,13 @@ def bump(plugin: str, version: str, root: Path = ROOT) -> list[str]:
     targets = [
         (plugin_dir / ".claude-plugin" / "plugin.json", _set_json_version),
         (plugin_dir / "scripts" / "command-metadata.json", _set_json_version),
-        (plugin_dir / "skills" / plugin / "SKILL.md", _set_skill_version),
     ]
+    # Every skill's SKILL.md with a frontmatter `version:` — not just the one
+    # named after the plugin (cabinet-of-imd's skill dir is `crew-roster`).
+    targets.extend(
+        (skill_md, _set_skill_version)
+        for skill_md in sorted((plugin_dir / "skills").glob("*/SKILL.md"))
+    )
     for path, fn in targets:
         if fn(path, version):
             changed.append(str(path.relative_to(root)))
