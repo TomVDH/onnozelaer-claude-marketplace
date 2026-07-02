@@ -30,12 +30,28 @@ except Exception:
   [ ! -f "$breadcrumb" ] && return 0
 
   local vault_path slug
-  # Breadcrumb format is `key: value` (YAML-ish, written by connect.py).
-  vault_path=$(sed -n 's/^vault_path:[[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
-  slug=$(sed -n 's/^slug:[[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
+  # Breadcrumb format is `key: value` (YAML-ish, written by connect.py);
+  # legacy pre-v0.4.0 `key=value` tolerated, matching the Python hooks.
+  vault_path=$(sed -n 's/^vault_path[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
+  slug=$(sed -n 's/^slug[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
+
+  [ -z "$slug" ] && return 0
+  vault_path="${vault_path/#\~/$HOME}"
+
+  # Cross-machine fallback: when the absolute vault_path doesn't exist here,
+  # delegate to _vault_walk.resolve_vault (vault_name candidates, OB_VAULT) —
+  # the single source of truth the verbs use. Best-effort, never blocks.
+  if [ ! -d "$vault_path" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+     && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_vault_walk.py" ]; then
+    vault_path=$(python3 -c 'import sys
+sys.path.insert(0, sys.argv[1])
+from pathlib import Path
+from _vault_walk import resolve_vault
+v = resolve_vault(Path(sys.argv[2]))
+print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true)
+  fi
 
   [ -z "$vault_path" ] && return 0
-  [ -z "$slug" ] && return 0
   [ ! -d "$vault_path" ] && return 0
 
   # --- 2. Inject context block ---

@@ -30,6 +30,12 @@ except Exception:  # pragma: no cover - defensive
     def stamp_source_session(*_a, **_k):  # type: ignore
         return False
 
+try:
+    from _vault_walk import _candidate_vault_paths
+except Exception:  # pragma: no cover - defensive
+    def _candidate_vault_paths(_name):  # type: ignore
+        return []
+
 
 def read_breadcrumb(project_dir: Path) -> dict:
     """Read `.claude/adjudant` breadcrumb (`key: value` per line, YAML-ish).
@@ -64,7 +70,15 @@ def main() -> int:
     if not vault_path or not slug:
         return 0
 
-    vault = Path(vault_path)
+    vault = Path(vault_path).expanduser()
+    if not vault.is_dir():
+        # Cross-machine fallback: vault_name against standard locations
+        vault = next(
+            (c for c in _candidate_vault_paths(info.get("vault_name", "")) if c.is_dir()),
+            None,
+        ) if info.get("vault_name") else None
+        if vault is None:
+            return 0  # stale breadcrumb — fail closed, never log to a phantom path
     project_root = vault / "projects" / slug
 
     try:

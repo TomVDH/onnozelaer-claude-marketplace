@@ -40,6 +40,36 @@ class TestFailClosedOnStaleVault(unittest.TestCase):
             self.assertFalse(phantom.exists(),
                              "stale vault path must NOT be materialized by the hook")
 
+    def test_vault_name_fallback_resolves_on_second_machine(self):
+        # Cross-machine: absolute vault_path is from the other Mac, but the
+        # vault exists under a standard location on THIS machine.
+        import _vault_walk
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "code"
+            vault = Path(tmp) / "cands" / "MyVault"
+            (vault / "projects" / "demo").mkdir(parents=True)
+            self._breadcrumb(project, "/other-machine/vault")
+            (project / ".claude" / "adjudant").write_text(
+                f"vault_path: /other-machine/vault\nvault_name: MyVault\nslug: demo\nmode: project\n")
+            (project / ".remember").mkdir()
+            (project / ".remember" / "remember.md").write_text("NEXT: x\n")
+
+            orig = precompact._candidate_vault_paths
+            precompact._candidate_vault_paths = lambda name: [Path(tmp) / "cands" / name]
+            os.environ["CLAUDE_PROJECT_DIR"] = str(project)
+            argv_before = sys.argv
+            sys.argv = ["precompact.py", "--sync-only"]
+            try:
+                rc = precompact.main()
+            finally:
+                sys.argv = argv_before
+                del os.environ["CLAUDE_PROJECT_DIR"]
+                precompact._candidate_vault_paths = orig
+
+            self.assertEqual(rc, 0)
+            self.assertTrue((vault / "projects" / "demo" / "_handoff.md").is_file(),
+                            "vault_name fallback must find the local vault")
+
     def test_real_vault_still_gets_handoff_mirror(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "code"

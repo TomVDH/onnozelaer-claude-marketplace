@@ -32,6 +32,12 @@ try:
 except Exception:  # pragma: no cover - defensive: hook must never crash on import
     _FRESHNESS = False
 
+try:
+    from _vault_walk import _candidate_vault_paths
+except Exception:  # pragma: no cover - defensive
+    def _candidate_vault_paths(_name):  # type: ignore
+        return []
+
     def parse_next_line(_text):  # type: ignore
         return None
 
@@ -120,7 +126,7 @@ def sync_handoff(project_dir: Path, vault: Path, slug: str, today: str, ts: str,
         handoff = vault / "projects" / slug / "_handoff.md"
         handoff.parent.mkdir(parents=True, exist_ok=True)
         handoff.write_text(content)
-    except OSError:
+    except Exception:  # hook must never crash compaction, whatever the cause
         return
 
 
@@ -140,7 +146,7 @@ def append_pause_marker(project_dir: Path, session_file: Path, ts: str) -> None:
         if session_file.exists():
             with session_file.open("a") as f:
                 f.write(marker + "\n")
-    except OSError:
+    except Exception:  # hook must never crash compaction, whatever the cause
         return
 
 
@@ -158,10 +164,17 @@ def main() -> int:
 
     vault = Path(vault_path).expanduser()
     if not vault.is_dir():
-        # Stale/cross-machine breadcrumb — fail closed. Writing anyway would
-        # materialize a phantom vault directory chain (mkdir -p) on every
-        # compaction instead of surfacing the misconfiguration.
-        return 0
+        # Cross-machine breadcrumb: try vault_name against standard locations
+        # (same candidates the verbs use) before giving up.
+        vault_name = info.get("vault_name", "")
+        vault = next(
+            (c for c in _candidate_vault_paths(vault_name) if c.is_dir()), None
+        ) if vault_name else None
+        if vault is None:
+            # Stale breadcrumb — fail closed. Writing anyway would materialize
+            # a phantom vault directory chain (mkdir -p) on every compaction
+            # instead of surfacing the misconfiguration.
+            return 0
 
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
