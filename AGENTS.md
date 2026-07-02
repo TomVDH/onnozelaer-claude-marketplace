@@ -8,7 +8,7 @@
 .
 ├── .claude-plugin/
 │   └── marketplace.json     # Marketplace manifest — lists every plugin with version + description
-├── adjudant/                # v0.1.0 — Vault editor/writer + project initializer (successor to the retired obsidian-bridge)
+├── adjudant/                # v0.10.0 — Vault editor/writer + project initializer, /adjudant with ten verbs and a three-tier cleanup model (successor to the retired obsidian-bridge)
 ├── cabinet-of-imd/          # v3.0.0 — Crew/persona flavor layer (functionality sunset; character-only)
 ├── cli-wrapper-helper/      # v1.0.0 — Bash TUI + Python helper script patterns
 ├── gemineye/               # v0.2.0 — Gemini as sandboxed review partner
@@ -32,12 +32,20 @@
 4. Commit per the conventional-commits style below.
 
 For plugins that follow the **Impeccable pattern** (one skill, one root command with sub-verbs):
-- `source/skills/<plugin>/` is canonical
-- `.claude/skills/<plugin>/` and `.gemini/skills/<plugin>/` are symlinks to source
+- `<plugin>/skills/<plugin>/` is the real canonical directory (content lives here)
+- `source/skills/<plugin>/`, `.claude/skills/<plugin>/`, and `.gemini/skills/<plugin>/` are all symlinks into it (`harness-parity` validator enforces they resolve to the canonical dir)
 - `scripts/validate.py` enforces drift defense
 - `scripts/command-metadata.json` is the single source of truth for verb metadata
 
 `adjudant/` is the reference implementation of this pattern.
+
+### Bumping a plugin version
+
+A plugin's version is kept in lockstep across up to four files (`plugin.json`,
+`scripts/command-metadata.json`, `SKILL.md` frontmatter, and the `marketplace.json`
+entry). Don't edit them by hand — run `python3 scripts/bump_plugin_version.py <plugin>
+<X.Y.Z>` to write all of them atomically (idempotent; enforced by the
+`version-consistency` validator + `check_marketplace_versions.py`).
 
 ## Build & validate
 
