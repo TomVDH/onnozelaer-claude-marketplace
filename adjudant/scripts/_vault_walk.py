@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from collections import Counter
@@ -80,7 +81,8 @@ def parse_frontmatter(text: str) -> tuple[Frontmatter, str]:
 
 
 _KEY_RE = re.compile(r"^([A-Za-z_][\w-]*)\s*:\s*(.*)$")
-_LIST_ITEM_RE = re.compile(r"^(\s+)-\s+(.*)$")
+# Zero-or-more indent: Obsidian tolerates flush-left list items under a key
+_LIST_ITEM_RE = re.compile(r"^(\s*)-\s+(.*)$")
 
 
 def _parse_minimal_yaml(text: str) -> dict[str, Any]:
@@ -140,6 +142,16 @@ def _parse_minimal_yaml(text: str) -> dict[str, Any]:
                 i += 1
                 continue
 
+        # Flow-style list: tags: [a, b] — parse into a real list, not a scalar
+        if rest.startswith("[") and rest.endswith("]"):
+            inner = rest[1:-1].strip()
+            result[key] = (
+                [_strip_quotes(part.strip()) for part in inner.split(",") if part.strip()]
+                if inner else []
+            )
+            i += 1
+            continue
+
         # Single-line value
         # Preserve literal "null"/"~" as the string so drift detection can flag it,
         # rather than coercing to Python None.
@@ -166,12 +178,17 @@ class Wikilink:
     heading: Optional[str]
     line: int
     raw: str
+    is_embed: bool = False  # ![[...]] — attachment/transclusion, not a nav link
 
 
 WIKILINK_RE = re.compile(r"\[\[(.+?)\]\]")
 ALIAS_SEP_RE = re.compile(r"\\?\|")  # | or \|, both alias separators
 TAG_RE = re.compile(r"(?:^|[\s,()])#([A-Za-z][\w/-]*)")
-MD_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+\.md(?:#[^)\s]*)?)\)")
+# Scheme lookahead keeps external URLs ending in .md (e.g. GitHub blobs) out
+MD_LINK_RE = re.compile(r"\[([^\]]*)\]\((?![a-z][a-z0-9+.-]*://)([^)\s]+\.md(?:#[^)\s]*)?)\)")
+# Wikilink target extensions the vault index can resolve; anything else
+# (png, pdf, …) is an attachment and not checkable against the index
+INDEXABLE_LINK_EXTS = (".md", ".canvas", ".base")
 URL_RE = re.compile(r"https?://\S+")
 # Inline code spans (single-line): `…`. Triple backticks are fenced blocks,
 # handled separately. Substituting with spaces preserves line geometry.
@@ -215,12 +232,14 @@ def extract_wikilinks(body: str) -> list[Wikilink]:
                 target, heading = target.split("#", 1)
                 target = target.strip()
                 heading = heading.strip()
+            is_embed = m.start() > 0 and scan[m.start() - 1] == "!"
             links.append(Wikilink(
                 target=target,
                 alias=alias,
                 heading=heading,
                 line=lineno,
                 raw=m.group(0),
+                is_embed=is_embed,
             ))
     return links
 
@@ -288,7 +307,12 @@ class VaultFile:
         return t if isinstance(t, str) else None
 
 
-DEFAULT_SKIP: tuple[str, ...] = (".git", "node_modules", "__pycache__", ".obsidian", ".trash")
+DEFAULT_SKIP: tuple[str, ...] = (
+    ".git", "node_modules", "__pycache__", ".obsidian", ".trash",
+    # adjudant's own scratch dirs — never scan a pending preview/backup
+    ".adjudant-tidy-preview", ".adjudant-tidy-backup",
+    ".adjudant-port-preview", ".adjudant-port-backup",
+)
 
 
 def walk_project(
@@ -386,6 +410,24 @@ def resolve_wikilink(target: str, index: set[str]) -> bool:
     return False
 
 
+def is_checkable_wikilink(wl: Wikilink) -> bool:
+    """True if this wikilink can be validated against the vault index.
+
+    Not checkable (and therefore never "broken"):
+      - embeds (``![[image.png]]``) — attachments aren't indexed
+      - empty targets (``[[#Heading]]``) — same-file heading links
+      - targets with a non-md/canvas/base extension — attachments by name
+    """
+    if wl.is_embed:
+        return False
+    if not wl.target:
+        return False
+    lower = wl.target.lower()
+    if "." in lower.rsplit("/", 1)[-1] and not lower.endswith(INDEXABLE_LINK_EXTS):
+        return False
+    return True
+
+
 # ============================================================
 # Breadcrumb + vault resolution (port.py patterns)
 # ============================================================
@@ -409,13 +451,27 @@ def _candidate_vault_paths(vault_name: str) -> list[Path]:
     might live. Used as a cross-machine portability fallback when an
     absolute `vault_path` in the breadcrumb doesn't resolve on this user."""
     home = Path.home()
-    return [
+    candidates = [
         home / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents" / vault_name,
+        # Generic iCloud Drive (vault stored outside the Obsidian app container)
+        home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / vault_name,
+        home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Obsidian" / vault_name,
         home / "Documents" / vault_name,
         home / "Documents" / "Obsidian" / vault_name,
         home / "Obsidian" / vault_name,
-        home / "Dropbox" / "Obsidian" / vault_name,
+        home / "Dropbox" / "Obsidian" / vault_name,  # legacy pre-CloudStorage mount
     ]
+    # Modern provider mounts: ~/Library/CloudStorage/<Provider>/[Obsidian/]<name>
+    cloud_storage = home / "Library" / "CloudStorage"
+    if cloud_storage.is_dir():
+        try:
+            for provider in sorted(cloud_storage.iterdir()):
+                if provider.is_dir():
+                    candidates.append(provider / vault_name)
+                    candidates.append(provider / "Obsidian" / vault_name)
+        except OSError:
+            pass
+    return candidates
 
 
 def resolve_vault(
@@ -430,7 +486,9 @@ def resolve_vault(
       4. .claude/obsidian-bridge legacy breadcrumb `vault:` field
       5. walk up parents for `Home.md` with `type: vault-home`
     """
-    # 1. Env var override
+    # 1. Env var override (explicit param wins; OB_VAULT read when not passed)
+    if env_vault is None:
+        env_vault = os.environ.get("OB_VAULT")
     if env_vault:
         p = Path(env_vault).expanduser()
         if p.is_dir():
@@ -698,7 +756,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         idx = build_vault_index(vault_dir)
         for f in files:
             for wl in f.wikilinks:
-                if not resolve_wikilink(wl.target, idx):
+                if is_checkable_wikilink(wl) and not resolve_wikilink(wl.target, idx):
                     broken_wl += 1
 
     output: dict[str, Any] = {

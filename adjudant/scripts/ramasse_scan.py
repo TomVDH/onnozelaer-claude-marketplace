@@ -42,6 +42,7 @@ from _vault_walk import (
     build_vault_index,
     is_bucket_b_migration,
     is_bucket_d_tag,
+    is_checkable_wikilink,
     resolve_vault,
     resolve_wikilink,
     smart_project_dir, VaultUnresolvableError,
@@ -294,6 +295,10 @@ def detect_broken_wikilinks(files: list[VaultFile], vault_index: set[str]) -> di
     total = 0
     for f in files:
         for wl in f.wikilinks:
+            # Embeds, same-file heading links, and attachments can't resolve
+            # against the index — they are not broken, just uncheckable.
+            if not is_checkable_wikilink(wl):
+                continue
             total += 1
             if not resolve_wikilink(wl.target, vault_index):
                 broken.append((str(f.rel_path), wl.line, wl.target))

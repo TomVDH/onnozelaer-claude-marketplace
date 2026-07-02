@@ -128,7 +128,9 @@ def add_to_session_id_list(session_file: Path, uuid: str) -> bool:
         m = re.match(r"^\s*-\s*(.*)$", lines[j])
         if not m:
             break
-        list_items.append(m.group(1).strip())
+        # Strip quotes so `- "uuid"` dedupes against the bare uuid (mirrors
+        # the inline-list branch)
+        list_items.append(m.group(1).strip().strip('"').strip("'"))
         j += 1
 
     if after_colon in ("", "[]"):

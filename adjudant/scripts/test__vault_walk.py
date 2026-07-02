@@ -489,6 +489,61 @@ class TestSmartProjectDir(unittest.TestCase):
                 smart_project_dir(str(code))
 
 
+class TestRoundThreeRegressions(unittest.TestCase):
+    """v0.11.0 primitives fixes."""
+
+    def test_md_link_re_ignores_external_urls(self):
+        from _vault_walk import MD_LINK_RE
+        line = "see [readme](https://github.com/x/y/blob/main/README.md) and [n](notes/n.md)"
+        paths = [m.group(2) for m in MD_LINK_RE.finditer(line)]
+        self.assertEqual(paths, ["notes/n.md"])
+
+    def test_embed_flag_set(self):
+        links = extract_wikilinks("An embed ![[diagram.png]] and a link [[note]].")
+        by_target = {l.target: l for l in links}
+        self.assertTrue(by_target["diagram.png"].is_embed)
+        self.assertFalse(by_target["note"].is_embed)
+
+    def test_is_checkable_wikilink(self):
+        from _vault_walk import is_checkable_wikilink
+        links = extract_wikilinks(
+            "![[img.png]] [[#Heading]] [[attach.pdf]] [[real-note]] [[art.canvas]]")
+        checkable = [l.target for l in links if is_checkable_wikilink(l)]
+        self.assertEqual(checkable, ["real-note", "art.canvas"])
+
+    def test_flow_style_tags_parse_as_list(self):
+        fm, _ = parse_frontmatter("---\ntags: [project, adjudant]\n---\n")
+        self.assertEqual(fm.fields["tags"], ["project", "adjudant"])
+
+    def test_flow_style_empty_list(self):
+        fm, _ = parse_frontmatter("---\nstack: []\n---\n")
+        self.assertEqual(fm.fields["stack"], [])
+
+    def test_zero_indent_block_list(self):
+        fm, _ = parse_frontmatter("---\ntags:\n- a\n- b\n---\n")
+        self.assertEqual(fm.fields["tags"], ["a", "b"])
+
+    def test_ob_vault_env_override(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            os.environ["OB_VAULT"] = tmp
+            try:
+                self.assertEqual(resolve_vault(Path("/nonexistent-project")), Path(tmp))
+            finally:
+                del os.environ["OB_VAULT"]
+
+    def test_walk_project_skips_scratch_dirs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "notes").mkdir()
+            (root / "notes" / "real.md").write_text("# real")
+            scratch = root / ".adjudant-tidy-preview" / "files" / "notes"
+            scratch.mkdir(parents=True)
+            (scratch / "pending.md").write_text("# pending")
+            names = [f.rel_path.name for f in walk_project(root)]
+            self.assertEqual(names, ["real.md"])
+
+
 class TestResolveProjectFromCwd(unittest.TestCase):
 
     def test_returns_context_when_breadcrumb_present(self):

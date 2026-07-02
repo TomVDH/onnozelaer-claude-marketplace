@@ -79,6 +79,14 @@ class TestSessionIdList(unittest.TestCase):
             self.assertFalse(add_to_session_id_list(Path(tmp) / "nope.md", UUID1))
 
 
+    def test_quoted_block_item_dedupes(self):
+        # Regression: `- "uuid"` evaded the idempotency check -> duplicate rows
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self._session(Path(tmp), f'type: session\nsession_id:\n  - "{UUID1}"\ntags:\n  - session\n')
+            self.assertFalse(add_to_session_id_list(f, UUID1))
+            self.assertEqual(f.read_text().count(UUID1), 1)
+
+
 class TestSourceSessionStamp(unittest.TestCase):
 
     def _decision(self, tmp: Path, name: str = "2026-06-26-pick-x.md") -> Path:

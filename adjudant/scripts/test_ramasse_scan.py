@@ -301,6 +301,20 @@ class TestDetectWikilinkFormViolations(unittest.TestCase):
 
 class TestDetectBrokenWikilinks(unittest.TestCase):
 
+    def test_embeds_and_heading_links_not_broken(self):
+        # ![[img.png]] (attachment) and [[#Head]] (same-file) are uncheckable,
+        # not broken — they used to be false positives.
+        from _vault_walk import extract_wikilinks
+        import types
+        f = types.SimpleNamespace(
+            rel_path=Path("notes/n.md"),
+            wikilinks=extract_wikilinks("![[img.png]] [[#Head]] [[real]] [[missing]]"),
+        )
+        out = detect_broken_wikilinks([f], {"real.md", "real"})
+        self.assertEqual(out["total_wikilinks"], 2)      # only checkable ones counted
+        self.assertEqual(out["broken_count"], 1)
+        self.assertEqual(out["samples"][0]["target"], "missing")
+
     def test_counts_broken(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

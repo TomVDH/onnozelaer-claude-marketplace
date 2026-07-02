@@ -23,8 +23,10 @@ LIGHT_YELLOW_MAX_H = 8.0
 
 TIME_RE = re.compile(r"\b([01]?\d|2[0-3]):([0-5]\d)\b")
 DATE_IN_NAME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
-# `NEXT: ...` in any leading markup form: `NEXT:`, `- NEXT:`, `**NEXT:**`, `## NEXT —`
-NEXT_INLINE_RE = re.compile(r"^[\s>#*\-]*\**\s*NEXT\**\s*[:\-–—]\s*(.+?)\s*$", re.IGNORECASE)
+# `NEXT: ...` in any leading markup form: `NEXT:`, `- NEXT:`, `**NEXT:**`, `## NEXT —`.
+# A plain hyphen only counts as the separator after whitespace, so compound
+# prose like "Next-day retry logic…" is not misread as a NEXT directive.
+NEXT_INLINE_RE = re.compile(r"^[\s>#*\-]*\**\s*NEXT\**\s*(?::|[–—]|\s[-–—])\s*(.+?)\s*$", re.IGNORECASE)
 # Hook-written session markers — noise, not real activity
 SESSION_MARKER_RE = re.compile(r"paused \(compaction\)|session ended", re.IGNORECASE)
 

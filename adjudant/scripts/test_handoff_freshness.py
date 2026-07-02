@@ -52,6 +52,13 @@ class TestParseNextLine(unittest.TestCase):
 # ============================================================
 
 
+    def test_compound_next_word_not_a_directive(self):
+        # Regression: "Next-day ..." prose matched via the bare-hyphen separator
+        self.assertIsNone(pc.parse_next_line("Next-day retry logic is planned.\n"))
+
+    def test_space_hyphen_separator_still_works(self):
+        self.assertEqual(pc.parse_next_line("NEXT - ship it\n"), "ship it")
+
 class TestTrafficLightAndAge(unittest.TestCase):
 
     def test_green_under_2h(self):
