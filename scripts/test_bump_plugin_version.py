@@ -87,6 +87,20 @@ class TestBump(unittest.TestCase):
             with self.assertRaises(KeyError):
                 bump("orphan", "0.2.0", root=root)
 
+    def test_unknown_plugin_leaves_all_files_untouched(self):
+        # Regression: the marketplace lookup used to run AFTER the plugin files
+        # were written, so a KeyError left partial lockstep state behind.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_tree(root, plugin="demo")
+            (root / "orphan" / ".claude-plugin").mkdir(parents=True)
+            pj = root / "orphan" / ".claude-plugin" / "plugin.json"
+            pj.write_text('{"name": "orphan", "version": "0.1.0"}\n')
+            before = pj.read_text()
+            with self.assertRaises(KeyError):
+                bump("orphan", "0.2.0", root=root)
+            self.assertEqual(pj.read_text(), before, "no file may be written on failure")
+
     def test_missing_plugin_dir_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

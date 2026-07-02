@@ -80,6 +80,15 @@ def bump(plugin: str, version: str, root: Path = ROOT) -> list[str]:
     if not plugin_dir.is_dir():
         raise KeyError(f"no plugin directory: {plugin_dir}")
 
+    # Validate the marketplace entry BEFORE any write — otherwise a KeyError
+    # here would leave the plugin files bumped but the marketplace stale
+    # (partial lockstep), defeating the point of this script.
+    mk_path = root / ".claude-plugin" / "marketplace.json"
+    if mk_path.is_file():
+        entries = json.loads(mk_path.read_text()).get("plugins", [])
+        if not any(p.get("name") == plugin for p in entries):
+            raise KeyError(f"plugin {plugin!r} not found in {mk_path}")
+
     changed: list[str] = []
     targets = [
         (plugin_dir / ".claude-plugin" / "plugin.json", _set_json_version),
