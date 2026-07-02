@@ -17,6 +17,8 @@ Validators:
  11. tidy-preview-coherence  — if tidy preview dir exists, has summary.md + changes.json + files/
  12. tidy-backup-integrity   — tidy backup dirs have at least one .legacy file
  13. gitignore-includes-tidy-dirs — .gitignore lists tidy dirs if either exists
+ 14. reference-files-exist   — every reference/*.md named in command-metadata.json and the SKILL.md router exists
+ 15. verb-surface-parity     — every verb name appears in plugin.json / README.md / marketplace description; spelled-out verb counts match
 """
 
 import json
@@ -363,6 +365,95 @@ def validate_version_consistency(r: Result) -> None:
     r.add_pass(name)
 
 
+def _load_command_metadata() -> Path:
+    """Locate command-metadata.json (same two-path logic as coherence check)."""
+    meta_file = ROOT / "adjudant" / "scripts" / "command-metadata.json"
+    if not meta_file.exists():
+        meta_file = ROOT / "scripts" / "command-metadata.json"
+    return meta_file
+
+
+def validate_reference_files_exist(r: Result) -> None:
+    """Every reference/*.md named in command-metadata.json or the SKILL.md
+    router must exist on disk — a verb pointing at a missing runbook is dead."""
+    name = "reference-files-exist"
+    meta_file = _load_command_metadata()
+    skill_file = CANONICAL / "SKILL.md"
+    if not meta_file.exists() or not skill_file.exists():
+        r.add_fail(name, f"missing {meta_file} or {skill_file}")
+        return
+    try:
+        meta = json.loads(meta_file.read_text())
+    except json.JSONDecodeError as e:
+        r.add_fail(name, f"command-metadata.json invalid: {e}")
+        return
+    wanted: set[str] = set()
+    for v in meta.get("verbs", []):
+        ref = v.get("reference", "")
+        if ref:
+            wanted.add(ref)
+    # reference/<file>.md paths cited in the SKILL.md router table
+    wanted.update(re.findall(r"`(reference/[\w-]+\.md)`", skill_file.read_text()))
+    missing = sorted(p for p in wanted if not (CANONICAL / p).is_file())
+    if missing:
+        r.add_fail(name, f"referenced files missing on disk: {missing}")
+        return
+    r.add_pass(name)
+
+
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+}
+
+
+def validate_verb_surface_parity(r: Result) -> None:
+    """The doc surfaces that enumerate verbs must all know every verb: each verb
+    name appears in plugin.json's description, the plugin README, and the
+    marketplace entry (when present); and any spelled-out '<N> verbs' count
+    matches command-metadata.json. Catches the 'nine verbs' escape class."""
+    name = "verb-surface-parity"
+    meta_file = _load_command_metadata()
+    try:
+        verbs = [v["name"] for v in json.loads(meta_file.read_text()).get("verbs", [])]
+    except (OSError, json.JSONDecodeError) as e:
+        r.add_fail(name, f"could not read command-metadata.json: {e}")
+        return
+    surfaces: dict[str, str] = {}
+    pj = ROOT / ".claude-plugin" / "plugin.json"
+    if pj.is_file():
+        try:
+            surfaces["plugin.json"] = json.loads(pj.read_text()).get("description", "")
+        except json.JSONDecodeError:
+            surfaces["plugin.json"] = ""
+    readme = ROOT / "README.md"
+    if readme.is_file():
+        surfaces["README.md"] = readme.read_text()
+    mk = ROOT.parent / ".claude-plugin" / "marketplace.json"
+    if mk.is_file():
+        try:
+            entry = next((p for p in json.loads(mk.read_text()).get("plugins", []) if p.get("name") == "adjudant"), None)
+            if entry is not None:
+                surfaces["marketplace.json"] = entry.get("description", "")
+        except json.JSONDecodeError:
+            pass
+    problems: list[str] = []
+    for surface, text in surfaces.items():
+        missing = [v for v in verbs if v not in text]
+        if missing:
+            problems.append(f"{surface} missing verbs: {missing}")
+        for word, n in ((m.group(1).lower(), _NUMBER_WORDS[m.group(1).lower()])
+                        for m in re.finditer(r"\b(\w+)\s+verbs\b", text, re.I)
+                        if m.group(1).lower() in _NUMBER_WORDS):
+            if n != len(verbs):
+                problems.append(f"{surface} says '{word} verbs' but metadata has {len(verbs)}")
+    if problems:
+        r.add_fail(name, "; ".join(problems))
+        return
+    r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -379,6 +470,8 @@ def main() -> int:
     validate_tidy_preview_coherence(r)
     validate_tidy_backup_integrity(r)
     validate_gitignore_includes_tidy_dirs(r)
+    validate_reference_files_exist(r)
+    validate_verb_surface_parity(r)
     return r.report()
 
 

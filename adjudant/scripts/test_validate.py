@@ -29,14 +29,20 @@ def _build(root: Path, *, version: str = "1.0.0", verbs=("connect", "check")) ->
         f"| Verb | Loads | Purpose |\n|---|---|---|\n{rows}\n"
     )
 
+    for v in verbs:
+        (canonical / "reference" / f"{v}.md").write_text(f"# /adjudant {v}\n")
+
     (plugin / ".claude-plugin").mkdir(parents=True)
     (plugin / ".claude-plugin" / "plugin.json").write_text(
-        json.dumps({"name": "adjudant", "version": version}, indent=2) + "\n")
+        json.dumps({"name": "adjudant", "version": version,
+                    "description": f"verbs: {', '.join(verbs)}"}, indent=2) + "\n")
+    (plugin / "README.md").write_text(f"# adjudant\n\nverbs: {', '.join(verbs)}\n")
 
     (plugin / "scripts").mkdir(parents=True)
     (plugin / "scripts" / "command-metadata.json").write_text(
         json.dumps({"name": "adjudant", "version": version,
-                    "verbs": [{"name": v} for v in verbs]}, indent=2) + "\n")
+                    "verbs": [{"name": v, "reference": f"reference/{v}.md"} for v in verbs]},
+                   indent=2) + "\n")
 
     for h in ("source", ".claude", ".gemini"):
         d = plugin / h / "skills"
@@ -45,7 +51,8 @@ def _build(root: Path, *, version: str = "1.0.0", verbs=("connect", "check")) ->
 
     (root / ".claude-plugin").mkdir(parents=True)
     (root / ".claude-plugin" / "marketplace.json").write_text(
-        json.dumps({"plugins": [{"name": "adjudant", "version": version}]}, indent=2) + "\n")
+        json.dumps({"plugins": [{"name": "adjudant", "version": version,
+                                 "description": f"verbs: {', '.join(verbs)}"}]}, indent=2) + "\n")
 
     return plugin
 
@@ -129,6 +136,42 @@ class TestTidyBackupIntegrity(_PatchedTree):
         r = Result()
         validate.validate_tidy_backup_integrity(r)
         self.assertEqual(r.failures, [])
+
+
+class TestReferenceFilesExist(_PatchedTree):
+
+    def test_passes_when_all_references_exist(self):
+        r = Result()
+        validate.validate_reference_files_exist(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_a_reference_file_is_missing(self):
+        (self.plugin / "skills" / "adjudant" / "reference" / "check.md").unlink()
+        r = Result()
+        validate.validate_reference_files_exist(r)
+        self.assertTrue(any("reference-files-exist" in f for f in r.failures))
+
+
+class TestVerbSurfaceParity(_PatchedTree):
+
+    def test_passes_when_all_surfaces_know_all_verbs(self):
+        r = Result()
+        validate.validate_verb_surface_parity(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_readme_missing_a_verb(self):
+        (self.plugin / "README.md").write_text("# adjudant\n\nverbs: connect\n")  # no 'check'
+        r = Result()
+        validate.validate_verb_surface_parity(r)
+        self.assertTrue(any("README.md missing verbs" in f for f in r.failures))
+
+    def test_fails_on_wrong_spelled_out_verb_count(self):
+        # The escape class this validator exists for: "nine verbs" surviving a
+        # verb addition. Fixture has 2 verbs; claim nine.
+        (self.plugin / "README.md").write_text("# adjudant\n\nnine verbs: connect, check\n")
+        r = Result()
+        validate.validate_verb_surface_parity(r)
+        self.assertTrue(any("says 'nine verbs' but metadata has 2" in f for f in r.failures))
 
 
 class TestCommandMetadataCoherence(_PatchedTree):
