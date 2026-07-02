@@ -20,11 +20,12 @@ python3 "$(dirname "$0")/../../../scripts/sitrep.py" \
 
 JSON output shape (top-level keys):
 - `project` — brief fields (slug, title, project_type, status, updated)
-- `vault_path` — absolute path to the resolved vault (where the vault is)
+- `vault_path` — absolute path to the resolved vault (breadcrumb hint, or a
+  `Home.md` walk-up fallback in direct-path mode; null only if both fail)
 - `purpose` — one-line project title/purpose
 - `freshness` — `{light: 🟢/🟡/🔴/⚪, age: "3h", last_activity: ISO or null}`
 - `were_doing` — timestamp of the most recent real activity (from `.remember/today-*.md`)
-- `whats_done` — `{last_session, last_decision, counts}`
+- `whats_done` — `{last_session, last_decision, counts, total_files}`
 - `next_step` — the single NEXT action parsed from `_handoff.md` (or null)
 - `open_signals` — latest dream drift signal, if any
 
@@ -37,7 +38,7 @@ One sentence per line. Concise, yet very clear.
 ```
 {freshness.light} 🧭 Where we are — {purpose}; last touched {freshness.age} ago.
 ✅ What's done — {counts summarised in plain words, e.g. "12 notes, 4 decisions, 3 work sessions"}; last session {whats_done.last_session}.
-📁 The vault — {vault_path} ({total files} files).
+📁 The vault — {vault_path} ({whats_done.total_files} files).
 👉 Start here — {next_step, in plain imperative}.
 ```
 

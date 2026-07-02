@@ -191,7 +191,7 @@ Anything actually present under the project but not in (defaults ∪ `extra_fold
 
 ### Auto-created
 
-- `dreams/` — created on first `/adjudant dream --save` invocation. Not in defaults.
+- `dreams/` — created when the dream flow writes its phase-3 report. Not in defaults.
 - `canvases/`, `bases/` — created on first `/adjudant draw canvas/base` invocation if not in defaults.
 
 ### The `_index.md` rule
@@ -200,7 +200,7 @@ Every folder under a project (or at vault root) that holds ≥2 sibling `.md` fi
 
 **Exceptions:** `sessions/` (chronological ordering is the index), `images/`, `assets/`, `previews/`, and `iterations/` plus the iteration folders inside it (non-text / build artefacts — HTML tryouts, experiments; the optional `_iteration.md` is the only conformant file, and artefacts carry no frontmatter).
 
-**Index shape:** `# {Collection Name}`, one-line description, `## Entries` with wikilinks. Chronological where dates are in filenames; alphabetical otherwise. `/adjudant ramasse` rebuilds these mechanically.
+**Index shape:** `# {Collection Name}`, one-line description, `## Entries` with wikilinks. Chronological where dates are in filenames; alphabetical otherwise. `/adjudant tidy` rebuilds these mechanically (ramasse only detects gaps).
 
 ---
 

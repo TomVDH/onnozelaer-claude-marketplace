@@ -47,7 +47,7 @@ python3 "$(dirname "$0")/../../../scripts/dream.py" \
 
 Optional flags: `--today YYYY-MM-DD` (override "now" for age math — deterministic), `--stale-days N` (staleness threshold, default 180), `--include-legacy`.
 
-The JSON catalog (the **comparator catalog**) carries seven categories:
+The JSON catalog (the **comparator catalog**) carries ten categories:
 
 | Key | What it surfaces |
 |---|---|
@@ -114,7 +114,7 @@ Default: current project (resolved from the `.claude/adjudant` breadcrumb — `d
 
 ## Lineage — the original `/dream`
 
-This verb's content checks descend from an earlier `/dream` (its historical two-pass design is preserved in `docs/superpowers/specs/2026-04-30-obsidian-bridge-design.md` §13): a structural-sanitation pass — now split across `tidy` + `ramasse` — and a content-analysis pass (contradictions, stale info, dangling scopes, unacted decisions, documentation gaps). adjudant `dream` is that content pass, modernised into a read-only comparator catalog. **It is fully standalone** — it has no dependency on, and no interoperation with, any other plugin; the report is always dry, with no personality layer.
+This verb's content checks descend from an earlier `/dream` (its historical two-pass design is preserved in `docs/superpowers/2026-04-30-obsidian-bridge.design.md` §13): a structural-sanitation pass — now split across `tidy` + `ramasse` — and a content-analysis pass (contradictions, stale info, dangling scopes, unacted decisions, documentation gaps). adjudant `dream` is that content pass, modernised into a read-only comparator catalog. **It is fully standalone** — it has no dependency on, and no interoperation with, any other plugin; the report is always dry, with no personality layer.
 
 ## When NOT to use dream
 

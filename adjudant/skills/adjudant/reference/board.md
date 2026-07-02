@@ -103,9 +103,18 @@ Re-running `board` does not wipe in-progress card state:
 `board.html` is always re-emitted from the canonical template — never hand-fork
 instantiations; change `templates/board.html` and re-run.
 
+## Merge provenance (refresh-without-clobber)
+
+Task-seeded cards carry `source: task`. On re-seed, a `source: task` card whose
+backing `tasks/*.md` note disappeared is parked in `icebox` (never deleted);
+cards **without** task provenance (hand-added in the board UI, or from a
+pre-provenance deck) keep their current column untouched.
+
 ## Fail conditions
 
-- No breadcrumb at cwd → exit non-zero with "run `/adjudant connect` first".
+- No breadcrumb at cwd → the target dir is treated as the vault project dir itself
+  and the board scaffolds there (deliberate scaffold-anywhere escape hatch; run
+  `/adjudant connect` first if you wanted the breadcrumb flow).
 - `--project`/`--all` with no resolvable vault → exit non-zero ("pass `--vault PATH`
   or run from a connected project").
 - `--project <slug>` not found → exit non-zero, listing the available slugs.

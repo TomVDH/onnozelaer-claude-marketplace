@@ -24,7 +24,7 @@ Per `reference/vault-standards.md`: `.canvas` and `.base` files use **strict keb
 ## Fail conditions
 
 - No breadcrumb at cwd → exit non-zero with "run `/adjudant connect` first"
-- `canvas/` or `bases/` subfolder doesn't exist and project_type doesn't list it as default → either declare in brief's `extra_folders` first, or pass `--add-folder` to auto-add (declared in brief at that point)
+- `canvases/` or `bases/` subfolder doesn't exist and project_type doesn't list it as default → declare it in the brief's `extra_folders` first, then create it
 - File already exists at target path → open for editing, don't recreate
 
 ## What draw does NOT do

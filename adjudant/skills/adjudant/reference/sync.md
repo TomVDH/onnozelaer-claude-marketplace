@@ -4,9 +4,9 @@ Push current project state to the linked vault. Always runs the full pass — no
 
 ## The 3 features (locked spec)
 
-1. **Brief refresh** — update `{vault}/projects/{slug}/brief.md` frontmatter (`updated:` field to today, `status:` if changed in working tree)
-2. **Handoff mirror** — copy `.remember/remember.md` body into `{vault}/projects/{slug}/_handoff.md` (preserve handoff frontmatter; update `updated:` + attribution line)
-3. **Index refresh** — refresh `{vault}/projects/{slug}/_index.md` entries from current sibling files
+1. **Brief refresh** — update `{vault}/projects/{slug}/brief.md` frontmatter (`updated:` field to today)
+2. **Handoff mirror** — copy `.remember/remember.md` body into `{vault}/projects/{slug}/_handoff.md` (preserve handoff frontmatter — only `updated:` is bumped; template used solely for brand-new handoffs)
+3. **Project-row refresh** — update this project's row (counts, last session) in the global `{vault}/projects/_index.md` table. Per-folder `_index.md` rebuilds inside the project are `/adjudant tidy`'s job, not sync's.
 
 ## Inputs
 

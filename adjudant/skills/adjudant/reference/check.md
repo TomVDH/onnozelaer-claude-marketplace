@@ -4,9 +4,9 @@ Read-only summary. Never writes. Backed by `check.py` which scans the project me
 
 ## The 3 features (locked spec)
 
-1. **Current project state** — brief summary (title, type, status), recent sessions (last by date), decisions count, handoff freshness (timestamp + delta vs now)
-2. **Vault snapshot** — project counts by status, drift flags from last `/adjudant dream` run
-3. **Schema compliance check** — quick frontmatter + tag conformance (full audit is `/adjudant dream`)
+1. **Current project state** — brief summary (title, type, status), recent sessions/decisions (last by date), handoff freshness (timestamp + delta vs now)
+2. **Folder counts** — non-index `.md` counts per standard folder (decisions, sessions, dreams, notes, …)
+3. **Drift signal** — date + item count from this project's latest dream report (`dreams/{date}-dream.md`); full audit is `/adjudant dream`
 
 ## Run
 
@@ -57,7 +57,7 @@ None. Operates on the project resolved from `.claude/adjudant` breadcrumb at cwd
 
 ## Fail conditions
 
-- No breadcrumb at cwd → render vault-wide snapshot only (sections 2 + 3 vault-wide); skip section 1
+- No breadcrumb at cwd and arg isn't a vault project dir → exit non-zero pointing at `/adjudant connect`
 - Vault path unreachable → exit non-zero with message
 
 ## See also

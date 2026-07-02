@@ -48,7 +48,7 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. | (runbook) |
 | `/adjudant board [--project <slug>\|--all]` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. One project, a named one, or the whole vault. Re-seeds without clobbering dragged cards. | `board.py` |
 
-All helpers follow the breadcrumb: pass `--project-dir` pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
+All helpers follow the breadcrumb: pass `--project-dir` (connect/port also accept it as an alias of their original `--project-root`) pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
 
 ## Architecture
 

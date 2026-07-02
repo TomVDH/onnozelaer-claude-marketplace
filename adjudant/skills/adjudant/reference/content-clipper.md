@@ -1,4 +1,4 @@
-> **`adjudant` vault?** Clipped notes land as `type: source` (or `type: note`). Populate frontmatter per `adjudant:vault-standards (reference/vault-standards.md) § Source` — `project:` piped wikilink, `tags: [ob/source]`, ISO `created:` date.
+> **`adjudant` vault?** Clipped notes land as `type: source` (or `type: note`). Populate frontmatter per `adjudant:vault-standards (reference/vault-standards.md)` §2A file-type tags — `project:` piped wikilink, `tags:` with the bare `source` file-type tag (never `ob/*` — deprecated), ISO `created:` date.
 
 # Obsidian Web Clipper Template Creator
 
