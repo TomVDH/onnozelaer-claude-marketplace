@@ -1,5 +1,6 @@
 """Tests for adjudant/scripts/port.py."""
 
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -394,7 +395,45 @@ class TestGeneratePreviewXBriefIsFile(unittest.TestCase):
             self.assertIn("type: project-brief", content)
 
 
-from port import apply_preview
+from port import apply_preview, _apply_vault_change
+
+
+class TestVaultSideBackup(unittest.TestCase):
+    """Regression: REPLACE-FROM-PROPOSED overwrote existing vault files with no
+    backup while the summary claimed 'Originals backed up'."""
+
+    def test_replace_backs_up_existing_vault_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preview = root / ".adjudant-port-preview"
+            preview.mkdir()
+            (preview / "brief.md.proposed").write_text("# new brief\n")
+            vault_proj = root / "vault" / "projects" / "demo"
+            vault_proj.mkdir(parents=True)
+            live = vault_proj / "brief.md"
+            live.write_text("# ORIGINAL brief — must survive in backup\n")
+
+            _apply_vault_change(f"REPLACE-FROM-PROPOSED:{live}:brief.md.proposed", preview_dir=preview)
+
+            self.assertEqual(live.read_text(), "# new brief\n")
+            backup = root / ".adjudant-port-backup" / "vault" / "demo__brief.md.legacy"
+            self.assertTrue(backup.is_file(), "vault-side original must be backed up as .legacy")
+            self.assertIn("ORIGINAL brief", backup.read_text())
+
+    def test_replace_over_nonexistent_file_makes_no_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            preview = root / ".adjudant-port-preview"
+            preview.mkdir()
+            (preview / "brief.md.proposed").write_text("# new brief\n")
+            vault_proj = root / "vault" / "projects" / "demo"
+            vault_proj.mkdir(parents=True)
+            live = vault_proj / "brief.md"
+
+            _apply_vault_change(f"REPLACE-FROM-PROPOSED:{live}:brief.md.proposed", preview_dir=preview)
+
+            self.assertEqual(live.read_text(), "# new brief\n")
+            self.assertFalse((root / ".adjudant-port-backup").exists())
 
 
 class TestApplyPreviewGuards(unittest.TestCase):
@@ -556,7 +595,9 @@ class TestUpsertProjectIndexRow(unittest.TestCase):
             self.assertTrue(idx.is_file())
             text = idx.read_text()
             self.assertIn(self.SIX_COL_HEADER, text)
-            self.assertIn("[[projects/newproj/brief|newproj]]", text)
+            # connect's canonical form: index-relative link, escaped alias pipe
+            self.assertIn("[[newproj/brief\\|newproj]]", text)
+            self.assertNotIn("[[projects/newproj/brief|newproj]]", text)  # old broken-table form
             self.assertNotIn("| Slug | Brief |", text)  # never the legacy 2-column shape
 
     def test_idempotent_when_slug_already_referenced(self):
@@ -594,9 +635,33 @@ class TestUpsertProjectIndexRow(unittest.TestCase):
             _upsert_project_index_row(idx, "newproj")
             text = idx.read_text()
             self.assertIn("[[projects/existing/brief|existing]]", text)   # existing preserved
-            self.assertIn("[[projects/newproj/brief|newproj]]", text)     # new row added
+            self.assertIn("[[newproj/brief\\|newproj]]", text)            # new row, escaped form
             self.assertEqual(text.count(self.SIX_COL_HEADER), 1)          # exactly one table
             self.assertNotIn("| Slug | Brief |", text)
+
+    def test_idempotent_against_connect_written_row(self):
+        """Cross-writer regression: connect writes `[[{slug}/brief\\|{slug}]]`
+        (escaped, index-relative). port must recognize that row and not duplicate."""
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            idx.parent.mkdir()
+            original = (
+                "# All Projects\n\n" + self.SIX_COL_HEADER + "\n|---|---|---|---|---|---|\n"
+                "| [[hubspot/brief\\|hubspot]] | coding | active | 3 | 5 | 2026-05-01 |\n"
+            )
+            idx.write_text(original)
+            _upsert_project_index_row(idx, "hubspot")
+            self.assertEqual(idx.read_text(), original)  # recognized -> no duplicate
+
+    def test_row_never_contains_unescaped_pipe_in_wikilink(self):
+        """Regression: an unescaped `|` inside the wikilink splits the table cell."""
+        with tempfile.TemporaryDirectory() as tmp:
+            idx = Path(tmp) / "projects" / "_index.md"
+            _upsert_project_index_row(idx, "demo")
+            row_line = next(ln for ln in idx.read_text().splitlines() if "demo" in ln)
+            # 6 columns -> exactly 7 unescaped pipes
+            unescaped = re.findall(r"(?<!\\)\|", row_line)
+            self.assertEqual(len(unescaped), 7, row_line)
 
 
 import subprocess

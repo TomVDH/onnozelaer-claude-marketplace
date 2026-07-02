@@ -646,6 +646,13 @@ def _apply_vault_change(line: str, preview_dir: Optional[Path] = None) -> None:
         proposed_path = preview_dir / proposed_name
         if not proposed_path.is_file():
             raise RuntimeError(f"REPLACE-FROM-PROPOSED: {proposed_path} not found in preview")
+        # Vault-side files are outside create_backup's project-side list — back
+        # them up here so "Originals backed up" holds for the vault too.
+        if live_path.is_file():
+            backup_dir = preview_dir.parent / ".adjudant-port-backup" / "vault"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            backup_name = f"{live_path.parent.name}__{live_path.name}.legacy"
+            (backup_dir / backup_name).write_text(live_path.read_text())
         live_path.write_text(proposed_path.read_text())
     elif action == "REPLACE":
         pass  # leave as-is for legacy compat; tests should use REPLACE-FROM-PROPOSED now
@@ -701,7 +708,10 @@ def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
     """
     idx_path.parent.mkdir(parents=True, exist_ok=True)
     proj_type = _project_type_from_brief(idx_path.parent / slug)
-    row = f"| [[projects/{slug}/brief|{slug}]] | {proj_type} | active | — | — | — |"
+    # Canonical row form shared with connect.upsert_projects_index_row: link is
+    # index-relative ({slug}/brief, not projects/{slug}/brief) and the alias
+    # pipe MUST be escaped (\|) or it splits the markdown table cell.
+    row = f"| [[{slug}/brief\\|{slug}]] | {proj_type} | active | — | — | — |"
 
     if not idx_path.is_file():
         idx_path.write_text(
@@ -711,8 +721,9 @@ def _upsert_project_index_row(idx_path: Path, slug: str) -> None:
         return
 
     text = idx_path.read_text()
-    # Idempotency: already listed
-    if f"projects/{slug}/brief" in text:
+    # Idempotency: already listed — accept both historical row forms
+    # (connect's `[[{slug}/brief\|…` and old port's `[[projects/{slug}/brief|…`)
+    if re.search(r"\[\[(?:projects/)?" + re.escape(slug) + r"/brief[\\|\]]", text):
         return
     # Append only into the canonical 6-column index — never corrupt other formats
     if PROJECTS_INDEX_HEADER.replace(" ", "") in text.replace(" ", ""):
