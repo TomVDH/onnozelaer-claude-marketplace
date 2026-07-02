@@ -156,7 +156,13 @@ def main() -> int:
     if not vault_path or not slug:
         return 0
 
-    vault = Path(vault_path)
+    vault = Path(vault_path).expanduser()
+    if not vault.is_dir():
+        # Stale/cross-machine breadcrumb — fail closed. Writing anyway would
+        # materialize a phantom vault directory chain (mkdir -p) on every
+        # compaction instead of surfacing the misconfiguration.
+        return 0
+
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
     ts = now.strftime("%H:%M")
