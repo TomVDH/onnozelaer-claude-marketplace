@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir
+from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir, VaultUnresolvableError
 
 
 def _read_brief(project_dir: Path) -> dict[str, Any]:
@@ -108,14 +108,16 @@ def _latest_dream_signal(project_dir: Path) -> dict[str, Any]:
     dreams = project_dir / "dreams"
     if not dreams.is_dir():
         return {"present": False}
+    # Dream reports are written as {YYYY-MM-DD}-dream.md (reference/dream.md);
+    # bare {YYYY-MM-DD}.md accepted for hand-authored reports.
     candidates = sorted(
-        (f for f in dreams.iterdir() if f.is_file() and re.match(r"^\d{4}-\d{2}-\d{2}\.md$", f.name)),
+        (f for f in dreams.iterdir() if f.is_file() and re.match(r"^\d{4}-\d{2}-\d{2}(-dream)?\.md$", f.name)),
         reverse=True,
     )
     if not candidates:
         return {"present": False}
     latest = candidates[0]
-    info: dict[str, Any] = {"present": True, "file": latest.name, "date": latest.stem}
+    info: dict[str, Any] = {"present": True, "file": latest.name, "date": latest.name[:10]}
     try:
         text = latest.read_text(errors="replace")
         m = _DRIFT_HEADER_RE.search(text)
@@ -155,7 +157,11 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--out", help="Write JSON to FILE instead of stdout")
     args = parser.parse_args(argv)
 
-    project_dir, _vault_hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, _vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not project_dir.is_dir():
         # Breadcrumb resolved to a vault project that doesn't exist yet
         if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():

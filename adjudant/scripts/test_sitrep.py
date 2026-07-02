@@ -77,6 +77,20 @@ class TestRunSitrep(unittest.TestCase):
             rep = run_sitrep(root, now=now)
             self.assertIsNone(rep["next_step"])
 
+    def test_breadcrumb_flow_reads_remember_from_code_root(self):
+        # In the real flow the vault project dir and the code root are DIFFERENT
+        # directories: .remember/ lives at the code root only. Freshness must
+        # come from there, not from the vault dir (regression: always-⚪ bug).
+        with tempfile.TemporaryDirectory() as tmp:
+            vault_proj = Path(tmp) / "vault" / "projects" / "demo"
+            code_root = Path(tmp) / "code"
+            self._project(vault_proj)
+            _write(code_root / ".remember" / "today-2026-07-02.md", "- 10:30 · wrote code\n")
+            now = datetime(2026, 7, 2, 11, 0)
+            rep = run_sitrep(vault_proj, now=now, code_root=code_root)
+            self.assertEqual(rep["freshness"]["light"], "\U0001f7e2")
+            self.assertEqual(rep["freshness"]["age"], "30m")
+
     def test_empty_project_no_activity(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

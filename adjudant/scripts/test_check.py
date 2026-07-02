@@ -103,6 +103,18 @@ class TestLatestDreamSignal(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertFalse(_latest_dream_signal(Path(tmp))["present"])
 
+    def test_matches_real_dream_report_filename(self):
+        # The dream verb writes {YYYY-MM-DD}-dream.md (reference/dream.md §Phase 3);
+        # regression: the old regex only accepted bare {YYYY-MM-DD}.md.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dreams").mkdir()
+            (root / "dreams" / "2026-06-30-dream.md").write_text("# report\n**12 drift items**")
+            sig = _latest_dream_signal(root)
+            self.assertTrue(sig["present"])
+            self.assertEqual(sig["date"], "2026-06-30")
+            self.assertEqual(sig["drift_items"], 12)
+
 
 class TestRunCheck(unittest.TestCase):
 

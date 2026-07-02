@@ -29,7 +29,7 @@ from _handoff_freshness import (
     parse_next_line,
     traffic_light,
 )
-from _vault_walk import smart_project_dir
+from _vault_walk import smart_project_dir, VaultUnresolvableError
 from check import (
     _folder_counts,
     _latest_dream_signal,
@@ -53,14 +53,20 @@ def run_sitrep(
     project_dir: Path,
     vault_path: Optional[Path] = None,
     now: Optional[_dt.datetime] = None,
+    code_root: Optional[Path] = None,
 ) -> dict[str, Any]:
-    """Compose a read-only orientation snapshot. `now` is injectable for tests."""
+    """Compose a read-only orientation snapshot. `now` is injectable for tests.
+
+    `project_dir` is the vault project dir; `code_root` is the code-side project
+    root where `.remember/` lives (they differ in the breadcrumb flow — falls
+    back to `project_dir` when the two are the same directory).
+    """
     now = now or _dt.datetime.now()
 
     brief = _read_brief(project_dir)
     counts = _folder_counts(project_dir)
 
-    activity = latest_today_activity(project_dir / ".remember")
+    activity = latest_today_activity((code_root or project_dir) / ".remember")
     hours = age_hours(activity, now)
     freshness = {
         "light": traffic_light(hours),
@@ -96,7 +102,11 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--out", help="Write JSON to FILE instead of stdout")
     args = parser.parse_args(argv)
 
-    project_dir, vault_hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not project_dir.is_dir():
         if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
             print(
@@ -110,7 +120,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     vault_path = Path(args.vault_dir).expanduser() if args.vault_dir else vault_hint
-    report = run_sitrep(project_dir, vault_path)
+    code_root = Path(args.project_dir).expanduser().resolve()
+    report = run_sitrep(project_dir, vault_path, code_root=code_root)
 
     payload = json.dumps(report, indent=2, default=str)
     if args.out:
