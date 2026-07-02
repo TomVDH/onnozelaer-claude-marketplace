@@ -53,6 +53,16 @@ class TestSessionIdList(unittest.TestCase):
             self.assertFalse(add_to_session_id_list(f, UUID1))
             self.assertEqual(f.read_text(), before)
 
+    def test_inline_list_with_items_converts_to_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = self._session(Path(tmp), f"type: session\nsession_id: [{UUID1}]\ntags:\n  - session\n")
+            self.assertTrue(add_to_session_id_list(f, UUID2))
+            text = f.read_text()
+            self.assertIn("session_id:\n", text)
+            self.assertIn(f"  - {UUID1}", text)
+            self.assertIn(f"  - {UUID2}", text)
+            self.assertNotIn("[", text.split("---")[1])  # no inline bracket left in fm
+
     def test_refuses_empty_uuid(self):
         with tempfile.TemporaryDirectory() as tmp:
             f = self._session(Path(tmp), "type: session\ntags:\n  - session\n")
@@ -119,6 +129,17 @@ class TestSourceSessionStamp(unittest.TestCase):
             f.parent.mkdir()
             f.write_text("plain markdown, no frontmatter\n")
             self.assertFalse(stamp_source_session(f, UUID1))
+
+    def test_empty_uuid_safe_skip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = Path(tmp) / "notes" / "n.md"
+            f.parent.mkdir()
+            f.write_text("---\ntype: note\n---\n\nbody\n")
+            self.assertFalse(stamp_source_session(f, ""))
+
+    def test_missing_file_safe_skip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertFalse(stamp_source_session(Path(tmp) / "notes" / "nope.md", UUID1))
 
     def test_preserves_existing_fields_and_body(self):
         with tempfile.TemporaryDirectory() as tmp:
