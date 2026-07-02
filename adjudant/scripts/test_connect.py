@@ -79,6 +79,33 @@ class TestResolveVault(unittest.TestCase):
             resolved = resolve_vault_for_connect(vault / "projects" / "x", None, None)
             self.assertEqual(resolved.resolve(), vault.resolve())
 
+    def test_ob_vault_env_honored(self):
+        """reference/connect.md lists OB_VAULT in the resolution order — the
+        function ignored it entirely (regression)."""
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"; proj.mkdir()
+            vault = Path(tmp) / "envvault"; vault.mkdir()
+            os.environ["OB_VAULT"] = str(vault)
+            try:
+                resolved = resolve_vault_for_connect(proj, None, None)
+            finally:
+                del os.environ["OB_VAULT"]
+            self.assertEqual(resolved, vault)
+
+    def test_explicit_path_beats_ob_vault_env(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"; proj.mkdir()
+            env_vault = Path(tmp) / "envvault"; env_vault.mkdir()
+            arg_vault = Path(tmp) / "argvault"; arg_vault.mkdir()
+            os.environ["OB_VAULT"] = str(env_vault)
+            try:
+                resolved = resolve_vault_for_connect(proj, str(arg_vault), None)
+            finally:
+                del os.environ["OB_VAULT"]
+            self.assertEqual(resolved, arg_vault)
+
 
 # ============================================================
 # Step 1: breadcrumb

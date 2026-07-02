@@ -7,6 +7,7 @@ dispatches accordingly. See docs/superpowers/2026-05-26-adjudant-port.design.md.
 """
 
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -14,6 +15,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+from connect import validate_slug  # single source of the kebab-case rule
 
 
 def create_backup(project_root: Path, files_to_backup: list[Path]) -> Path:
@@ -58,7 +61,9 @@ def detect_flavor(project_root: Path) -> str:
     if (project_root / ".adjudant-port-preview").is_dir():
         return "preview"
 
-    if (project_root / ".adjudant-port-backup").is_dir() and _is_adjudant_compliant(project_root):
+    # Compliance alone is enough — the backup dir may have been cleaned or
+    # gitignored; a compliant project must never be re-detected as legacy.
+    if _is_adjudant_compliant(project_root):
         return "applied"
 
     if (project_root / ".claude" / "obsidian-bridge").is_file():
@@ -299,6 +304,19 @@ This file is for **Claude Code-specific overrides only**:
 {extra}"""
 
 
+def _agents_hash(project_root: Path) -> str:
+    """sha256 of AGENTS.md content, or 'absent'. Basis of the apply-time
+    staleness guard promised by reference/port.md."""
+    agents = project_root / "AGENTS.md"
+    if not agents.is_file():
+        return "absent"
+    return hashlib.sha256(agents.read_bytes()).hexdigest()
+
+
+def _write_source_hash(preview_dir: Path, project_root: Path) -> None:
+    (preview_dir / "source-hash.txt").write_text(_agents_hash(project_root) + "\n")
+
+
 def render_brief_md_y(legacy_brief_text: str, slug: str, project_type: str) -> str:
     """For Y flavor: produce a new adjudant-shape brief.md preserving the legacy body.
 
@@ -312,12 +330,21 @@ def render_brief_md_y(legacy_brief_text: str, slug: str, project_type: str) -> s
         body = body[fm_match.end():]
     body = body.lstrip()
 
+    today = datetime.now().strftime("%Y-%m-%d")
+    # Canonical brief frontmatter shape (templates/project-brief-*.md):
+    # type is `project` with project_type alongside — NOT type: project-brief-*.
     return (
         f"---\n"
-        f"type: project-brief-{project_type}\n"
+        f"type: project\n"
+        f"project_type: {project_type}\n"
         f"slug: {slug}\n"
+        f"aliases:\n"
+        f"  - {slug}\n"
         f"status: active\n"
-        f"updated: \n"
+        f"created: {today}\n"
+        f"updated: {today}\n"
+        f"tags:\n"
+        f"  - project\n"
         f"---\n"
         f"\n"
         f"{body}"
@@ -329,12 +356,18 @@ def generate_preview_y(
     vault_path: Path,
     project_type: str,
     project_name: str,
+    slug: Optional[str] = None,
 ) -> None:
-    """For Flavor Y: parse legacy files, run OB mapping, write preview dir."""
+    """For Flavor Y: parse legacy files, run OB mapping, write preview dir.
+
+    Slug precedence: explicit `slug` arg (CLI --slug) → legacy OB breadcrumb's
+    slug field → project_root.name.
+    """
     preview_dir = project_root / ".adjudant-port-preview"
     preview_dir.mkdir(exist_ok=True)
+    _write_source_hash(preview_dir, project_root)
 
-    slug = _parse_breadcrumb_field(project_root / ".claude" / "obsidian-bridge", "slug") or project_root.name
+    slug = slug or _parse_breadcrumb_field(project_root / ".claude" / "obsidian-bridge", "slug") or project_root.name
     vault_name = vault_path.name
 
     agents_legacy = project_root / "AGENTS.md"
@@ -461,6 +494,7 @@ def generate_preview_x(
     """For Flavor X: fresh-scaffold using templates only. No legacy parsing."""
     preview_dir = project_root / ".adjudant-port-preview"
     preview_dir.mkdir(exist_ok=True)
+    _write_source_hash(preview_dir, project_root)
     vault_name = vault_path.name
 
     agents_out = render_agents_md(
@@ -524,6 +558,7 @@ def generate_preview_z_scaffold(
     """
     preview_dir = project_root / ".adjudant-port-preview"
     preview_dir.mkdir(exist_ok=True)
+    _write_source_hash(preview_dir, project_root)
     vault_name = vault_path.name
 
     for name in ("AGENTS.md", "CLAUDE.md"):
@@ -581,6 +616,19 @@ def apply_preview(project_root: Path) -> None:
                 "The AI classifier step was not completed. "
                 "See reference/port.md AI classifier section, fill in the proposed files, "
                 "then re-run."
+            )
+
+    # Staleness guard (reference/port.md fail-conditions): AGENTS.md edited
+    # after the preview was generated must not be silently overwritten.
+    # Old previews without source-hash.txt skip the check (backward compat).
+    hash_file = preview / "source-hash.txt"
+    if hash_file.is_file():
+        recorded = hash_file.read_text().strip()
+        if recorded and recorded != _agents_hash(project_root):
+            raise RuntimeError(
+                "AGENTS.md changed since the preview was generated — applying "
+                "would overwrite those edits. Delete .adjudant-port-preview/ "
+                "and re-run the preview phase."
             )
 
     files_to_backup = [
@@ -661,8 +709,12 @@ def _apply_vault_change(line: str, preview_dir: Optional[Path] = None) -> None:
         if not target.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             if target.name == "brief.md":
+                slug = target.parent.name
+                today = datetime.now().strftime("%Y-%m-%d")
                 target.write_text(
-                    "---\ntype: project-brief\nstatus: active\nupdated: \n---\n\n"
+                    f"---\ntype: project\nproject_type: coding\nslug: {slug}\n"
+                    f"aliases:\n  - {slug}\nstatus: active\n"
+                    f"created: {today}\nupdated: {today}\ntags:\n  - project\n---\n\n"
                     "# Brief\n\n(Brief content goes here. Edit and re-run `/adjudant:adjudant sync`.)\n"
                 )
             else:
@@ -775,7 +827,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         description="Adjudant port verb — migrate legacy projects to adjudant compliance.",
     )
     parser.add_argument("phase", choices=["preview", "apply", "detect"], help="Phase to run")
-    parser.add_argument("--project-root", default=".", help="Project root path (default: cwd)")
+    parser.add_argument("--project-root", "--project-dir", dest="project_root",
+                        default=".", help="Project root path (default: cwd)")
     parser.add_argument("--vault-path", help="Vault path (overrides env/breadcrumb resolution)")
     parser.add_argument("--slug", help="Project slug (auto-derived if omitted)")
     parser.add_argument("--project-type", choices=["coding", "knowledge", "plugin", "tinkerage"], help="Project type")
@@ -813,11 +866,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         return 1
 
     slug = args.slug or root.name
+    slug_error = validate_slug(slug)
+    if slug_error:
+        print(f"[port] ERROR: {slug_error}. Pass --slug with a kebab-case name.", file=sys.stderr)
+        return 1
     project_type = args.project_type or "coding"
     project_name = args.project_name or slug.replace("-", " ").title()
 
     if flavor == "Y":
-        generate_preview_y(root, vault_path=vault_path, project_type=project_type, project_name=project_name)
+        # Only an explicit --slug overrides the legacy OB breadcrumb's slug
+        generate_preview_y(root, vault_path=vault_path, project_type=project_type,
+                           project_name=project_name, slug=args.slug)
     elif flavor == "Z":
         generate_preview_z_scaffold(root, vault_path=vault_path, slug=slug, project_type=project_type, project_name=project_name)
     elif flavor == "X":

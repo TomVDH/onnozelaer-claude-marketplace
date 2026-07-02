@@ -31,6 +31,17 @@ class TestDetectFlavor(unittest.TestCase):
             (root / "CLAUDE.md").write_text("@AGENTS.md\n\n# Claude-specific overrides\n")
             self.assertEqual(detect_flavor(root), "applied")
 
+    def test_compliant_without_backup_dir_still_applied(self):
+        """Regression: a compliant project whose backup dir was cleaned/gitignored
+        must NOT be re-detected as legacy and re-migrated."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "adjudant").write_text("vault_path: /tmp/v\nvault_name: v\nslug: x\nmode: project\n")
+            (root / "AGENTS.md").write_text("# Real Project\n\nAuthored content, not template.\n")
+            (root / "CLAUDE.md").write_text("@AGENTS.md\n")
+            self.assertEqual(detect_flavor(root), "applied")
+
     def test_obsidian_bridge_breadcrumb_returns_y(self):
         """If .claude/obsidian-bridge breadcrumb exists, flavor is Y."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -285,7 +296,8 @@ class TestGeneratePreviewY(unittest.TestCase):
             proposed_brief = (root / ".adjudant-port-preview" / "brief.md.proposed")
             self.assertTrue(proposed_brief.is_file())
             text = proposed_brief.read_text()
-            self.assertIn("type: project-brief-coding", text)
+            self.assertIn("type: project", text)              # canonical template shape
+            self.assertIn("project_type: coding", text)
             self.assertNotIn("type: project-brief-ob", text)
             self.assertIn("Original content.", text)
 
@@ -303,7 +315,8 @@ class TestGeneratePreviewY(unittest.TestCase):
             generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
             apply_preview(root)
             new_brief = (Path(vault) / "projects" / "p" / "brief.md").read_text()
-            self.assertIn("type: project-brief-coding", new_brief)
+            self.assertIn("type: project", new_brief)         # canonical template shape
+            self.assertIn("project_type: coding", new_brief)
             self.assertNotIn("type: project-brief-ob", new_brief)
             self.assertIn("Old content.", new_brief)
 
@@ -392,7 +405,8 @@ class TestGeneratePreviewXBriefIsFile(unittest.TestCase):
             self.assertTrue(brief.exists(), "brief.md should exist after apply_preview")
             self.assertTrue(brief.is_file(), "brief.md must be a FILE, not a directory")
             content = brief.read_text()
-            self.assertIn("type: project-brief", content)
+            self.assertIn("type: project", content)          # canonical template shape
+            self.assertIn("project_type: coding", content)
 
 
 from port import apply_preview, _apply_vault_change
@@ -434,6 +448,73 @@ class TestVaultSideBackup(unittest.TestCase):
 
             self.assertEqual(live.read_text(), "# new brief\n")
             self.assertFalse((root / ".adjudant-port-backup").exists())
+
+
+class TestStalenessGuard(unittest.TestCase):
+    """reference/port.md: 'AGENTS.md changed since preview generated → warn'."""
+
+    def _preview(self, root: Path, vault: str) -> None:
+        (root / ".claude").mkdir()
+        (root / ".claude" / "obsidian-bridge").write_text(f"vault: {vault}\nslug: p\n")
+        (root / "AGENTS.md").write_text("# P original\n")
+        (root / "CLAUDE.md").write_text("# P claude\n")
+        (Path(vault) / "projects" / "p").mkdir(parents=True)
+        generate_preview_y(root, vault_path=Path(vault), project_type="coding", project_name="P")
+
+    def test_preview_writes_source_hash(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._preview(root, vault)
+            h = root / ".adjudant-port-preview" / "source-hash.txt"
+            self.assertTrue(h.is_file())
+            self.assertEqual(len(h.read_text().strip()), 64)  # sha256 hex
+
+    def test_apply_aborts_when_agents_md_changed(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._preview(root, vault)
+            (root / "AGENTS.md").write_text("# P EDITED after preview\n")
+            with self.assertRaises(RuntimeError) as ctx:
+                apply_preview(root)
+            self.assertIn("re-run the preview", str(ctx.exception))
+            self.assertIn("# P EDITED after preview", (root / "AGENTS.md").read_text())  # untouched
+
+    def test_apply_proceeds_when_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._preview(root, vault)
+            apply_preview(root)  # no raise
+            self.assertFalse((root / ".adjudant-port-preview").exists())
+
+    def test_old_preview_without_hash_still_applies(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            self._preview(root, vault)
+            (root / ".adjudant-port-preview" / "source-hash.txt").unlink()  # legacy preview
+            (root / "AGENTS.md").write_text("# P edited\n")
+            apply_preview(root)  # backward compat: no guard, no raise
+
+
+class TestSlugHandling(unittest.TestCase):
+
+    def test_invalid_slug_rejected_in_preview_phase(self):
+        from port import main as port_main
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            rc = port_main(["preview", "--project-root", tmp,
+                            "--vault-path", vault, "--slug", "Bad Slug!"])
+            self.assertEqual(rc, 1)
+
+    def test_explicit_slug_overrides_ob_breadcrumb_for_y(self):
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as vault:
+            root = Path(tmp)
+            (root / ".claude").mkdir()
+            (root / ".claude" / "obsidian-bridge").write_text(f"vault: {vault}\nslug: old-slug\n")
+            (root / "AGENTS.md").write_text("# P\n")
+            generate_preview_y(root, vault_path=Path(vault), project_type="coding",
+                               project_name="P", slug="new-slug")
+            summary = (root / ".adjudant-port-preview" / "summary.md").read_text()
+            self.assertIn("new-slug", summary)
+            self.assertNotIn("old-slug", summary)
 
 
 class TestApplyPreviewGuards(unittest.TestCase):

@@ -111,6 +111,36 @@ class TestMirrorHandoff(unittest.TestCase):
             r = mirror_handoff(proj, handoff, "p", "2026-05-27")
             self.assertEqual(r, "no-source")
 
+    def test_preserves_existing_handoff_frontmatter(self):
+        """reference/sync.md: 'preserve handoff frontmatter'. Custom fields and
+        the template's extras must survive a re-mirror; only updated: bumps."""
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "now.md", "new state\n")
+            handoff = Path(tmp) / "_handoff.md"
+            handoff.write_text(
+                "---\ntype: handoff\nproject: \"[[projects/p/brief|p]]\"\n"
+                "created: 2026-01-01\nsource: now\ncodename: falcon\n"
+                "updated: 2026-05-01\ntags:\n  - handoff\n---\n\n# old\n\nold body\n"
+            )
+            r = mirror_handoff(proj, handoff, "p", "2026-05-27")
+            self.assertEqual(r, "mirrored")
+            content = handoff.read_text()
+            self.assertIn("created: 2026-01-01", content)   # custom field survives
+            self.assertIn("codename: falcon", content)      # custom field survives
+            self.assertIn("updated: 2026-05-27", content)   # bumped
+            self.assertNotIn("updated: 2026-05-01", content)
+            self.assertIn("new state", content)              # body regenerated
+
+    def test_adds_updated_when_existing_frontmatter_lacks_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "now.md", "state\n")
+            handoff = Path(tmp) / "_handoff.md"
+            handoff.write_text("---\ntype: handoff\n---\n\nbody\n")
+            mirror_handoff(proj, handoff, "p", "2026-05-27")
+            self.assertIn("updated: 2026-05-27", handoff.read_text())
+
     def test_includes_freshness_header(self):
         """Parity with the PreCompact hook: the verb writes the freshness block."""
         with tempfile.TemporaryDirectory() as tmp:

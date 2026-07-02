@@ -109,6 +109,38 @@ def find_remember_source(project_root: Path) -> Optional[Path]:
     return None
 
 
+def _preserved_frontmatter(handoff_path: Path, today: str) -> Optional[str]:
+    """Existing handoff frontmatter block with `updated:` bumped to today.
+
+    Per reference/sync.md the mirror must PRESERVE handoff frontmatter — a
+    handoff may carry fields the template doesn't know about (created,
+    session_id, custom keys). Returns the block incl. fences + trailing blank
+    line, or None when the file is missing/has no valid frontmatter.
+    """
+    if not handoff_path.is_file():
+        return None
+    try:
+        lines = handoff_path.read_text(errors="replace").split("\n")
+    except OSError:
+        return None
+    if not lines or lines[0].rstrip() != "---":
+        return None
+    close_idx = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None)
+    if close_idx is None:
+        return None
+    block = lines[: close_idx + 1]
+    bumped = False
+    for i in range(1, close_idx):
+        m = re.match(r"^(updated\s*:\s*).*$", block[i])
+        if m:
+            block[i] = f"{m.group(1)}{today}"
+            bumped = True
+            break
+    if not bumped:
+        block.insert(close_idx, f"updated: {today}")
+    return "\n".join(block) + "\n\n"
+
+
 def mirror_handoff(
     project_root: Path,
     handoff_path: Path,
@@ -121,6 +153,9 @@ def mirror_handoff(
     Output shape matches the PreCompact hook's `sync_handoff` (single source of
     truth for the freshness block via `_handoff_freshness`), so a manual
     `/adjudant sync` and an auto-compaction sync produce identical handoffs.
+
+    An existing handoff keeps its frontmatter (only `updated:` is bumped);
+    the template is used solely for brand-new files.
 
     Returns: 'mirrored' / 'no-source'.
     """
@@ -138,8 +173,11 @@ def mirror_handoff(
     fresh = freshness_header(light, age_str, next_line, stale)
     fresh_block = f"{fresh}\n\n" if fresh else ""
 
+    frontmatter = _preserved_frontmatter(handoff_path, today) \
+        or HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today)
+
     new_content = (
-        f"{HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today)}"
+        f"{frontmatter}"
         f"# Handoff — {slug}\n\n"
         f"{fresh_block}"
         f"*Mirrored from `.remember/{source.name}` on {today}.*\n\n"

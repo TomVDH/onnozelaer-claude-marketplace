@@ -21,7 +21,7 @@ CLI:
         [--project-name "Display Name"]
 
 Resolution order (per field):
-    vault       → --vault-path → --vault-name → existing breadcrumb → walk up
+    vault       → --vault-path → OB_VAULT env → --vault-name → existing breadcrumb → walk up
     slug        → --slug → existing breadcrumb → cwd basename
     type        → --project-type → existing brief → required (fail if missing)
     name        → --project-name → existing brief heading → slug.title()
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -98,13 +99,20 @@ def resolve_vault_for_connect(
         if p.is_dir():
             return p
 
-    # 2. --vault-name argument → search standard locations
+    # 2. OB_VAULT env var (documented in reference/connect.md resolution order)
+    env = os.environ.get("OB_VAULT")
+    if env:
+        p = Path(env).expanduser()
+        if p.is_dir():
+            return p
+
+    # 3. --vault-name argument → search standard locations
     if vault_name_arg:
         for cand in _candidate_vault_paths(vault_name_arg):
             if cand.is_dir():
                 return cand
 
-    # 3. Existing breadcrumb (re-connect case)
+    # 4. Existing breadcrumb (re-connect case)
     bc = parse_breadcrumb(project_root)
     if bc:
         if "vault_path" in bc:
@@ -116,7 +124,7 @@ def resolve_vault_for_connect(
                 if cand.is_dir():
                     return cand
 
-    # 4. Walk up for Home.md
+    # 5. Walk up for Home.md
     return resolve_vault(project_root)
 
 
@@ -519,7 +527,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         prog="connect.py",
         description="Adjudant connect — onboard a project to the vault. Idempotent.",
     )
-    parser.add_argument("--project-root", default=".", help="Project root (default: cwd)")
+    parser.add_argument("--project-root", "--project-dir", dest="project_root",
+                        default=".", help="Project root (default: cwd)")
     parser.add_argument("--vault-path", help="Explicit vault path")
     parser.add_argument("--vault-name", help="Vault name (looked up under standard locations)")
     parser.add_argument("--slug", help="Project slug (kebab-case)")
