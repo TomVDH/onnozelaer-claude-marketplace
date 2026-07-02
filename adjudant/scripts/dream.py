@@ -49,7 +49,7 @@ from _vault_walk import (
     build_vault_index,
     resolve_vault,
     resolve_wikilink,
-    smart_project_dir,
+    smart_project_dir, VaultUnresolvableError,
     walk_project,
 )
 
@@ -792,7 +792,11 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
             print(f"error: --today not a valid YYYY-MM-DD: {args.today}", file=sys.stderr)
             return 1
 
-    project_dir, vault_hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not project_dir.is_dir():
         if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
             print(

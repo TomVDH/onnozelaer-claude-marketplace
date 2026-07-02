@@ -44,7 +44,7 @@ from _vault_walk import (
     is_bucket_d_tag,
     resolve_vault,
     resolve_wikilink,
-    smart_project_dir,
+    smart_project_dir, VaultUnresolvableError,
     walk_project,
 )
 
@@ -416,7 +416,11 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--include-legacy", action="store_true", help="Include _legacy/ in scan")
     args = parser.parse_args(argv)
 
-    project_dir, vault_hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not project_dir.is_dir():
         if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
             print(

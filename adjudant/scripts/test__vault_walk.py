@@ -19,6 +19,7 @@ from _vault_walk import (
     resolve_vault,
     resolve_project_from_cwd,
     smart_project_dir,
+    VaultUnresolvableError,
     is_bucket_d_tag,
     is_bucket_b_migration,
     BUCKET_A_TYPES,
@@ -474,6 +475,18 @@ class TestSmartProjectDir(unittest.TestCase):
             scan_dir, vault_hint = smart_project_dir(str(code))
             self.assertEqual(scan_dir.resolve(), (vault / "projects" / "p").resolve())
             self.assertEqual(vault_hint.resolve(), vault.resolve())
+
+    def test_raises_when_breadcrumb_present_but_vault_unresolvable(self):
+        # Regression: this used to fall through and return the CODE REPO as the
+        # scan dir, letting write-path verbs (tidy apply) rewrite the repository.
+        with tempfile.TemporaryDirectory() as tmp:
+            code = Path(tmp) / "code"; code.mkdir()
+            (code / ".claude").mkdir()
+            (code / ".claude" / "adjudant").write_text(
+                f"vault_path: {tmp}/does-not-exist\nvault_name: no-such-vault\nslug: p\nmode: project\n"
+            )
+            with self.assertRaises(VaultUnresolvableError):
+                smart_project_dir(str(code))
 
 
 class TestResolveProjectFromCwd(unittest.TestCase):

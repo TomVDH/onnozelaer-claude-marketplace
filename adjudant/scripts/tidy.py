@@ -44,7 +44,7 @@ from _vault_walk import (
     parse_frontmatter,
     resolve_vault,
     resolve_wikilink,
-    smart_project_dir,
+    smart_project_dir, VaultUnresolvableError,
     walk_project,
 )
 
@@ -683,7 +683,11 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--vault-dir", help="Vault root (default: resolved from breadcrumb)")
     args = parser.parse_args(argv)
 
-    project_dir, vault_hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not project_dir.is_dir():
         if (Path(args.project_dir).expanduser() / ".claude" / "adjudant").is_file():
             print(

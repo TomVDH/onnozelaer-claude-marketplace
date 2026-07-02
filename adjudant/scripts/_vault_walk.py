@@ -510,6 +510,14 @@ def resolve_project_from_cwd(cwd: Optional[Path] = None) -> Optional[ProjectCont
     )
 
 
+class VaultUnresolvableError(RuntimeError):
+    """A `.claude/adjudant` breadcrumb exists but the vault cannot be resolved.
+
+    Raised instead of falling back to the code repo as the scan dir — that
+    fallback would let write-path verbs (tidy apply) rewrite the repository.
+    """
+
+
 def smart_project_dir(project_dir_arg: str) -> tuple[Path, Optional[Path]]:
     """Resolve `--project-dir` smartly across helpers.
 
@@ -517,7 +525,9 @@ def smart_project_dir(project_dir_arg: str) -> tuple[Path, Optional[Path]]:
 
     - If the arg points at a directory containing `.claude/adjudant`:
       treat it as a code root, follow the breadcrumb, return the vault
-      project dir + vault path.
+      project dir + vault path. If the breadcrumb is present but the vault
+      cannot be resolved, raise VaultUnresolvableError — never fall back to
+      scanning the code repo itself.
     - Otherwise: treat the arg as already-the-vault-project-dir,
       return it unchanged + try to resolve the vault upward.
 
@@ -533,6 +543,11 @@ def smart_project_dir(project_dir_arg: str) -> tuple[Path, Optional[Path]]:
             # Breadcrumb exists but vault project dir missing — surface the
             # intended path so callers can error out with a clear message.
             return ctx.vault_project_dir, ctx.vault_path
+        raise VaultUnresolvableError(
+            f"breadcrumb at {breadcrumb} exists but the vault could not be resolved "
+            f"(bad slug or vault_path/vault_name points nowhere on this machine). "
+            f"Fix the breadcrumb or re-run /adjudant connect."
+        )
     # Treat as vault project path directly
     return arg_path, None
 

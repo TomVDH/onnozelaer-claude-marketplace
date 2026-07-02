@@ -40,7 +40,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir
+from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir, VaultUnresolvableError
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "skills" / "adjudant" / "templates" / "board.html"
 MARK_RE = re.compile(r"/\*BOARD_DATA_START\*/.*?/\*BOARD_DATA_END\*/", re.DOTALL)
@@ -353,7 +353,11 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
         return rc
 
     # ── Default: --project-dir (the current breadcrumb-linked project) ──
-    project_dir, _hint = smart_project_dir(args.project_dir)
+    try:
+        project_dir, _hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     dest = Path(args.dest).expanduser() if args.dest else (project_dir / "board")
     rc = scaffold_one(project_dir, dest, from_tasks=args.from_tasks, data=args.data,
                       force=args.force, title=args.title, board_id=None)
