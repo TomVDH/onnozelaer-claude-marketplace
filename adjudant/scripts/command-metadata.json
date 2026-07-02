@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "verbs": [
     {
       "name": "connect",
@@ -25,6 +25,12 @@
       "description": "Read-only summary — project state, vault snapshot, schema compliance. Calls check.py for the scan, Claude renders. Never writes.",
       "argumentHint": "(no args)",
       "reference": "reference/check.md"
+    },
+    {
+      "name": "sitrep",
+      "description": "ELI5 orientation briefing — where were we, what's done, where the vault is, and where best to start. Read-only; sitrep.py scans, Claude renders four plain-language lines. For re-orienting after a break; complements check (which reports schema compliance).",
+      "argumentHint": "(no args)",
+      "reference": "reference/sitrep.md"
     },
     {
       "name": "tidy",

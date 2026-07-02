@@ -1,15 +1,15 @@
 ---
 name: adjudant
-description: Obsidian vault operations. `/adjudant {connect|port|sync|check|tidy|ramasse|dream|draw|board}` for project-to-vault scaffolding, schema-enforced writes, structural + content cleanup, and a self-hosted work-order kanban board. Also fires when writing decisions/sessions/notes into a linked vault.
-version: 0.9.0
+description: Obsidian vault operations. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board}` for project-to-vault scaffolding, schema-enforced writes, structural + content cleanup, an ELI5 orientation briefing, and a self-hosted work-order kanban board. Also fires when writing decisions/sessions/notes into a linked vault.
+version: 0.10.0
 user-invocable: true
-argument-hint: "[connect|port|sync|check|tidy|ramasse|dream|draw|board] [args]"
+argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, nine verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
+Vault editor/writer and project initializer. One skill, one command, ten verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
@@ -19,6 +19,7 @@ Vault editor/writer and project initializer. One skill, one command, nine verbs.
 | `port` | `reference/port.md` | Migrate any legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance via two-phase preview → apply |
 | `sync` | `reference/sync.md` | Push brief + handoff to vault |
 | `check` | `reference/check.md` | Read-only project + vault summary (consumes `check.py` JSON) |
+| `sitrep` | `reference/sitrep.md` | ELI5 orientation briefing — where we were, what's done, where the vault is, where to start. Read-only (consumes `sitrep.py` JSON). For re-orienting after a break |
 | `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`) |
 | `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
 | `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic. Reads prose of decisions/notes/sessions; catches outdated info, contradictions, supersession, redundancy, stale refs, orphan threads. Judgment-heavy. Analysis via `dream.py`, judge + plan + execute via superpowers |
@@ -50,6 +51,7 @@ Every file-touching verb is backed by a Python helper. Helpers follow the `.clau
 | `ramasse` | `ramasse_scan.py` + `_vault_walk.py` | JSON drift catalog (analysis phase); planning + execute via superpowers |
 | `dream` | `dream.py` + `_vault_walk.py` | JSON content/staleness comparator catalog (analysis phase); judge + plan + execute via superpowers |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
+| `sitrep` | `sitrep.py` + `_vault_walk.py` | JSON orientation briefing (recent activity, NEXT, vault location + counts); Claude renders ELI5 |
 | `board` | `board.py` + `_vault_walk.py` | scaffold per-project `board-data.json` + a self-contained `board.html`; resolves any project by slug (or `--all`) via `enumerate_projects`. Refresh-without-clobber: re-seeding from `tasks/` merges, preserving dragged columns (idempotent; `--force` rebuilds) |
 
 `_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
