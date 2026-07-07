@@ -21,7 +21,8 @@ CLI:
     python3 board.py scaffold [--project-dir PATH | --project SLUG | --all]
                               [--vault PATH] [--dest DIR] [--from-tasks]
                               [--data board-data.json] [--title STR] [--force]
-    python3 board.py serve --dir DIR [--port 8787]
+    python3 board.py serve --dir DIR [--port 8787] [--open]
+    python3 board.py status [--project-dir PATH | --project SLUG | --all]
 
 `scaffold` is idempotent and *refresh-without-clobber*: re-running with
 `--from-tasks` against an existing board merges the current task state into the
@@ -107,6 +108,7 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
     if not tasks.is_dir():
         return []
     cards: list[dict[str, Any]] = []
+    seen: dict[str, str] = {}  # card id -> source filename (duplicate detection)
     for f in sorted(tasks.iterdir()):
         if not f.is_file() or f.suffix != ".md" or f.name == "_index.md":
             continue
@@ -119,8 +121,22 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
         if not category:
             tags = _as_list(fields.get("tags"))
             category = next((t for t in tags if t not in ("task", "tasks")), None)
+        # Duplicate ids corrupt the merge (last-wins) and the board UI (drag
+        # moves the wrong ticket) — disambiguate deterministically and warn.
+        cid = str(fields.get("code") or fields.get("id") or f.stem)
+        if cid in seen:
+            orig = cid
+            cid = f.stem
+            n = 2
+            while cid in seen:
+                cid = f"{f.stem}~{n}"
+                n += 1
+            print(f"[board] warning: duplicate card id '{orig}' in tasks/ "
+                  f"({seen[orig]}, {f.name}) — using '{cid}' for {f.name}",
+                  file=sys.stderr)
+        seen[cid] = f.name
         cards.append({
-            "id": str(fields.get("code") or fields.get("id") or f.stem),
+            "id": cid,
             "title": fields.get("title") or _first_heading(body) or f.stem,
             "column": STATUS_TO_COLUMN.get(status, "backlog"),
             "category": category or "task",
@@ -237,18 +253,32 @@ def merge_deck(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any
         out["title"] = existing["title"]
     if existing.get("subtitle"):
         out["subtitle"] = existing["subtitle"]
+    if existing.get("columns"):
+        # Columns are user-ownable deck data (added/renamed lanes) — a re-seed
+        # must not reset them to the six defaults, or cards dragged into a
+        # custom lane vanish from the rendered board.
+        out["columns"] = existing["columns"]
     return out
 
 
-def emit_html(deck: dict[str, Any], dest_html: Path) -> None:
+def render_template(deck: dict[str, Any]) -> str:
+    """The full board.html text with the deck injected. Raises before any file
+    is written when the template is missing/markerless, so a failed render
+    can't leave board-data.json and board.html out of sync."""
     if not TEMPLATE.is_file():
         raise FileNotFoundError(f"board template missing: {TEMPLATE}")
     tpl = TEMPLATE.read_text()
-    payload = "/*BOARD_DATA_START*/" + json.dumps(deck, indent=2) + "/*BOARD_DATA_END*/"
     if not MARK_RE.search(tpl):
         raise ValueError("template has no BOARD_DATA markers")
-    out = MARK_RE.sub(lambda _m: payload, tpl, count=1)
-    dest_html.write_text(out)
+    # Escape every `<` as \u003c — valid JSON *and* JS — so a task title
+    # containing `</script>` or `<!--` can't break out of the script block.
+    payload_json = json.dumps(deck, indent=2).replace("<", "\\u003c")
+    payload = "/*BOARD_DATA_START*/" + payload_json + "/*BOARD_DATA_END*/"
+    return MARK_RE.sub(lambda _m: payload, tpl, count=1)
+
+
+def emit_html(deck: dict[str, Any], dest_html: Path) -> None:
+    dest_html.write_text(render_template(deck))
 
 
 def _resolve_vault_root(args: argparse.Namespace) -> Optional[Path]:
@@ -278,8 +308,38 @@ def scaffold_one(
     bid = board_id or project_dir.name
     resolved_title = title or project_dir.name.replace("-", " ").title()
 
+    # `--force` alone over an existing board would rebuild an EMPTY starter
+    # deck on top of it — total loss of cards, notes, and drag state. Refuse.
+    if force and data_path.is_file() and not from_tasks and not data:
+        print("error: --force without --from-tasks (or --data) would overwrite "
+              "the existing board with an empty deck — refusing. "
+              "Add --from-tasks to rebuild from tasks/.", file=sys.stderr)
+        return 1
+    # Any force-rebuild over an existing deck keeps a one-shot escape hatch.
+    if force and data_path.is_file():
+        try:
+            shutil.copy2(data_path, data_path.with_name("board-data.json.bak"))
+        except OSError as e:
+            print(f"error: could not back up existing deck before --force: {e}", file=sys.stderr)
+            return 1
+
+    try:
+        if data:
+            deck = json.loads(Path(data).expanduser().read_text())
+            if not isinstance(deck, dict):
+                raise ValueError("deck root must be a JSON object")
+        elif data_path.is_file() and not force:
+            existing = json.loads(data_path.read_text())
+            if not isinstance(existing, dict):
+                raise ValueError("deck root must be a JSON object")
+        else:
+            existing = None
+    except (OSError, json.JSONDecodeError, ValueError) as e:
+        src = data if data else str(data_path)
+        print(f"error: could not read deck {src}: {e}", file=sys.stderr)
+        return 1
+
     if data:
-        deck = json.loads(Path(data).expanduser().read_text())
         deck.setdefault("version", DECK_VERSION)
         deck.setdefault("boardId", bid)
         deck.setdefault("subtitle", DEFAULT_SUBTITLE)
@@ -288,9 +348,7 @@ def scaffold_one(
         deck.setdefault("cards", [])
         if title:
             deck["title"] = title
-        data_path.write_text(json.dumps(deck, indent=2) + "\n")
     elif data_path.is_file() and not force:
-        existing = json.loads(data_path.read_text())
         if from_tasks:
             # refresh-without-clobber: merge current task state into the deck
             fresh = build_deck(project_dir, from_tasks=True, title=resolved_title, board_id=bid)
@@ -298,12 +356,14 @@ def scaffold_one(
         else:
             deck = existing            # keep the user's deck untouched
             deck.setdefault("boardId", bid)   # backfill id for pre-0.9 decks
-        data_path.write_text(json.dumps(deck, indent=2) + "\n")
     else:
         deck = build_deck(project_dir, from_tasks=from_tasks, title=resolved_title, board_id=bid)
-        data_path.write_text(json.dumps(deck, indent=2) + "\n")
 
-    emit_html(deck, dest / "board.html")
+    # Render FIRST: a missing/markerless template must fail before any write,
+    # never leaving board-data.json and board.html out of sync.
+    html = render_template(deck)
+    data_path.write_text(json.dumps(deck, indent=2) + "\n")
+    (dest / "board.html").write_text(html)
     print(f"[board] {dest}/board.html  ({len(deck.get('cards', []))} cards, {len(deck.get('columns', []))} stages)", file=sys.stderr)
     print(str(dest / "board.html"))
     return 0
@@ -373,18 +433,109 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    import errno
     import functools
     import http.server
     import socketserver
     directory = str(Path(args.dir).expanduser())
+
+    class _ReuseServer(socketserver.TCPServer):
+        # Survive TIME_WAIT restarts instead of dying with a raw traceback.
+        allow_reuse_address = True
+
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
-    with socketserver.TCPServer(("127.0.0.1", args.port), handler) as httpd:
-        print(f"[board] serving {directory} at http://localhost:{args.port}/board.html (Ctrl-C to stop)", file=sys.stderr)
+    try:
+        httpd = _ReuseServer(("127.0.0.1", args.port), handler)
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            print(f"error: port {args.port} is already in use — pass --port N "
+                  f"(or --port 0 for a free one)", file=sys.stderr)
+            return 1
+        raise
+    with httpd:
+        port = httpd.server_address[1]  # the REAL port (matters with --port 0)
+        url = f"http://localhost:{port}/board.html"
+        print(f"[board] serving {directory} at {url} (Ctrl-C to stop)", file=sys.stderr)
+        if getattr(args, "open", False):
+            import webbrowser
+            webbrowser.open(url)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\n[board] stopped", file=sys.stderr)
     return 0
+
+
+def _status_line(slug: str, board_dir: Path) -> tuple[str, bool]:
+    """One status line for a project's board. Returns (line, ok)."""
+    data_path = board_dir / "board-data.json"
+    if not data_path.is_file():
+        return f"{slug:24s} (no board — run scaffold)", False
+    try:
+        deck = json.loads(data_path.read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return f"{slug:24s} (unreadable board-data.json: {e})", False
+    columns = deck.get("columns") or []
+    cards = deck.get("cards") or []
+    known = {c.get("id") for c in columns}
+    counts = {c.get("id"): 0 for c in columns}
+    unknown: dict[str, int] = {}
+    for card in cards:
+        col = card.get("column")
+        if col in known:
+            counts[col] += 1
+        else:
+            unknown[str(col)] = unknown.get(str(col), 0) + 1
+    cols = " ".join(f"{cid}:{n}" for cid, n in counts.items())
+    line = f"{slug:24s} {cols}  ({len(cards)} cards, updated {deck.get('updated') or '—'})"
+    for col, n in sorted(unknown.items()):
+        line += f"\n{'':24s} warning: {n} card(s) in unknown column '{col}'"
+    return line, True
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Terminal column counts — see the board without opening a browser."""
+    if args.all or args.project:
+        vault = _resolve_vault_root(args)
+        if vault is None:
+            print("error: no vault resolved; pass --vault PATH or run from a connected project", file=sys.stderr)
+            return 1
+
+    if args.all:
+        if args.dest:
+            print("error: --dest cannot be combined with --all (each board lives at {project}/board/)", file=sys.stderr)
+            return 1
+        projects = enumerate_projects(vault)
+        if not projects:
+            print(f"error: no projects found under {vault}/projects", file=sys.stderr)
+            return 1
+        rc = 0
+        for slug, pdir in projects:
+            line, ok = _status_line(slug, pdir / "board")
+            print(line)
+            if not ok:
+                rc = 1
+        return rc
+
+    if args.project:
+        pdir = vault / "projects" / args.project
+        if not pdir.is_dir():
+            have = ", ".join(s for s, _ in enumerate_projects(vault)) or "(none)"
+            print(f"error: project '{args.project}' not found under {vault}/projects (have: {have})", file=sys.stderr)
+            return 1
+        line, ok = _status_line(args.project, Path(args.dest).expanduser() if args.dest else pdir / "board")
+        print(line)
+        return 0 if ok else 1
+
+    try:
+        project_dir, _hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    board_dir = Path(args.dest).expanduser() if args.dest else project_dir / "board"
+    line, ok = _status_line(project_dir.name, board_dir)
+    print(line)
+    return 0 if ok else 1
 
 
 def cli_main(argv: Optional[list[str]] = None) -> int:
@@ -406,8 +557,18 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
 
     sv = sub.add_parser("serve", help="serve a board dir over localhost (so disk-save works)")
     sv.add_argument("--dir", required=True, help="board dir to serve")
-    sv.add_argument("--port", type=int, default=8787)
+    sv.add_argument("--port", type=int, default=8787, help="port (0 picks a free one)")
+    sv.add_argument("--open", action="store_true", help="open the board in the default browser")
     sv.set_defaults(func=cmd_serve)
+
+    st = sub.add_parser("status", help="print per-column card counts without opening a browser")
+    st_mode = st.add_mutually_exclusive_group()
+    st_mode.add_argument("--project", help="target a named project by slug under {vault}/projects")
+    st_mode.add_argument("--all", action="store_true", help="status for every project in the vault")
+    st.add_argument("--project-dir", default=".", help="project root (breadcrumb-resolved; default cwd)")
+    st.add_argument("--vault", help="vault root for --project/--all (default: resolve from cwd breadcrumb)")
+    st.add_argument("--dest", help="board dir (default: {project}/board)")
+    st.set_defaults(func=cmd_status)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -1,5 +1,7 @@
 """Tests for adjudant/scripts/board.py."""
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ from board import (
     STATUS_TO_COLUMN,
     _as_list,
     _first_heading,
+    _status_line,
     build_deck,
     cards_from_tasks,
     emit_html,
@@ -22,6 +25,15 @@ from board import (
 def _write(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
+
+
+def _scaffold(*args, **kwargs) -> tuple[int, str]:
+    """scaffold_one with stdout/stderr captured — keeps the unittest output
+    clean and lets tests assert on warnings. Returns (rc, stderr)."""
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        rc = scaffold_one(*args, **kwargs)
+    return rc, err.getvalue()
 
 
 def _make_project(root: Path, slug: str, *, brief: bool = True) -> Path:
@@ -225,7 +237,7 @@ class TestScaffoldOne(unittest.TestCase):
                 "t2.md": "---\ncode: T-2\nstatus: next\ncategory: docs\n---\n# Two\n",
             })
             dest = proj / "board"
-            rc = scaffold_one(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
             self.assertEqual(rc, 0)
             data_path = dest / "board-data.json"
             deck = json.loads(data_path.read_text())
@@ -242,7 +254,7 @@ class TestScaffoldOne(unittest.TestCase):
                 "t1.md": "---\ncode: T-1\nstatus: backlog\ncategory: build\n---\n# One renamed\n",
                 "t3.md": "---\ncode: T-3\nstatus: review\ncategory: build\n---\n# Three\n",
             })
-            rc = scaffold_one(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
             self.assertEqual(rc, 0)
             deck = json.loads(data_path.read_text())
             by_id = {c["id"]: c for c in deck["cards"]}
@@ -257,12 +269,12 @@ class TestScaffoldOne(unittest.TestCase):
             proj = Path(tmp) / "proj"
             self._seed_tasks(proj, {"t1.md": "---\ncode: T-1\nstatus: backlog\n---\n# One\n"})
             dest = proj / "board"
-            scaffold_one(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
             data_path = dest / "board-data.json"
             deck = json.loads(data_path.read_text())
             deck["cards"][0]["column"] = "done"
             data_path.write_text(json.dumps(deck))
-            scaffold_one(proj, dest, from_tasks=True, data=None, force=True, title=None, board_id="proj")
+            _scaffold(proj, dest, from_tasks=True, data=None, force=True, title=None, board_id="proj")
             deck = json.loads(data_path.read_text())
             self.assertEqual(deck["cards"][0]["column"], "backlog")    # reset to status
 
@@ -271,7 +283,7 @@ class TestScaffoldOne(unittest.TestCase):
             proj = Path(tmp) / "proj"
             (proj).mkdir(parents=True)
             dest = proj / "board"
-            rc = scaffold_one(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
             self.assertEqual(rc, 0)
             deck = json.loads((dest / "board-data.json").read_text())
             self.assertEqual(deck["cards"], [])
@@ -284,7 +296,7 @@ class TestScaffoldOne(unittest.TestCase):
             dest.mkdir(parents=True)
             (dest / "board-data.json").write_text(json.dumps(
                 {"title": "Keep", "cards": [{"id": "K-1", "column": "doing"}], "columns": [], "categories": []}))
-            scaffold_one(proj, dest, from_tasks=False, data=None, force=False, title=None, board_id="proj")
+            _scaffold(proj, dest, from_tasks=False, data=None, force=False, title=None, board_id="proj")
             deck = json.loads((dest / "board-data.json").read_text())
             self.assertEqual(deck["title"], "Keep")
             self.assertEqual(deck["cards"][0]["column"], "doing")
@@ -325,6 +337,164 @@ class TestEmitHtml(unittest.TestCase):
             start = html.index("/*BOARD_DATA_START*/") + len("/*BOARD_DATA_START*/")
             end = html.index("/*BOARD_DATA_END*/")
             self.assertEqual(json.loads(html[start:end])["title"], "Z")
+
+    def test_escapes_script_breakout(self):
+        # A task title containing </script> must not close the injected
+        # script block (broken page / stored XSS on the local board).
+        hostile = "pwn </script><script>alert(1)</script>"
+        deck = {"title": hostile, "columns": [], "categories": [], "cards": []}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "board.html"
+            emit_html(deck, out)
+            html = out.read_text()
+            start = html.index("/*BOARD_DATA_START*/") + len("/*BOARD_DATA_START*/")
+            end = html.index("/*BOARD_DATA_END*/")
+            payload = html[start:end]
+            self.assertNotIn("</script>", payload)           # nothing can close the tag
+            self.assertNotIn("<!--", payload)                # no comment-opener either
+            self.assertEqual(json.loads(payload)["title"], hostile)  # round-trips intact
+
+
+class TestForceSafety(unittest.TestCase):
+
+    def _seeded_board(self, tmp: Path) -> tuple[Path, Path]:
+        proj = tmp / "proj"
+        _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: doing\n---\n# One\n")
+        dest = proj / "board"
+        rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+        assert rc == 0
+        return proj, dest
+
+    def test_force_without_from_tasks_refused(self):
+        # `--force` alone over an existing board would wipe it to an empty
+        # starter deck — must refuse instead of destroying data.
+        with tempfile.TemporaryDirectory() as tmp:
+            proj, dest = self._seeded_board(Path(tmp))
+            before = (dest / "board-data.json").read_text()
+            rc, err = _scaffold(proj, dest, from_tasks=False, data=None, force=True, title=None, board_id="proj")
+            self.assertEqual(rc, 1)
+            self.assertIn("refusing", err)
+            self.assertEqual((dest / "board-data.json").read_text(), before)  # untouched
+
+    def test_force_backs_up_existing_deck(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj, dest = self._seeded_board(Path(tmp))
+            deck = json.loads((dest / "board-data.json").read_text())
+            deck["cards"][0]["column"] = "done"  # user drag state
+            (dest / "board-data.json").write_text(json.dumps(deck))
+            rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=True, title=None, board_id="proj")
+            self.assertEqual(rc, 0)
+            bak = dest / "board-data.json.bak"
+            self.assertTrue(bak.is_file(), "--force must back up the deck it discards")
+            self.assertEqual(json.loads(bak.read_text())["cards"][0]["column"], "done")
+
+    def test_non_object_deck_friendly_error(self):
+        # Valid JSON that isn't an object (null/[]) must hit the same friendly
+        # error path, not an AttributeError traceback.
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            dest = proj / "board"
+            dest.mkdir(parents=True)
+            for payload in ("null", "[]"):
+                (dest / "board-data.json").write_text(payload)
+                rc, err = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+                self.assertEqual(rc, 1, payload)
+                self.assertIn("could not read deck", err)
+
+    def test_corrupt_deck_friendly_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            dest = proj / "board"
+            dest.mkdir(parents=True)
+            (dest / "board-data.json").write_text("{not json")
+            rc, err = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            self.assertEqual(rc, 1)
+            self.assertIn("could not read deck", err)
+
+
+class TestMergePreservesColumns(unittest.TestCase):
+
+    def test_custom_columns_survive_reseed(self):
+        # A user-added 'qa' lane (and the card dragged into it) must survive a
+        # --from-tasks re-scaffold; columns are user-ownable deck data.
+        custom_cols = [{"id": "backlog", "name": "Backlog"}, {"id": "qa", "name": "QA"}]
+        existing = {"title": "P", "columns": custom_cols, "categories": [],
+                    "cards": [{"id": "X-1", "column": "qa", "category": "build", "notes": ""}]}
+        fresh = {"title": "P", "columns": [{"id": "backlog", "name": "Backlog"}], "categories": [],
+                 "cards": [{"id": "X-1", "column": "backlog", "category": "build", "notes": ""}]}
+        out = merge_deck(existing, fresh)
+        self.assertEqual(out["columns"], custom_cols)
+        self.assertEqual(out["cards"][0]["column"], "qa")
+
+
+class TestDuplicateIds(unittest.TestCase):
+
+    def test_duplicate_codes_disambiguated_with_warning(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "tasks" / "a.md", "---\ncode: T-1\nstatus: doing\n---\n# A\n")
+            _write(root / "tasks" / "b.md", "---\ncode: T-1\nstatus: next\n---\n# B\n")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                cards = cards_from_tasks(root)
+            ids = [c["id"] for c in cards]
+            self.assertEqual(len(ids), len(set(ids)), f"ids must be unique, got {ids}")
+            self.assertIn("T-1", ids)
+            self.assertIn("b", ids)  # collision falls back to the filename stem
+            self.assertIn("duplicate card id 'T-1'", err.getvalue())
+
+    def test_warning_names_the_final_id_when_stem_also_collides(self):
+        # a.md has code 'b'; b.md also claims 'b' → b.md becomes 'b~2' and the
+        # warning must say so (not the intermediate stem).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "tasks" / "a.md", "---\ncode: b\nstatus: doing\n---\n# A\n")
+            _write(root / "tasks" / "b.md", "---\ncode: b\nstatus: next\n---\n# B\n")
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                cards = cards_from_tasks(root)
+            ids = sorted(c["id"] for c in cards)
+            self.assertEqual(ids, ["b", "b~2"])
+            self.assertIn("using 'b~2' for b.md", err.getvalue())
+
+
+class TestStatus(unittest.TestCase):
+
+    def test_status_line_counts_and_unknown_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: doing\n---\n# One\n")
+            _write(proj / "tasks" / "t2.md", "---\ncode: T-2\nstatus: done\n---\n# Two\n")
+            dest = proj / "board"
+            rc, _ = _scaffold(proj, dest, from_tasks=True, data=None, force=False, title=None, board_id="proj")
+            self.assertEqual(rc, 0)
+            line, ok = _status_line("proj", dest)
+            self.assertTrue(ok)
+            self.assertIn("doing:1", line)
+            self.assertIn("done:1", line)
+            self.assertIn("2 cards", line)
+            # a card in a removed column surfaces as a warning, not silence
+            deck = json.loads((dest / "board-data.json").read_text())
+            deck["cards"][0]["column"] = "qa"
+            (dest / "board-data.json").write_text(json.dumps(deck))
+            line, ok = _status_line("proj", dest)
+            self.assertTrue(ok)
+            self.assertIn("unknown column 'qa'", line)
+
+    def test_status_all_rejects_dest(self):
+        from board import cli_main
+        with tempfile.TemporaryDirectory() as tmp:
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                rc = cli_main(["status", "--all", "--dest", "somewhere", "--vault", tmp])
+            self.assertEqual(rc, 1)
+            self.assertIn("--dest cannot be combined with --all", err.getvalue())
+
+    def test_status_missing_board(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            line, ok = _status_line("ghost", Path(tmp) / "board")
+            self.assertFalse(ok)
+            self.assertIn("no board", line)
 
 
 if __name__ == "__main__":

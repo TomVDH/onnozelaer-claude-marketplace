@@ -61,6 +61,12 @@
     letter-spacing:.04em;text-transform:uppercase;border-bottom:1px dashed var(--border-strong)
   }
   .controls button:hover{color:var(--text);border-bottom-color:var(--text)}
+  .controls input#q{
+    font:inherit;background:none;border:none;border-bottom:1px dashed var(--border-strong);
+    color:var(--text);padding:0 0 1px;width:110px;letter-spacing:.04em;outline:none
+  }
+  .controls input#q::placeholder{color:var(--text-faint);text-transform:uppercase}
+  .controls input#q:focus{border-bottom-color:var(--text)}
   .conn{display:inline-flex;align-items:center;gap:6px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.1em}
   .conn::before{content:"";width:7px;height:7px;border:1.5px solid currentColor;border-radius:50%}
   .conn.on{color:var(--ok)} .conn.on::before{background:currentColor;border-color:currentColor}
@@ -73,8 +79,10 @@
   .stats b{color:var(--text);font-weight:700}
   .stats .sep{color:var(--border-strong)}
   .legend{display:flex;gap:var(--sp-4);flex-wrap:wrap}
-  .legend .k{display:inline-flex;align-items:center;gap:7px}
+  .legend .k{display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
   .legend .k i{width:9px;height:9px;background:var(--c);outline:1px solid color-mix(in oklch,var(--text) 28%,transparent);outline-offset:-1px}
+  .legend .k.off{opacity:.35}
+  .legend .k.on{text-decoration:underline;text-underline-offset:3px}
 
   /* ── Board: ruled manifest columns ── */
   .board{display:flex;gap:0;padding:0 var(--sp-6) var(--sp-6);overflow-x:auto;align-items:flex-start}
@@ -87,6 +95,8 @@
   .lane.muted .lane-head{border-bottom-color:var(--border-strong)}
   .lane-head .nm{font-family:var(--mono);font-weight:700;font-size:var(--fs-micro);letter-spacing:.18em;text-transform:uppercase}
   .lane-head .ct{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint)}
+  .lane-head .ct.over{color:oklch(58% 0.19 25);font-weight:700}
+  .lane.unfiled .lane-head{border-bottom-style:dashed}
   .lane-body{display:flex;flex-direction:column;gap:var(--sp-3);min-height:48px}
   .lane.drop .lane-body{outline:1.5px dashed var(--border-strong);outline-offset:6px}
   .lane-empty{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-faint);letter-spacing:.08em;padding:5px 0}
@@ -142,6 +152,7 @@
     </div>
     <div class="spacer"></div>
     <div class="controls">
+      <input id="q" type="search" placeholder="filter" spellcheck="false" autocomplete="off">
       <span class="conn" id="conn">local</span>
       <button id="connectBtn" type="button">connect file</button>
       <button id="downloadBtn" type="button">download</button>
@@ -163,6 +174,9 @@
   Drag an order between stages — saved to this browser instantly. Hit
   <kbd>connect file</kbd> and pick <code>board-data.json</code> to auto-save to disk (Chromium).
   Card ids and mono <code>ref ·</code> tags cross-link your codes (specs, handoffs, commits).
+  Type in <kbd>filter</kbd> (or click a legend key) to narrow; <kbd>Esc</kbd> clears.
+  Focus a ticket (<kbd>Tab</kbd>) and press <kbd>[</kbd> / <kbd>]</kbd> to move it a stage left / right.
+  A column with <code>"wip": N</code> in <code>board-data.json</code> shows an over-limit count in red.
 </p>
 
 <script>
@@ -189,6 +203,15 @@ const LS_KEY="adjudant-board:"+boardKey();
 const IDB_KEY=boardKey();
 const STAMP={done:["built","BUILT"],icebox:["parked","PARKED"]};
 let state=null, fileHandle=null, catColors={};
+/* view-state only (never persisted): text filter + toggled legend category */
+let filterText="", filterCat=null;
+function cardMatches(c){
+  if(filterCat && c.category!==filterCat) return false;
+  if(!filterText) return true;
+  // default every field: undefined must not leak "undefined" into the haystack
+  return [c.id,c.title,c.category,(c.related||[]).join(" "),c.notes]
+    .map(v=>v==null?"":String(v)).join(" ").toLowerCase().includes(filterText);
+}
 
 /* IndexedDB: persist the file handle across reloads (keyed per board) */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("cf-board",1);r.onupgradeneeded=()=>r.result.createObjectStore("h");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
@@ -244,6 +267,17 @@ function normalize(d){
 function catColor(cat){ return catColors[cat] || "var(--border-strong)"; }
 function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
 
+/* keyboard capacity: focused ticket + [ / ] moves it one lane left / right */
+function moveCard(card, delta){
+  const cols=state.columns.map(c=>c.id);
+  const i=cols.indexOf(card.column);
+  const j=i+delta;
+  if(i<0||j<0||j>=cols.length) return;
+  card.column=cols[j]; render(); persist();
+  const moved=document.querySelector('.ticket[data-id="'+CSS.escape(String(card.id))+'"]');
+  if(moved) moved.focus();
+}
+
 function ticketNode(card){
   const t=el("div","ticket"); t.draggable=true; t.tabIndex=0; t.dataset.id=card.id;
   t.style.setProperty("--c",catColor(card.category));
@@ -262,6 +296,10 @@ function ticketNode(card){
   if(STAMP[card.column]){ const [cls,label]=STAMP[card.column]; t.appendChild(el("span","stamp "+cls,label)); }
   t.addEventListener("dragstart",ev=>{ev.dataTransfer.setData("text/plain",card.id);ev.dataTransfer.effectAllowed="move";t.classList.add("dragging");});
   t.addEventListener("dragend",()=>t.classList.remove("dragging"));
+  t.addEventListener("keydown",ev=>{
+    if(ev.key==="[") { ev.preventDefault(); moveCard(card,-1); }
+    else if(ev.key==="]") { ev.preventDefault(); moveCard(card,1); }
+  });
   return t;
 }
 
@@ -273,19 +311,28 @@ function render(){
   document.getElementById("stageCount").textContent=state.columns.length;
   const lg=document.getElementById("legend"); lg.innerHTML="";
   (state.categoryNames||[]).forEach(cat=>{
-    const k=el("span","k"); k.style.setProperty("--c",catColor(cat));
-    k.appendChild(el("i")); k.appendChild(document.createTextNode(cat)); lg.appendChild(k);
+    const k=el("span","k"+(filterCat===cat?" on":(filterCat?" off":"")));
+    k.style.setProperty("--c",catColor(cat));
+    k.appendChild(el("i")); k.appendChild(document.createTextNode(cat));
+    k.addEventListener("click",()=>{ filterCat = (filterCat===cat) ? null : cat; render(); });
+    lg.appendChild(k);
   });
+  const filtering = !!(filterText || filterCat);
   const board=document.getElementById("board"); board.innerHTML="";
-  state.columns.forEach(col=>{
-    const cards=state.cards.filter(c=>c.column===col.id);
-    const lane=el("div","lane"+( (col.id==="done"||col.id==="icebox")?" muted":"" )); lane.dataset.col=col.id;
+  const laneNode=(col, all, extraCls)=>{
+    const cards=all.filter(cardMatches);
+    const lane=el("div","lane"+( (col.id==="done"||col.id==="icebox")?" muted":"" )+(extraCls||"")); lane.dataset.col=col.id;
     const head=el("div","lane-head");
     head.appendChild(el("span","nm",col.name));
-    head.appendChild(el("span","ct",String(cards.length).padStart(2,"0")));
+    // count: `shown/total` while filtering; over-limit (col.wip) shown in red
+    const over = Number.isFinite(col.wip) && all.length>col.wip;
+    const ctTxt = filtering
+      ? String(cards.length).padStart(2,"0")+"/"+String(all.length).padStart(2,"0")
+      : String(all.length).padStart(2,"0") + (Number.isFinite(col.wip)?("/"+col.wip+" wip"):"");
+    head.appendChild(el("span","ct"+(over?" over":""),ctTxt));
     lane.appendChild(head);
     const body=el("div","lane-body");
-    if(!cards.length) body.appendChild(el("div","lane-empty","—  empty"));
+    if(!cards.length) body.appendChild(el("div","lane-empty", filtering&&all.length ? "—  filtered" : "—  empty"));
     cards.forEach(c=>body.appendChild(ticketNode(c)));
     lane.appendChild(body);
     lane.addEventListener("dragover",ev=>{ev.preventDefault();ev.dataTransfer.dropEffect="move";lane.classList.add("drop");});
@@ -294,10 +341,16 @@ function render(){
       ev.preventDefault(); lane.classList.remove("drop");
       const id=ev.dataTransfer.getData("text/plain");
       const card=state.cards.find(c=>c.id===id);
-      if(card && card.column!==col.id){ card.column=col.id; render(); persist(); }
+      if(card && card.column!==col.id && col.id!=="__unfiled"){ card.column=col.id; render(); persist(); }
     });
     board.appendChild(lane);
-  });
+  };
+  const known=new Set(state.columns.map(c=>c.id));
+  state.columns.forEach(col=>laneNode(col, state.cards.filter(c=>c.column===col.id)));
+  // Safety lane: cards whose column matches no lane (deck edited by hand,
+  // column removed) must never be invisible — surface them as UNFILED.
+  const orphans=state.cards.filter(c=>!known.has(c.column));
+  if(orphans.length) laneNode({id:"__unfiled",name:"Unfiled"}, orphans, " unfiled");
 }
 
 async function boot(){
@@ -319,6 +372,11 @@ async function boot(){
 }
 document.getElementById("connectBtn").addEventListener("click",connectFile);
 document.getElementById("downloadBtn").addEventListener("click",download);
+const q=document.getElementById("q");
+q.addEventListener("input",()=>{ filterText=q.value.trim().toLowerCase(); render(); });
+q.addEventListener("keydown",ev=>{
+  if(ev.key==="Escape"){ q.value=""; filterText=""; filterCat=null; render(); q.blur(); }
+});
 boot();
 </script>
 </body>

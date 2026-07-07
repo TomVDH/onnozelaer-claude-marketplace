@@ -30,18 +30,25 @@ break discovery. `--all` is error-isolated: one bad project never aborts the bat
 
 1. **Scaffold** — `board.py scaffold` writes `board-data.json` (the deck) + a
    self-contained `board.html` (template with the deck injected between its
-   `BOARD_DATA` markers). Default dest is `{vault}/projects/{slug}/board/`; pass
-   `--dest` to target a code repo (e.g. `<repo>/_docs/board`). `--dest`/`--data`
-   are single-project only (not valid with `--all`).
+   `BOARD_DATA` markers; every `<` in the payload is escaped, so task titles
+   containing `</script>` or `<!--` can't break the page). Default dest is
+   `{vault}/projects/{slug}/board/`; pass `--dest` to target a code repo
+   (e.g. `<repo>/_docs/board`). `--dest`/`--data` are single-project only
+   (not valid with `--all`).
 2. **Seed from tasks** — `--from-tasks` builds one card per `{project}/tasks/*.md`
    note: `code`/`id`/filename → card id, first `# heading`/`title:` → title,
    `status:` → column, `category:`/first non-`task` tag → category,
    `related:` → mono refs, `note:` → note. `_index.md` and roadmap/index files
    (`type: tasks`) are skipped — they aren't per-card task notes. Empty `tasks/`
-   yields a clean 6-stage starter deck (no error).
+   yields a clean 6-stage starter deck (no error). Duplicate card ids across
+   task notes are disambiguated to the filename stem, with a stderr warning.
 3. **Serve** — `board.py serve --dir DIR` runs a localhost static server so the
    disk-save (File System Access API) works (it needs a secure context, not
-   `file://`).
+   `file://`). `--open` launches the browser; `--port 0` picks a free port
+   (the real port is printed); a busy port errors cleanly instead of tracebacking.
+4. **Status** — `board.py status [--project SLUG|--all]` prints per-column card
+   counts in the terminal (plus a warning for cards in unknown columns) without
+   opening a browser. Same targeting flags as scaffold.
 
 ## Run
 
@@ -82,6 +89,15 @@ the user they can drag cards + hit **connect file** to enable disk auto-save.
 - `boardId` (defaults to the project slug) namespaces the board's browser
   `localStorage` + IndexedDB file-handle, keeping multiple boards independent.
 - `done` and `icebox` columns get `BUILT` / `PARKED` rubber-stamp overprints.
+- A column may carry `"wip": N` — the lane head then shows `count/N wip` and
+  turns red when over the limit.
+- Cards whose `column` matches no lane (hand-edited deck, removed column) are
+  never invisible — they render in a synthetic **UNFILED** lane you can drag
+  them out of.
+- In-browser view tools (never persisted): a **filter** box narrows by
+  id/title/category/ref/note (`Esc` clears), legend keys click-toggle a
+  category filter, and a focused ticket moves one lane left/right with
+  `[` / `]`.
 - The browser's rev-guard keys on the **set of card ids** (not the date or
   count): a re-scaffold that only moves cards between columns keeps your browser
   state; adding/removing a card refreshes it.
@@ -94,11 +110,17 @@ Re-running `board` does not wipe in-progress card state:
   in both keeps the **column you dragged it to** (and any board-local `notes`),
   while `title`/`category`/`related` re-seed from the task note. New tasks are
   added in their status-derived column; a card whose task disappeared is moved to
-  `icebox` (never deleted).
+  `icebox` (never deleted). Deck-level `title`/`subtitle`/**`columns`** from disk
+  are preserved — custom lanes you added survive a re-seed.
 - **Without `--from-tasks` → the on-disk deck is kept untouched** (only `board.html`
   is refreshed from the template, so styling/engine updates land).
-- **`--force` → full rebuild from tasks**, discarding dragged columns.
+- **`--force` → full rebuild from tasks**, discarding dragged columns. It
+  requires `--from-tasks` (or `--data`) when a deck already exists — `--force`
+  alone would overwrite the board with an empty starter deck, so it refuses.
+  Any force-rebuild first copies the old deck to `board-data.json.bak`.
 - **`--data FILE` → that deck verbatim** (missing standard fields are backfilled).
+- A corrupt/unreadable `board-data.json` (or `--data` file) exits non-zero with
+  a clear error — it never tracebacks or silently rebuilds.
 
 `board.html` is always re-emitted from the canonical template — never hand-fork
 instantiations; change `templates/board.html` and re-run.
