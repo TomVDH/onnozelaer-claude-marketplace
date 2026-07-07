@@ -1,6 +1,6 @@
 ---
 name: adjudant
-description: Obsidian vault operations. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board}` for project-to-vault scaffolding, schema-enforced writes, structural + content cleanup, an ELI5 orientation briefing, and a self-hosted work-order kanban board. Also fires when writing decisions/sessions/notes into a linked vault.
+description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), and a self-hosted kanban board. Also fires whenever decisions, sessions, or notes are written into a linked vault.
 version: 0.11.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board] [args]"
@@ -22,9 +22,9 @@ Vault editor/writer and project initializer. One skill, one command, ten verbs. 
 | `sitrep` | `reference/sitrep.md` | ELI5 orientation briefing — where we were, what's done, where the vault is, where to start. Read-only (consumes `sitrep.py` JSON). For re-orienting after a break |
 | `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`) |
 | `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
-| `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic. Reads prose of decisions/notes/sessions; catches outdated info, contradictions, supersession, redundancy, stale refs, orphan threads. Judgment-heavy. Analysis via `dream.py`, judge + plan + execute via superpowers |
-| `draw` | `reference/draw.md` | Create canvas / base / diagram |
-| `board` | `reference/board.md` | Scaffold a self-hosted work-order kanban board — drag-to-move, disk-persisted, seeded from `tasks/`. A standard surface any project can have: `--project <slug>` for one, `--all` for the whole vault. Generates `board-data.json` + a self-contained `board.html` |
+| `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic, judgment-heavy. `dream.py` (read-only) emits a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphans, unacted decisions, gaps, dangling scopes); Claude judges, superpowers executes |
+| `draw` | `reference/draw.md` | Create canvas / base / mermaid diagram — hand-authored or generated from vault data via `graph.py` (relations / board / tiers) |
+| `board` | `reference/board.md` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. `--project <slug>` for one project, `--all` for the whole vault; `status` prints terminal column counts |
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
 
@@ -52,7 +52,8 @@ Every file-touching verb is backed by a Python helper. Helpers follow the `.clau
 | `dream` | `dream.py` + `_vault_walk.py` | JSON content/staleness comparator catalog (analysis phase); judge + plan + execute via superpowers |
 | `check` | `check.py` + `_vault_walk.py` | JSON status snapshot |
 | `sitrep` | `sitrep.py` + `_vault_walk.py` | JSON orientation briefing (recent activity, NEXT, vault location + counts); Claude renders ELI5 |
-| `board` | `board.py` + `_vault_walk.py` | scaffold per-project `board-data.json` + a self-contained `board.html`; resolves any project by slug (or `--all`) via `enumerate_projects`. Refresh-without-clobber: re-seeding from `tasks/` merges, preserving dragged columns (idempotent; `--force` rebuilds) |
+| `board` | `board.py` + `_vault_walk.py` | scaffold per-project `board-data.json` + a self-contained `board.html`; resolves any project by slug (or `--all`) via `enumerate_projects`. Refresh-without-clobber: re-seeding from `tasks/` merges, preserving dragged columns (idempotent; `--force` rebuilds with a `.bak`). `status` prints per-column counts |
+| `draw` | `graph.py` + `_vault_walk.py` | generated mermaid fences from vault data — `relations` (wikilink graph, node-capped), `board` (kanban snapshot), `tiers` (cleanup model). Read-only |
 
 `_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
 
@@ -66,7 +67,8 @@ For specialized content types, load the matching reference on demand:
 
 - `reference/content-canvas.md` — `.canvas` files
 - `reference/content-bases.md` — `.base` files
-- `reference/content-mermaid.md` — mermaid diagrams
+- `reference/content-mermaid.md` — mermaid diagrams (syntax)
+- `reference/mermaid-generation-rules.md` — mermaid generation discipline (always applies when producing fences)
 - `reference/content-markdown.md` — Obsidian-flavoured markdown (callouts, embeds, wikilinks)
 - `reference/content-clipper.md` — Web Clipper templates
 - `reference/content-cli.md` — Obsidian CLI
@@ -82,7 +84,7 @@ This plugin registers 5 hooks (vault-aware only):
 | Event | Script | Purpose |
 |---|---|---|
 | SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume) |
-| UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords |
+| UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords (at most once per session) |
 | PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`) |
 | PreCompact | `hooks/scripts/precompact.py` | Mechanical, no model calls (5s budget): append enriched pause tombstone (`— next: …`) + mirror handoff with a freshness header (traffic light · age · NEXT · stale flag) |
 | SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + sync handoff to vault |

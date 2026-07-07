@@ -10,7 +10,7 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 /plugin install adjudant
 ```
 
-## Surface (v0.10.1)
+## Surface
 
 | | |
 |---|---|
@@ -19,9 +19,9 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
-| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `check.py`, `sitrep.py` |
-| Drift defense | `python3 scripts/validate.py` — 15 validators, runs via pre-commit |
-| Tests | 300+ unit tests; `python3 -m unittest discover -p 'test_*.py'` |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py` |
+| Drift defense | `python3 scripts/validate.py` — 17 validators, runs via pre-commit |
+| Tests | 449 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 
@@ -45,8 +45,8 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant tidy` | Surface mechanical sweep — rebuild indexes, normalise tags, fix wikilink form. Two-phase preview → apply. | `tidy.py` |
 | `/adjudant ramasse` | Deep structural clean — analysis phase via `ramasse_scan.py`, planning + execute via the superpowers chain. | `ramasse_scan.py` |
 | `/adjudant dream` | Content/knowledge/memory refresh — semantic. Analysis via `dream.py` (read-only comparator catalog), judge + plan + execute via the superpowers chain, backups for destructive content ops. | `dream.py` |
-| `/adjudant draw <canvas\|base\|diagram> <name>` | Create visual artefacts. | (runbook) |
-| `/adjudant board [--project <slug>\|--all]` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. One project, a named one, or the whole vault. Re-seeds without clobbering dragged cards. | `board.py` |
+| `/adjudant draw <canvas\|base\|diagram> <name\|type>` | Create visual artefacts — canvases, bases, mermaid diagrams (hand-authored or generated from vault data). | `graph.py` |
+| `/adjudant board [scaffold\|serve\|status] [--project <slug>\|--all]` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. One project, a named one, or the whole vault. Re-seeds without clobbering dragged cards or custom columns; `status` prints terminal column counts. | `board.py` |
 
 All helpers follow the breadcrumb: pass `--project-dir` (connect/port also accept it as an alias of their original `--project-root`) pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
 

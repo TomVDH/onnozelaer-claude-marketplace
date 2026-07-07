@@ -10,7 +10,7 @@
     },
     {
       "name": "port",
-      "description": "Migrate any legacy project (raw repo, obsidian-bridge legacy, hand-authored) to adjudant compliance. Two-phase: first run writes a preview, second run applies it. Idempotent.",
+      "description": "Migrate any legacy project (raw, obsidian-bridge, hand-authored) to adjudant compliance. Two-phase: preview, then apply with backup. Idempotent.",
       "argumentHint": "(no args)",
       "reference": "reference/port.md"
     },
@@ -22,44 +22,44 @@
     },
     {
       "name": "check",
-      "description": "Read-only summary — project state, vault snapshot, schema compliance. Calls check.py for the scan, Claude renders. Never writes.",
+      "description": "Read-only summary — project state, vault snapshot, schema compliance. check.py scans, Claude renders. Never writes.",
       "argumentHint": "(no args)",
       "reference": "reference/check.md"
     },
     {
       "name": "sitrep",
-      "description": "ELI5 orientation briefing — where were we, what's done, where the vault is, and where best to start. Read-only; sitrep.py scans, Claude renders four plain-language lines. For re-orienting after a break; complements check (which reports schema compliance).",
+      "description": "ELI5 orientation briefing for re-orienting after a break — where we were, what's done, where the vault is, where to start. Read-only (sitrep.py scans, Claude renders).",
       "argumentHint": "(no args)",
       "reference": "reference/sitrep.md"
     },
     {
       "name": "tidy",
-      "description": "Surface mechanical sweep — rebuild _index.md, normalise tags per locked schema, fix wikilink form, bump updated:. Two-phase: tidy.py preview, then tidy.py apply. Idempotent. Daily/weekly cadence.",
+      "description": "Surface mechanical sweep — indexes, tags, wikilink form, updated:. Routine (daily/weekly). Two-phase: tidy.py preview → apply. Idempotent.",
       "argumentHint": "(no args)",
       "reference": "reference/tidy.md"
     },
     {
       "name": "ramasse",
-      "description": "Deep structural clean — folder shape, schema, file types, naming, renames, broken-wikilink triage, doc/decision mismatches. Used sparingly (quarterly). Analysis phase via ramasse_scan.py; planning + execute via superpowers.",
+      "description": "Deep structural clean — folders, schema, file types, naming, broken-wikilink triage. Sparing (quarterly). ramasse_scan.py analyses; superpowers plans + executes.",
       "argumentHint": "(no args)",
       "reference": "reference/ramasse.md"
     },
     {
       "name": "dream",
-      "description": "Content/knowledge/memory refresh — semantic, the third cleanup tier. Reads prose of decisions/notes/sessions and surfaces a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphan questions/threads, unacted decisions, documentation gaps, dangling scopes) for Claude to judge. Analysis via dream.py (read-only); judge + plan + execute via superpowers, with backups for destructive content ops. Fully standalone — no dependency on other plugins.",
+      "description": "Content/knowledge/memory refresh — the third, semantic cleanup tier. dream.py (read-only) emits a 10-category staleness/contradiction/redundancy catalog; Claude judges, superpowers executes with backups.",
       "argumentHint": "(no args)",
       "reference": "reference/dream.md"
     },
     {
       "name": "draw",
-      "description": "Create visual artefacts — canvas, base, or mermaid diagram.",
+      "description": "Create visual artefacts — canvas, base, or mermaid diagram (hand-authored or generated from vault data via graph.py).",
       "argumentHint": "<canvas|base|diagram> <name|type>",
       "reference": "reference/draw.md"
     },
     {
       "name": "board",
-      "description": "Scaffold a self-hosted work-order kanban board (drag-to-move, disk-persisted via the File System Access API) seeded from tasks/ — a standard surface any project can have. Target the current project, a named one (--project SLUG), or every project (--all). Refresh-without-clobber: re-seeding merges current tasks while preserving dragged columns (--force rebuilds). Generates board-data.json + a self-contained board.html. Helper: board.py (scaffold|serve).",
-      "argumentHint": "[scaffold|serve] [--project SLUG|--all] [--from-tasks] [--dest DIR] [--force]",
+      "description": "Scaffold a self-hosted work-order kanban (single-file HTML, drag-to-move, disk-persisted) seeded from tasks/. Re-seeding merges without clobbering dragged columns; --project SLUG or --all for other projects.",
+      "argumentHint": "[scaffold|serve|status] [--project SLUG|--all] [--from-tasks] [--force]",
       "reference": "reference/board.md"
     }
   ]
