@@ -19,6 +19,8 @@ Validators:
  13. gitignore-includes-tidy-dirs — .gitignore lists tidy dirs if either exists
  14. reference-files-exist   — every reference/*.md named in command-metadata.json and the SKILL.md router exists
  15. verb-surface-parity     — every verb name appears in plugin.json / README.md / marketplace description; spelled-out verb counts match
+ 16. reference-doc-links     — every relative markdown link inside reference/*.md resolves on disk
+ 17. verb-description-length — command-metadata verb descriptions stay router-line short (≤ 220 chars)
 """
 
 import json
@@ -480,6 +482,85 @@ def validate_verb_surface_parity(r: Result) -> None:
     r.add_pass(name)
 
 
+# [text](target) with a non-empty path part (pure-#anchor links don't match)
+MD_LOCAL_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)#\s]+(?:#[^)\s]*)?)\)")
+INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
+
+
+def _strip_fences_and_code(text: str) -> str:
+    """Prose-only view of a markdown doc: fenced blocks and inline code spans
+    removed. Fences are tracked line-based (a delimiter is a line whose lstrip
+    starts with ```), NOT regex-paired — a mid-line ```` ```mermaid ```` code
+    span or an unclosed trailing fence must not desynchronize the stripping.
+    An unclosed fence is treated as fenced to EOF."""
+    out: list[str] = []
+    in_fence = False
+    for ln in text.splitlines():
+        if ln.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if not in_fence:
+            out.append(ln)
+    return INLINE_CODE_RE.sub("", "\n".join(out))
+
+
+def validate_reference_doc_links(r: Result) -> None:
+    """Every relative markdown link inside reference/*.md must resolve on disk.
+
+    Catches the dead-companion-file class (a doc pointing at a
+    references/GENERATION_RULES.md that never shipped). External links
+    (any scheme:) are skipped; fenced blocks and inline code spans are
+    stripped first so syntax examples like `[text](path.md)` can't
+    false-positive."""
+    name = "reference-doc-links"
+    if not REFERENCE.is_dir():
+        r.add_fail(name, f"{REFERENCE.relative_to(ROOT)} missing")
+        return
+    problems: list[str] = []
+    for f in sorted(REFERENCE.glob("*.md")):
+        text = _strip_fences_and_code(f.read_text())
+        for m in MD_LOCAL_LINK_RE.finditer(text):
+            target = m.group(1)
+            if re.match(r"^[a-z][a-z0-9+.-]*:", target, re.I):
+                continue  # http:, https:, mailto:, obsidian:, …
+            path_part = target.split("#", 1)[0]
+            if path_part and not (f.parent / path_part).exists():
+                problems.append(f"{f.name} → {target}")
+    if problems:
+        r.add_fail(name, "dead relative links: " + "; ".join(problems))
+        return
+    r.add_pass(name)
+
+
+MAX_VERB_DESCRIPTION = 220
+
+
+def validate_verb_description_length(r: Result) -> None:
+    """Verb descriptions are router lines, not runbooks — detail belongs in the
+    verb's reference/*.md (the plugin's own progressive-disclosure doctrine).
+    The cap keeps them from re-growing release by release."""
+    name = "verb-description-length"
+    meta_file = _load_command_metadata()
+    try:
+        verbs = json.loads(meta_file.read_text()).get("verbs", [])
+    except (OSError, json.JSONDecodeError) as e:
+        r.add_fail(name, f"could not read command-metadata.json: {e}")
+        return
+    too_long = [
+        f"{v.get('name')} ({len(v.get('description', ''))} chars)"
+        for v in verbs
+        if len(v.get("description", "")) > MAX_VERB_DESCRIPTION
+    ]
+    if too_long:
+        r.add_fail(
+            name,
+            f"descriptions over {MAX_VERB_DESCRIPTION} chars "
+            f"(move detail to the verb's reference/*.md): " + ", ".join(too_long),
+        )
+        return
+    r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -498,6 +579,8 @@ def main() -> int:
     validate_gitignore_includes_tidy_dirs(r)
     validate_reference_files_exist(r)
     validate_verb_surface_parity(r)
+    validate_reference_doc_links(r)
+    validate_verb_description_length(r)
     return r.report()
 
 

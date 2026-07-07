@@ -385,5 +385,83 @@ class TestSkillFrontmatterVersion(_PatchedTree):
         self.assertEqual(validate._skill_frontmatter_version(skill), "1.0.0")
 
 
+class TestReferenceDocLinks(_PatchedTree):
+
+    def test_passes_on_valid_and_external_links(self):
+        ref = self.plugin / "skills" / "adjudant" / "reference"
+        (ref / "companion.md").write_text("# companion\n")
+        (ref / "connect.md").write_text(
+            "See [companion](companion.md) and [anchor](companion.md#top).\n"
+            "External: [mermaid](https://mermaid.js.org/) and [uri](obsidian://open?vault=x).\n"
+            "Pure anchor: [here](#section).\n"
+            "```\nfenced [dead](inside-fence.md) links are ignored\n```\n")
+        r = Result()
+        validate.validate_reference_doc_links(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_on_dead_relative_link(self):
+        ref = self.plugin / "skills" / "adjudant" / "reference"
+        (ref / "connect.md").write_text("[rules](references/GENERATION_RULES.md)\n")
+        r = Result()
+        validate.validate_reference_doc_links(r)
+        self.assertEqual(len(r.failures), 1)
+        self.assertIn("GENERATION_RULES.md", r.failures[0])
+
+    def test_inline_fence_mention_does_not_desync_stripping(self):
+        # A mid-line ```` ```mermaid ```` code span must not pair with a real
+        # fence delimiter: the prose dead link after it must still be caught,
+        # and a syntax-example link INSIDE a real fence must stay exempt.
+        ref = self.plugin / "skills" / "adjudant" / "reference"
+        (ref / "connect.md").write_text(
+            "Obsidian renders ```` ```mermaid ```` blocks natively.\n"
+            "A dead prose link: [dead](missing-a.md)\n"
+            "```mermaid\n"
+            "flowchart LR\n"
+            "  a[see [ex](missing-in-fence.md)]\n"
+            "```\n"
+            "More prose: [dead2](missing-b.md)\n")
+        r = Result()
+        validate.validate_reference_doc_links(r)
+        self.assertEqual(len(r.failures), 1)
+        self.assertIn("missing-a.md", r.failures[0])
+        self.assertIn("missing-b.md", r.failures[0])
+        self.assertNotIn("missing-in-fence.md", r.failures[0])
+
+    def test_unclosed_fence_treated_as_fenced_to_eof(self):
+        ref = self.plugin / "skills" / "adjudant" / "reference"
+        (ref / "connect.md").write_text(
+            "Prose [dead](missing-a.md)\n"
+            "```\n"
+            "unclosed fence [x](missing-in-fence.md)\n")
+        r = Result()
+        validate.validate_reference_doc_links(r)
+        self.assertEqual(len(r.failures), 1)
+        self.assertIn("missing-a.md", r.failures[0])
+        self.assertNotIn("missing-in-fence.md", r.failures[0])
+
+
+class TestVerbDescriptionLength(_PatchedTree):
+
+    def _write_meta(self, desc: str) -> None:
+        (self.plugin / "scripts" / "command-metadata.json").write_text(
+            json.dumps({"name": "adjudant", "version": "1.0.0",
+                        "verbs": [{"name": "connect", "description": desc,
+                                   "reference": "reference/connect.md"}]}) + "\n")
+
+    def test_passes_at_cap(self):
+        self._write_meta("x" * 220)
+        r = Result()
+        validate.validate_verb_description_length(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_over_cap(self):
+        self._write_meta("x" * 300)
+        r = Result()
+        validate.validate_verb_description_length(r)
+        self.assertEqual(len(r.failures), 1)
+        self.assertIn("connect (300 chars)", r.failures[0])
+        self.assertIn("reference/*.md", r.failures[0])
+
+
 if __name__ == "__main__":
     unittest.main()
