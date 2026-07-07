@@ -23,21 +23,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-# Shared freshness primitives live in <plugin>/scripts/. Bootstrap that onto the
-# path (fixed plugin layout) and import; degrade gracefully if unavailable.
+# Shared primitives live in <plugin>/scripts/. Bootstrap that onto the path
+# (fixed plugin layout), then import each module under its own guard: a broken
+# or mid-sync module must only degrade ITS OWN capability, never shadow a
+# sibling import that succeeded and never crash the hook.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
-    from _handoff_freshness import compute_freshness, freshness_header, parse_next_line
-    _FRESHNESS = True
-except Exception:  # pragma: no cover - defensive: hook must never crash on import
-    _FRESHNESS = False
+except Exception:  # pragma: no cover - defensive
+    pass
 
 try:
-    from _vault_walk import _candidate_vault_paths
-except Exception:  # pragma: no cover - defensive
-    def _candidate_vault_paths(_name):  # type: ignore
-        return []
-
+    from _handoff_freshness import compute_freshness, freshness_header, parse_next_line
+except Exception:  # pragma: no cover - degrade: mechanical work without freshness
     def parse_next_line(_text):  # type: ignore
         return None
 
@@ -46,6 +43,15 @@ except Exception:  # pragma: no cover - defensive
 
     def freshness_header(*_a, **_k):  # type: ignore
         return ""
+
+try:
+    from _vault_walk import resolve_vault
+    _RESOLVER = True
+except Exception:  # pragma: no cover - degrade: breadcrumb vault_path only
+    _RESOLVER = False
+
+    def resolve_vault(_project_root, _env_vault=None):  # type: ignore
+        return None
 
 
 def read_breadcrumb(project_dir: Path) -> dict:
@@ -68,6 +74,22 @@ def read_breadcrumb(project_dir: Path) -> dict:
         k, v = line.split(sep, 1)
         info[k.strip()] = v.strip()
     return info
+
+
+def latest_session_file(sessions_dir: Path, today: str) -> Path:
+    """Today's session note — or, when it doesn't exist yet (session straddling
+    midnight), the lexically-latest existing daily note so the entry isn't
+    silently dropped. Falls back to today's path if none exist (caller gates
+    on .exists())."""
+    target = sessions_dir / f"{today}.md"
+    if target.exists():
+        return target
+    try:
+        # digit classes, not ?: a stray abcd-ef-gh.md must never outrank a date
+        candidates = sorted(sessions_dir.glob("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md"))
+    except OSError:
+        candidates = []
+    return candidates[-1] if candidates else target
 
 
 def find_remember_source(project_dir: Path) -> Optional[Path]:
@@ -97,7 +119,7 @@ def sync_handoff(project_dir: Path, vault: Path, slug: str, today: str, ts: str,
         return
     source_name = source.name
 
-    session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
+    session_file = latest_session_file(vault / "projects" / slug / "sessions", today)
     light, age_str, next_line, stale = compute_freshness(project_dir, body, source, session_file, now)
     fresh = freshness_header(light, age_str, next_line, stale)
     fresh_block = f"{fresh}\n\n" if fresh else ""
@@ -157,24 +179,31 @@ def main() -> int:
 
     project_dir = Path(project_dir_str)
     info = read_breadcrumb(project_dir)
-    vault_path = info.get("vault_path", "")
     slug = info.get("slug", "")
-    if not vault_path or not slug:
+    if not slug:
         return 0
 
-    vault = Path(vault_path).expanduser()
-    if not vault.is_dir():
-        # Cross-machine breadcrumb: try vault_name against standard locations
-        # (same candidates the verbs use) before giving up.
-        vault_name = info.get("vault_name", "")
-        vault = next(
-            (c for c in _candidate_vault_paths(vault_name) if c.is_dir()), None
-        ) if vault_name else None
-        if vault is None:
-            # Stale breadcrumb — fail closed. Writing anyway would materialize
-            # a phantom vault directory chain (mkdir -p) on every compaction
-            # instead of surfacing the misconfiguration.
-            return 0
+    # Single source of truth: the same 5-step resolve_vault chain the verbs and
+    # shell hooks use (OB_VAULT override, vault_path, vault_name candidates,
+    # legacy breadcrumb, Home.md walk-up) — so every hook writes to the SAME
+    # vault. Degraded mode (broken _vault_walk): honor a locally-valid
+    # vault_path only.
+    vault = resolve_vault(project_dir)
+    if vault is None and not _RESOLVER:
+        # Degraded mode must keep the shell hooks' precedence: OB_VAULT first,
+        # then a locally-valid vault_path — otherwise a mid-sync _vault_walk
+        # splits writes across two vaults.
+        ob = os.environ.get("OB_VAULT", "")
+        p = Path(ob).expanduser() if ob else None
+        if p is None or not p.is_dir():
+            vault_path = info.get("vault_path", "")
+            p = Path(vault_path).expanduser() if vault_path else None
+        vault = p if (p is not None and p.is_dir()) else None
+    if vault is None or not vault.is_dir():
+        # Stale breadcrumb — fail closed. Writing anyway would materialize
+        # a phantom vault directory chain (mkdir -p) on every compaction
+        # instead of surfacing the misconfiguration.
+        return 0
 
     now = datetime.now()
     today = now.strftime("%Y-%m-%d")
@@ -185,7 +214,7 @@ def main() -> int:
     sync_only = "--sync-only" in sys.argv[1:]
 
     if not sync_only:
-        session_file = vault / "projects" / slug / "sessions" / f"{today}.md"
+        session_file = latest_session_file(vault / "projects" / slug / "sessions", today)
         append_pause_marker(project_dir, session_file, ts)
 
     sync_handoff(project_dir, vault, slug, today, ts, now)
@@ -193,4 +222,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # A PreCompact hook must never block compaction: whatever goes wrong
+    # (future logic error, exotic I/O failure), exit 0.
+    try:
+        sys.exit(main())
+    except Exception:  # pragma: no cover - last-resort guard
+        sys.exit(0)

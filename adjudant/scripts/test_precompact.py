@@ -1,10 +1,15 @@
 """Tests for hooks/scripts/precompact.py — the PreCompact/SessionEnd hook.
 
 Regression focus: the hook must fail closed on a stale/cross-machine breadcrumb
-instead of materializing a phantom vault directory chain via mkdir(parents=True).
+instead of materializing a phantom vault directory chain via mkdir(parents=True);
+resolution must use the same resolve_vault chain as the verbs; and a broken or
+mid-sync scripts/ module must only degrade its own capability (no import
+shadowing, no crash).
 """
 
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,9 +17,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "scripts"))
 import precompact
+import _vault_walk
+
+SCRIPTS = Path(__file__).resolve().parent
+HOOK = SCRIPTS.parent / "hooks" / "scripts" / "precompact.py"
 
 
-class TestFailClosedOnStaleVault(unittest.TestCase):
+class _EnvHygiene(unittest.TestCase):
+    """OB_VAULT from the developer's shell must never leak into these tests —
+    resolve_vault consults it as step 1."""
+
+    def setUp(self):
+        self._ob_vault = os.environ.pop("OB_VAULT", None)
+
+    def tearDown(self):
+        if self._ob_vault is not None:
+            os.environ["OB_VAULT"] = self._ob_vault
+
+
+class TestFailClosedOnStaleVault(_EnvHygiene):
 
     def _breadcrumb(self, project: Path, vault_path: str, slug: str = "demo") -> None:
         (project / ".claude").mkdir(parents=True)
@@ -42,8 +63,9 @@ class TestFailClosedOnStaleVault(unittest.TestCase):
 
     def test_vault_name_fallback_resolves_on_second_machine(self):
         # Cross-machine: absolute vault_path is from the other Mac, but the
-        # vault exists under a standard location on THIS machine.
-        import _vault_walk
+        # vault exists under a standard location on THIS machine. The hook now
+        # delegates to _vault_walk.resolve_vault, so the candidate scan is
+        # patched at its source.
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp) / "code"
             vault = Path(tmp) / "cands" / "MyVault"
@@ -54,8 +76,8 @@ class TestFailClosedOnStaleVault(unittest.TestCase):
             (project / ".remember").mkdir()
             (project / ".remember" / "remember.md").write_text("NEXT: x\n")
 
-            orig = precompact._candidate_vault_paths
-            precompact._candidate_vault_paths = lambda name: [Path(tmp) / "cands" / name]
+            orig = _vault_walk._candidate_vault_paths
+            _vault_walk._candidate_vault_paths = lambda name: [Path(tmp) / "cands" / name]
             os.environ["CLAUDE_PROJECT_DIR"] = str(project)
             argv_before = sys.argv
             sys.argv = ["precompact.py", "--sync-only"]
@@ -64,11 +86,40 @@ class TestFailClosedOnStaleVault(unittest.TestCase):
             finally:
                 sys.argv = argv_before
                 del os.environ["CLAUDE_PROJECT_DIR"]
-                precompact._candidate_vault_paths = orig
+                _vault_walk._candidate_vault_paths = orig
 
             self.assertEqual(rc, 0)
             self.assertTrue((vault / "projects" / "demo" / "_handoff.md").is_file(),
                             "vault_name fallback must find the local vault")
+
+    def test_vault_path_absent_still_resolves_via_vault_name(self):
+        # A breadcrumb with only vault_name + slug (hand-ported, no absolute
+        # path) used to make the python hooks silently no-op while the shell
+        # hooks resolved it.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "code"
+            vault = Path(tmp) / "cands" / "MyVault"
+            (vault / "projects" / "demo").mkdir(parents=True)
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / "adjudant").write_text(
+                "vault_name: MyVault\nslug: demo\nmode: project\n")
+            (project / ".remember").mkdir()
+            (project / ".remember" / "remember.md").write_text("NEXT: x\n")
+
+            orig = _vault_walk._candidate_vault_paths
+            _vault_walk._candidate_vault_paths = lambda name: [Path(tmp) / "cands" / name]
+            os.environ["CLAUDE_PROJECT_DIR"] = str(project)
+            argv_before = sys.argv
+            sys.argv = ["precompact.py", "--sync-only"]
+            try:
+                rc = precompact.main()
+            finally:
+                sys.argv = argv_before
+                del os.environ["CLAUDE_PROJECT_DIR"]
+                _vault_walk._candidate_vault_paths = orig
+
+            self.assertEqual(rc, 0)
+            self.assertTrue((vault / "projects" / "demo" / "_handoff.md").is_file())
 
     def test_real_vault_still_gets_handoff_mirror(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -92,6 +143,137 @@ class TestFailClosedOnStaleVault(unittest.TestCase):
             handoff = vault / "projects" / "demo" / "_handoff.md"
             self.assertTrue(handoff.is_file(), "handoff mirror must be written for a real vault")
             self.assertIn("NEXT: keep going", handoff.read_text())
+
+    def test_midnight_straddle_pause_marker_lands_in_latest_note(self):
+        # No note for today (session started before midnight): the pause
+        # tombstone must land in the latest existing daily note.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "code"
+            vault = Path(tmp) / "vault"
+            sessions = vault / "projects" / "demo" / "sessions"
+            sessions.mkdir(parents=True)
+            latest = sessions / "2020-01-02.md"
+            latest.write_text("## Log\n")
+            (sessions / "2020-01-01.md").write_text("## Log\n")
+            decoy = sessions / "abcd-ef-gh.md"  # 4-2-2 shape, not a date
+            decoy.write_text("## Not a session\n")
+            self._breadcrumb(project, str(vault))
+            (project / ".remember").mkdir()
+            (project / ".remember" / "remember.md").write_text("NEXT: resume x\n")
+
+            os.environ["CLAUDE_PROJECT_DIR"] = str(project)
+            argv_before = sys.argv
+            sys.argv = ["precompact.py"]
+            try:
+                rc = precompact.main()
+            finally:
+                sys.argv = argv_before
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+            self.assertEqual(rc, 0)
+            self.assertIn("paused (compaction)", latest.read_text())
+            self.assertNotIn("paused", decoy.read_text())  # digit glob, not ?
+
+
+class TestImportDegradation(_EnvHygiene):
+    """A broken or mid-sync scripts/ module must only degrade its own
+    capability. Runs the hook as a subprocess inside a fake plugin tree so the
+    import-time behavior is exercised for real."""
+
+    def _fake_plugin(self, tmp: Path, *, break_freshness: bool, break_walk: bool) -> Path:
+        plugin = tmp / "plugin"
+        (plugin / "hooks" / "scripts").mkdir(parents=True)
+        (plugin / "scripts").mkdir(parents=True)
+        shutil.copy2(HOOK, plugin / "hooks" / "scripts" / "precompact.py")
+        if break_freshness:
+            (plugin / "scripts" / "_handoff_freshness.py").write_text("def (broken syntax\n")
+        else:
+            shutil.copy2(SCRIPTS / "_handoff_freshness.py", plugin / "scripts")
+        if break_walk:
+            (plugin / "scripts" / "_vault_walk.py").write_text("def (broken syntax\n")
+        else:
+            shutil.copy2(SCRIPTS / "_vault_walk.py", plugin / "scripts")
+        return plugin
+
+    def _project_and_vault(self, tmp: Path) -> tuple[Path, Path]:
+        project = tmp / "code"
+        vault = tmp / "vault"
+        (vault / "projects" / "demo").mkdir(parents=True)
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "adjudant").write_text(
+            f"vault_path: {vault}\nvault_name: vault\nslug: demo\nmode: project\n")
+        (project / ".remember").mkdir()
+        (project / ".remember" / "remember.md").write_text("body\n\nNEXT: carry on\n")
+        return project, vault
+
+    def _run(self, plugin: Path, project: Path) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env.pop("OB_VAULT", None)
+        return subprocess.run(
+            [sys.executable, str(plugin / "hooks" / "scripts" / "precompact.py"), "--sync-only"],
+            env=env, capture_output=True, text=True, timeout=15,
+        )
+
+    def test_broken_freshness_still_does_mechanical_work(self):
+        # _handoff_freshness broken, _vault_walk fine: exit 0, handoff written,
+        # freshness header simply absent. (Used to NameError-crash and write
+        # nothing.)
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin = self._fake_plugin(Path(tmp), break_freshness=True, break_walk=False)
+            project, vault = self._project_and_vault(Path(tmp))
+            r = self._run(plugin, project)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            handoff = vault / "projects" / "demo" / "_handoff.md"
+            self.assertTrue(handoff.is_file())
+            text = handoff.read_text()
+            self.assertIn("Mirrored from", text)
+            self.assertNotIn("handoff age", text)  # degraded: no freshness header
+
+    def test_broken_walk_keeps_freshness_header(self):
+        # _vault_walk broken, _handoff_freshness fine: exit 0, handoff written
+        # WITH the freshness header. (The old shims clobbered the working
+        # freshness functions.)
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin = self._fake_plugin(Path(tmp), break_freshness=False, break_walk=True)
+            project, vault = self._project_and_vault(Path(tmp))
+            r = self._run(plugin, project)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            handoff = vault / "projects" / "demo" / "_handoff.md"
+            self.assertTrue(handoff.is_file())
+            text = handoff.read_text()
+            self.assertIn("handoff age", text)      # freshness survived
+            self.assertIn("NEXT: carry on", text)
+
+    def test_degraded_mode_honors_ob_vault_first(self):
+        # _vault_walk broken + OB_VAULT set + locally-valid breadcrumb path:
+        # the Python hook must prefer OB_VAULT, matching the shell hooks'
+        # degraded branch (same-vault invariant).
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin = self._fake_plugin(Path(tmp), break_freshness=False, break_walk=True)
+            project, vault = self._project_and_vault(Path(tmp))
+            override = Path(tmp) / "ovault"
+            (override / "projects" / "demo").mkdir(parents=True)
+            env = dict(os.environ)
+            env["CLAUDE_PROJECT_DIR"] = str(project)
+            env["OB_VAULT"] = str(override)
+            r = subprocess.run(
+                [sys.executable, str(plugin / "hooks" / "scripts" / "precompact.py"), "--sync-only"],
+                env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertTrue((override / "projects" / "demo" / "_handoff.md").is_file(),
+                            "degraded mode must write to the OB_VAULT vault")
+            self.assertFalse((vault / "projects" / "demo" / "_handoff.md").exists(),
+                             "breadcrumb vault must NOT receive the handoff when OB_VAULT overrides")
+
+    def test_both_broken_still_exits_zero(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin = self._fake_plugin(Path(tmp), break_freshness=True, break_walk=True)
+            project, vault = self._project_and_vault(Path(tmp))
+            r = self._run(plugin, project)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            # vault_path is locally valid → degraded mode still mirrors
+            self.assertTrue((vault / "projects" / "demo" / "_handoff.md").is_file())
 
 
 if __name__ == "__main__":

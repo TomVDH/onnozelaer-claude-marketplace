@@ -3,6 +3,12 @@
 # 1. Discover vault from .claude/adjudant breadcrumb
 # 2. Detect AGENTS.md + CLAUDE.md presence, warn if missing
 # 3. Create or resume today's session note (stamping the Claude Code conversation UUID)
+#
+# Resolution parity: when the plugin's Python layer is reachable this delegates
+# to _vault_walk.resolve_vault (OB_VAULT override, vault_path, vault_name
+# candidates, legacy breadcrumb, Home.md walk-up) — the SAME chain the verbs
+# and Python hooks use. Pure-bash degraded mode still honors OB_VAULT + a
+# locally-valid vault_path.
 set -euo pipefail
 
 main() {
@@ -13,7 +19,7 @@ main() {
   # Hooks receive a JSON payload on stdin: { session_id, transcript_path, ... }.
   # Stamping is advisory; this never blocks the hook.
   local session_id=""
-  if [ ! -t 0 ]; then
+  if [ ! -t 0 ] && command -v python3 >/dev/null 2>&1; then
     local payload
     payload=$(cat 2>/dev/null || true)
     if [ -n "$payload" ]; then
@@ -32,23 +38,29 @@ except Exception:
   local vault_path slug
   # Breadcrumb format is `key: value` (YAML-ish, written by connect.py);
   # legacy pre-v0.4.0 `key=value` tolerated, matching the Python hooks.
-  vault_path=$(sed -n 's/^vault_path[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
-  slug=$(sed -n 's/^slug[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 || true)
+  # tr -d '\r' — a CRLF breadcrumb (Windows-side edit, sync round-trip) must
+  # not leak \r into paths/slugs (it used to create phantom `slug\r/` dirs).
+  vault_path=$(sed -n 's/^vault_path[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 | tr -d '\r' || true)
+  slug=$(sed -n 's/^slug[:=][[:space:]]*//p' "$breadcrumb" 2>/dev/null | head -n1 | tr -d '\r' || true)
 
   [ -z "$slug" ] && return 0
   vault_path="${vault_path/#\~/$HOME}"
 
-  # Cross-machine fallback: when the absolute vault_path doesn't exist here,
-  # delegate to _vault_walk.resolve_vault (vault_name candidates, OB_VAULT) —
-  # the single source of truth the verbs use. Best-effort, never blocks.
-  if [ ! -d "$vault_path" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
-     && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_vault_walk.py" ]; then
-    vault_path=$(python3 -c 'import sys
+  # Full-chain resolution via the Python layer when available (keeps all five
+  # hooks + the verbs writing to the SAME vault, OB_VAULT included).
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_vault_walk.py" ] \
+     && command -v python3 >/dev/null 2>&1; then
+    local resolved
+    resolved=$(python3 -c 'import sys
 sys.path.insert(0, sys.argv[1])
 from pathlib import Path
 from _vault_walk import resolve_vault
 v = resolve_vault(Path(sys.argv[2]))
 print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true)
+    [ -n "$resolved" ] && vault_path="$resolved"
+  elif [ -n "${OB_VAULT:-}" ] && [ -d "${OB_VAULT/#\~/$HOME}" ]; then
+    # Pure-bash degraded mode: still honor the OB_VAULT override.
+    vault_path="${OB_VAULT/#\~/$HOME}"
   fi
 
   [ -z "$vault_path" ] && return 0
@@ -75,23 +87,25 @@ print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true
 
   # --- 3. Session note: create or resume ---
   local today ts session_dir session_file
-  today=$(date +%Y-%m-%d)
-  ts=$(date +%H:%M)
+  # Single clock read so date and time can't straddle midnight between calls.
+  read -r today ts <<< "$(date '+%Y-%m-%d %H:%M')"
   session_dir="$vault_path/projects/$slug/sessions"
   session_file="$session_dir/$today.md"
 
   mkdir -p "$session_dir" 2>/dev/null || true
 
-  if [ ! -f "$session_file" ]; then
-    # Render the session_id block: list with the current UUID if we got one,
-    # empty list otherwise (the next SessionStart will append).
-    local sid_block
-    if [ -n "$session_id" ]; then
-      sid_block=$'session_id:\n  - '"$session_id"
-    else
-      sid_block="session_id: []"
-    fi
-    cat > "$session_file" <<EOF
+  # Render the session_id block: list with the current UUID if we got one,
+  # empty list otherwise (the next SessionStart will append).
+  local sid_block
+  if [ -n "$session_id" ]; then
+    sid_block=$'session_id:\n  - '"$session_id"
+  else
+    sid_block="session_id: []"
+  fi
+
+  # Atomic create via noclobber: two SessionStarts racing on the same day
+  # can't truncate each other — the loser falls through to the resume branch.
+  if ( set -o noclobber; cat > "$session_file" <<EOF
 ---
 type: session
 project: "[[projects/$slug/brief|$slug]]"
@@ -108,19 +122,24 @@ tags:
 
 - $ts · session started
 EOF
+  ) 2>/dev/null; then
+    # Only claim creation when the write actually succeeded — a failed write
+    # (read-only vault, offline iCloud) must not inject a phantom-file claim.
     printf -- '- Session note created: `projects/%s/sessions/%s.md`\n' "$slug" "$today"
-  else
-    {
-      printf '\n--- %s session resumed ---\n\n' "$ts"
-    } >> "$session_file"
-    # Idempotently append this conversation's UUID to the session_id list.
-    if [ -n "$session_id" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
-       && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" ]; then
-      python3 "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" \
-        session-id "$session_file" "$session_id" >/dev/null 2>&1 || true
+  elif [ -f "$session_file" ]; then
+    # brace group: silence stderr BEFORE the >> open (left→right redirections)
+    if { printf '\n--- %s session resumed ---\n\n' "$ts" >> "$session_file"; } 2>/dev/null; then
+      # Idempotently append this conversation's UUID to the session_id list.
+      if [ -n "$session_id" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
+         && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" ] \
+         && command -v python3 >/dev/null 2>&1; then
+        python3 "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" \
+          session-id "$session_file" "$session_id" >/dev/null 2>&1 || true
+      fi
+      printf -- '- Session note resumed: `projects/%s/sessions/%s.md`\n' "$slug" "$today"
     fi
-    printf -- '- Session note resumed: `projects/%s/sessions/%s.md`\n' "$slug" "$today"
   fi
+  # else: write failed and no file exists — stay silent, claim nothing.
 }
 
 main "$@" || exit 0

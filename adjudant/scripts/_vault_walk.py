@@ -434,13 +434,19 @@ def is_checkable_wikilink(wl: Wikilink) -> bool:
 
 
 def parse_breadcrumb(project_root: Path) -> Optional[dict]:
-    """Read .claude/adjudant breadcrumb (key:value, one per line)."""
+    """Read .claude/adjudant breadcrumb (key:value, one per line).
+
+    Legacy pre-v0.4.0 `key=value` form is tolerated — every other breadcrumb
+    parser (hooks, shell sed) accepts it, and this one feeds resolve_vault's
+    vault_path/vault_name steps, which would otherwise go dead on a legacy
+    breadcrumb whose absolute path is stale on this machine.
+    """
     bc = project_root / ".claude" / "adjudant"
     if not bc.is_file():
         return None
     out: dict[str, str] = {}
     for line in bc.read_text().splitlines():
-        m = re.match(r"^\s*([A-Za-z_][\w-]*)\s*:\s*(.+?)\s*$", line)
+        m = re.match(r"^\s*([A-Za-z_][\w-]*)\s*[:=]\s*(.+?)\s*$", line)
         if m:
             out[m.group(1)] = m.group(2)
     return out

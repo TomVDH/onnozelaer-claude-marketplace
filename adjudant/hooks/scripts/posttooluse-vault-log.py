@@ -18,23 +18,31 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Shared stamping primitives live in <plugin>/scripts/. Mirror precompact's
-# bootstrap pattern; degrade gracefully so a missing helper never crashes the hook.
+# Shared primitives live in <plugin>/scripts/. Mirror precompact's bootstrap
+# pattern, one guard per module: a broken or mid-sync module must only degrade
+# ITS OWN capability, never shadow a sibling import that succeeded.
 try:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+except Exception:  # pragma: no cover - defensive
+    pass
+
+try:
     from _session_stamp import stamp_source_session
     _STAMP = True
-except Exception:  # pragma: no cover - defensive
+except Exception:  # pragma: no cover - degrade: log without stamping
     _STAMP = False
 
     def stamp_source_session(*_a, **_k):  # type: ignore
         return False
 
 try:
-    from _vault_walk import _candidate_vault_paths
-except Exception:  # pragma: no cover - defensive
-    def _candidate_vault_paths(_name):  # type: ignore
-        return []
+    from _vault_walk import resolve_vault
+    _RESOLVER = True
+except Exception:  # pragma: no cover - degrade: breadcrumb vault_path only
+    _RESOLVER = False
+
+    def resolve_vault(_project_root, _env_vault=None):  # type: ignore
+        return None
 
 
 def read_breadcrumb(project_dir: Path) -> dict:
@@ -65,20 +73,25 @@ def main() -> int:
         return 0
 
     info = read_breadcrumb(Path(project_dir))
-    vault_path = info.get("vault_path", "")
     slug = info.get("slug", "")
-    if not vault_path or not slug:
+    if not slug:
         return 0
 
-    vault = Path(vault_path).expanduser()
-    if not vault.is_dir():
-        # Cross-machine fallback: vault_name against standard locations
-        vault = next(
-            (c for c in _candidate_vault_paths(info.get("vault_name", "")) if c.is_dir()),
-            None,
-        ) if info.get("vault_name") else None
-        if vault is None:
-            return 0  # stale breadcrumb — fail closed, never log to a phantom path
+    # Same 5-step resolve_vault chain as the verbs and the other hooks, so
+    # every hook writes to the SAME vault. Degraded mode (broken _vault_walk):
+    # honor a locally-valid vault_path only.
+    vault = resolve_vault(Path(project_dir))
+    if vault is None and not _RESOLVER:
+        # Degraded mode keeps the shell hooks' precedence: OB_VAULT first,
+        # then a locally-valid vault_path (same-vault invariant).
+        ob = os.environ.get("OB_VAULT", "")
+        p = Path(ob).expanduser() if ob else None
+        if p is None or not p.is_dir():
+            vault_path = info.get("vault_path", "")
+            p = Path(vault_path).expanduser() if vault_path else None
+        vault = p if (p is not None and p.is_dir()) else None
+    if vault is None or not vault.is_dir():
+        return 0  # stale breadcrumb — fail closed, never log to a phantom path
     project_root = vault / "projects" / slug
 
     try:
@@ -95,23 +108,37 @@ def main() -> int:
 
     file_path = Path(file_path_str)
     try:
-        rel = file_path.relative_to(project_root)
-    except ValueError:
+        # Resolve both sides so a symlinked or differently-normalized Write
+        # path (~/Obsidian/V → iCloud, `..` segments) still matches the vault.
+        rel = file_path.resolve().relative_to(project_root.resolve())
+    except (ValueError, OSError):
         return 0
 
     # Only act on NEW files (Write tool, not Edit/MultiEdit)
     if tool_name != "Write":
         return 0
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    ts = datetime.now().strftime("%H:%M")
+    now = datetime.now()  # single clock read: date and time can't straddle midnight
+    today = now.strftime("%Y-%m-%d")
+    ts = now.strftime("%H:%M")
+    # Today's note — or the latest existing one when the session straddles
+    # midnight (the new day's note appears at the next SessionStart).
     session_file = project_root / "sessions" / f"{today}.md"
+    if not session_file.exists():
+        try:
+            # digit classes, not ?: a stray abcd-ef-gh.md must never win
+            candidates = sorted((project_root / "sessions").glob(
+                "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md"))
+        except OSError:
+            candidates = []
+        if candidates:
+            session_file = candidates[-1]
 
     parts = rel.parts
     if not parts:
         return 0
 
-    # --- Job 1: append a session-log entry (if a session note exists for today) ---
+    # --- Job 1: append a session-log entry (if a session note exists) ---
     if session_file.exists():
         is_decision = parts[0] == "decisions"
         label = "Decision" if is_decision else "Added"
@@ -135,4 +162,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # A PostToolUse hook must never surface as a tool failure: whatever goes
+    # wrong (future logic error, exotic I/O failure), exit 0.
+    try:
+        sys.exit(main())
+    except Exception:  # pragma: no cover - last-resort guard
+        sys.exit(0)
