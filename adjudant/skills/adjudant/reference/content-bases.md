@@ -176,7 +176,7 @@ formulas:
 
 ## Key Functions
 
-Most commonly used functions. For the complete reference of all types (Date, String, Number, List, File, Link, Object, RegExp), see [FUNCTIONS_REFERENCE.md](references/FUNCTIONS_REFERENCE.md).
+Most commonly used functions. For the complete reference of all types (Date, String, Number, List, File, Link, Object, RegExp), see the official Obsidian Bases functions docs: <https://help.obsidian.md/bases/functions>.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -496,7 +496,7 @@ formulas:
 - [Functions](https://help.obsidian.md/bases/functions)
 - [Views](https://help.obsidian.md/bases/views)
 - [Formulas](https://help.obsidian.md/formulas)
-- [Complete Functions Reference](references/FUNCTIONS_REFERENCE.md)
+- [Complete Functions Reference (official Obsidian docs)](https://help.obsidian.md/bases/functions)
 
 ## Limitations
 - Use this skill only when the task clearly matches the scope described above.

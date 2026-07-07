@@ -149,7 +149,7 @@ The `subpath` works like Obsidian wikilink anchors: `#Heading` for a section, `#
 |---|---|---|
 | Canvas opens blank | `nodes`/`edges` missing or invalid JSON | Ensure both arrays present (even if empty) and JSON is valid |
 | Edge does not render | `fromNode` / `toNode` references a missing `id` | IDs must match exactly (case-sensitive) |
-| File card shows "File not found" | `file:` path is absolute or wrong-cased | Use vault-relative path; case-sensitive on macOS HFS+ and Linux |
+| File card shows "File not found" | `file:` path is absolute or wrong-cased | Use vault-relative path with exact casing (default macOS APFS tolerates case drift; Linux and case-sensitive volumes do not) |
 | Group does not visually contain its members | Group is just a rectangle — placement is positional | Reposition member nodes to fall inside the group's `x`/`y`/`width`/`height` |
 | Wikilinks inside `text` nodes do not work | Actually they DO — `text` field renders as Markdown | If broken, check the wikilink path is vault-relative |
 | Subpath embed shows whole file | `#heading` not found in target file | Heading match is by exact text, case-sensitive |

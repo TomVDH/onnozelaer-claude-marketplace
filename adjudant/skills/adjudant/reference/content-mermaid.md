@@ -21,7 +21,7 @@ Mermaid renders diagrams from Markdown-inspired text. Obsidian renders ```` ```m
 
 ## Generation discipline (READ THIS BEFORE GENERATING)
 
-When **producing** new diagrams (not just understanding existing ones), follow the discipline in [`references/GENERATION_RULES.md`](references/GENERATION_RULES.md). Eight rule groups covering:
+When **producing** new diagrams (not just understanding existing ones), follow the discipline in [`mermaid-generation-rules.md`](mermaid-generation-rules.md). Eight rule groups covering:
 
 1. **Topology** — one terminal per path, pure DAGs only, mirror parallel branches, no hub nodes, avoid subgraphs for layout grouping
 2. **Label parser safety** — quote always, no markdown-list prefixes, `<br>` not `<br/>`, escape `<>&`
@@ -32,7 +32,15 @@ When **producing** new diagrams (not just understanding existing ones), follow t
 7. **Anti-patterns to refuse** — single End with >2 inbound, hub nodes >5 edges, etc.
 8. **Validation** — pre-flight parse + anti-pattern check before write
 
-The base SKILL.md (this file) covers syntax. `GENERATION_RULES.md` covers taste and discipline. Both apply when generating.
+This file covers syntax; `mermaid-generation-rules.md` covers taste and discipline. Both apply when generating.
+
+**Generated diagrams**: for diagrams derived from vault data — the project's wikilink relations, a board snapshot, the three-tier cleanup model — don't hand-draw. `scripts/graph.py` emits a node-capped fence with quoted labels and role classDefs (review its topology against the rules' §1/§7 before pasting):
+
+```bash
+python3 .../scripts/graph.py --project-dir "$PROJECT_ROOT" --mode relations   # wikilink graph
+python3 .../scripts/graph.py --project-dir "$PROJECT_ROOT" --mode board      # kanban snapshot
+python3 .../scripts/graph.py --mode tiers                                    # tidy→ramasse→dream
+```
 
 ## Diagram Types — Quick Reference
 
@@ -225,15 +233,29 @@ C4Context
   Rel(user, app, "uses")
 ```
 
-Variants: `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`. Useful pair with the plugin's existing `c4-container` / `c4-component` skills.
+Variants: `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`. Experimental upstream — keep them small (see Size & complexity below).
 
 ## Obsidian-Specific Notes
 
 - **Native rendering, no plugin needed.** Works in reading view, live preview, and exported PDFs.
-- **Theme follows Obsidian theme.** Light/dark switches automatically. Per-diagram theme overrides via `%%{init: {...}}%%` directive at the top of the fence (advanced — usually leave alone for vault consistency).
-- **Wikilinks are NOT parsed inside Mermaid.** If a node should link to another vault note, prefer a separate Markdown wikilink under the diagram, or use `click NodeId "obsidian://open?vault=...&file=..."`.
+- **Theme follows Obsidian theme.** Light/dark switches automatically. When a per-diagram override is truly needed, prefer front-matter config inside the fence (```` ```mermaid ```` then `---` / `config: …` / `---`) over the legacy `%%{init: {...}}%%` directive — and usually leave theme alone for vault consistency (rules §6).
+- **Wikilinks are NOT parsed inside Mermaid**, but flowchart nodes can link to vault notes natively:
+  `click A "Note Name"` plus `class A internal-link` (flowchart only; works in reading view).
+  **Avoid `obsidian://open?vault=...` URIs** — they hardcode the vault name and dead-end on the
+  other machine or after a vault rename. A plain wikilink under the diagram is the portable fallback.
 - **Embedded diagrams (`![[other-note]]`)** that contain Mermaid will render in the embedding note.
 - **Inside callouts** Mermaid still renders, but indentation must be preserved per callout block.
+
+## Size & complexity
+
+- **~25–30 nodes per fence, maximum.** Obsidian renders mermaid in-note; big graphs stutter live
+  preview and become unreadable at note width. Split by theme, or escalate to a Canvas
+  (`content-canvas.md`) when the graph should be pannable.
+- `graph.py --mode relations` enforces the cap mechanically (`--max-nodes`, default 30) and says
+  what it dropped — prefer it over hand-drawing large graphs.
+- **Per-type support caveats**: `timeline`, `quadrantChart`, and `mindmap` need a reasonably
+  recent Obsidian (older bundled mermaid versions render them as raw text); `C4Context` and
+  friends are experimental upstream — expect layout quirks and keep them small.
 
 ## Common Pitfalls
 
@@ -243,7 +265,7 @@ Variants: `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`. Useful pair wi
 | `Syntax error in graph` at first line | Diagram-type keyword missing or misspelled | First line inside fence is `flowchart LR` (etc.) |
 | Labels with `:` or `()` break parsing | Unquoted special chars | Wrap in `"..."`: `A["Label: with colon"]` |
 | Edge label disappears | Wrong syntax | Use `-->|label|` not `-- label -->` for flowchart |
-| Wikilink renders as literal text | Not supported | Use external URL via `click`, or external Markdown link below the diagram |
+| Wikilink renders as literal text | Not supported | `click NodeId "Note Name"` + `class NodeId internal-link` (flowchart), or a wikilink below the diagram |
 | Sequence diagram lifelines don't show | Missing `activate`/`+` | Use `->>+ S` and `-->>- U` shorthand |
 | ERD cardinality wrong | Glyph mirrored incorrectly | Left of `--` = left entity's perspective |
 | Gantt `dateFormat` mismatch | Format string doesn't match dates | Default is `YYYY-MM-DD`; set explicitly if other |
@@ -259,6 +281,8 @@ Variants: `C4Context`, `C4Container`, `C4Component`, `C4Dynamic`. Useful pair wi
 
 ## Cross-References
 
-- Obsidian rendering specifics: see `adjudant:markdown` for the broader Obsidian-flavored Markdown context.
-- C4-shaped architecture diagrams: pair with skills `c4-context`, `c4-container`, `c4-component`, `c4-code` (separate plugins) when modelling systems.
+- Generation discipline: `mermaid-generation-rules.md` (always applies when producing new fences).
+- Generated-from-vault diagrams: `scripts/graph.py` (relations / board / tiers).
+- Broader Obsidian-flavored Markdown context: `content-markdown.md`.
+- Pannable large graphs: `content-canvas.md`.
 - Upstream syntax canon: <https://mermaid.js.org/intro/>.

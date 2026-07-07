@@ -36,6 +36,7 @@ from _vault_walk import (
     BUCKET_A_TYPES,
     BUCKET_A_TYPES_PLUS_HOME,
     BUCKET_B_MIGRATIONS,
+    DEFAULT_SKIP,
     INDEX_EXEMPT_FOLDERS,
     PROJECT_TYPE_DEFAULT_FOLDERS,
     VaultFile,
@@ -267,6 +268,32 @@ def detect_naming_violations(files: list[VaultFile]) -> list[dict]:
     return out
 
 
+KEBAB_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+
+
+def detect_artefact_naming(project_dir: Path, include_legacy: bool = False) -> list[dict]:
+    """`.canvas`/`.base` filenames must be strict kebab-case (§4 'strict').
+
+    These artefacts aren't markdown, so `walk_project` never sees them — this
+    is their dedicated naming pass (draw.md promises a check enforces the rule).
+    templates/ scaffolds are exempt, mirroring detect_naming_violations; the
+    _legacy skip honors include_legacy, matching walk_project's contract.
+    """
+    out = []
+    skip = set(DEFAULT_SKIP)
+    if not include_legacy:
+        skip.add("_legacy")
+    for ext in ("canvas", "base"):
+        for f in sorted(project_dir.rglob(f"*.{ext}")):
+            rel = f.relative_to(project_dir)
+            if any(part in skip or part == "templates" for part in rel.parts):
+                continue
+            if not KEBAB_RE.fullmatch(f.stem):
+                out.append({"file": str(rel),
+                            "issue": f".{ext} filename not strict kebab-case (§4)"})
+    return out
+
+
 def detect_wikilink_form_violations(files: list[VaultFile], vault_index: set[str]) -> list[dict]:
     """`[text](*.md)` markdown-style links pointing at vault .md files.
 
@@ -360,7 +387,7 @@ def run_scan(
     fm_drift = detect_frontmatter_drift(files)
     tag_drift = detect_tag_drift(files, slug)
     type_drift = detect_type_drift(files)
-    naming = detect_naming_violations(files)
+    naming = detect_naming_violations(files) + detect_artefact_naming(project_dir, include_legacy)
     wl_form = detect_wikilink_form_violations(files, vault_index) if vault_index else []
     broken = detect_broken_wikilinks(files, vault_index) if vault_index else {
         "total_wikilinks": 0, "broken_count": 0, "broken_pct": 0.0,

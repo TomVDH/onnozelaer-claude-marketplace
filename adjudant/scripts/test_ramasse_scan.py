@@ -11,6 +11,7 @@ from ramasse_scan import (
     detect_folder_drift,
     detect_frontmatter_drift,
     detect_index_gaps,
+    detect_artefact_naming,
     detect_naming_violations,
     detect_tag_drift,
     detect_type_drift,
@@ -390,6 +391,55 @@ class TestRunDream(unittest.TestCase):
             payload = json.dumps(report, default=str)
             roundtrip = json.loads(payload)
             self.assertEqual(roundtrip["meta"]["project_slug"], "test")
+
+
+class TestArtefactNaming(unittest.TestCase):
+
+    def test_canvas_base_kebab_case_enforced(self):
+        # draw.md promises strict kebab-case for .canvas/.base — this is the
+        # check that makes that promise true.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "canvases").mkdir(parents=True)
+            (root / "bases").mkdir(parents=True)
+            (root / "canvases" / "user-flow.canvas").write_text("{}")
+            (root / "canvases" / "MyCoolCanvas.canvas").write_text("{}")
+            (root / "bases" / "research_targets.base").write_text("")
+            v = detect_artefact_naming(root)
+            issues = {x["file"]: x["issue"] for x in v}
+            self.assertNotIn("canvases/user-flow.canvas", issues)
+            self.assertIn("canvases/MyCoolCanvas.canvas", issues)
+            self.assertIn("bases/research_targets.base", issues)
+            self.assertIn("kebab-case", issues["canvases/MyCoolCanvas.canvas"])
+
+    def test_templates_and_legacy_exempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "templates").mkdir(parents=True)
+            (root / "_legacy").mkdir(parents=True)
+            (root / "templates" / "BigScaffold.canvas").write_text("{}")
+            (root / "_legacy" / "Old Canvas.canvas").write_text("{}")
+            self.assertEqual(detect_artefact_naming(root), [])
+
+    def test_include_legacy_scans_legacy_artefacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "_legacy").mkdir(parents=True)
+            (root / "_legacy" / "Old Canvas.canvas").write_text("{}")
+            self.assertEqual(detect_artefact_naming(root), [])
+            v = detect_artefact_naming(root, include_legacy=True)
+            self.assertEqual(len(v), 1)
+            self.assertIn("Old Canvas.canvas", v[0]["file"])
+
+    def test_artefact_naming_lands_in_run_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_minimal_project(root)
+            (root / "canvases").mkdir()
+            (root / "canvases" / "BadName.canvas").write_text("{}")
+            report = run_scan(root, root)
+            files = [x["file"] for x in report["naming_violations"]]
+            self.assertIn("canvases/BadName.canvas", files)
 
 
 if __name__ == "__main__":
