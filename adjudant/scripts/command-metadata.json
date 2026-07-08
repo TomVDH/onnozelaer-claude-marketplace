@@ -22,8 +22,8 @@
     },
     {
       "name": "check",
-      "description": "Read-only summary — project state, vault snapshot, schema compliance. check.py scans, Claude renders. Never writes.",
-      "argumentHint": "(no args)",
+      "description": "Read-only summary — project + vault snapshot, schema compliance; [vault|repo|all] also audits repo structure (versions, symlinks, registration, stale plans). check.py/repo_scan.py scan, Claude renders. Never writes.",
+      "argumentHint": "[vault|repo|all]",
       "reference": "reference/check.md"
     },
     {
@@ -34,8 +34,8 @@
     },
     {
       "name": "tidy",
-      "description": "Surface mechanical sweep — indexes, tags, wikilink form, updated:. Routine (daily/weekly). Two-phase: tidy.py preview → apply. Idempotent.",
-      "argumentHint": "(no args)",
+      "description": "Surface mechanical sweep — indexes, tags, wikilink form, updated:. Routine (daily/weekly). Two-phase preview → apply, idempotent; [vault|repo|all] also repairs adopted-plugin harness symlinks in the repo.",
+      "argumentHint": "[vault|repo|all]",
       "reference": "reference/tidy.md"
     },
     {

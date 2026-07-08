@@ -18,9 +18,9 @@ Vault editor/writer and project initializer. One skill, one command, ten verbs. 
 | `connect` | `reference/connect.md` | Rigid project init — breadcrumb, AGENTS.md+CLAUDE.md, vault scaffold, session note, .gitignore |
 | `port` | `reference/port.md` | Migrate any legacy project (raw / obsidian-bridge / hand-authored) to adjudant compliance via two-phase preview → apply |
 | `sync` | `reference/sync.md` | Push brief + handoff to vault |
-| `check` | `reference/check.md` | Read-only project + vault summary (consumes `check.py` JSON) |
+| `check` | `reference/check.md` | Read-only project + vault summary (consumes `check.py` JSON). `[vault\|repo\|all]` also audits repo structure — versions, symlinks, registration, stale plans — via `repo_scan.py` |
 | `sitrep` | `reference/sitrep.md` | ELI5 orientation briefing — where we were, what's done, where the vault is, where to start. Read-only (consumes `sitrep.py` JSON). For re-orienting after a break |
-| `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`) |
+| `tidy` | `reference/tidy.md` | Surface mechanical sweep — indexes, tags, wikilink form, `updated:`. Routine cadence. Two-phase preview→apply (via `tidy.py`). `[vault\|repo\|all]` also repairs adopted-plugin harness symlinks via `repo_tidy.py` |
 | `ramasse` | `reference/ramasse.md` | Deep structural clean — folder shape, schema, file types, naming, doc/decision mismatches. Sparing cadence. Analysis via `ramasse_scan.py`, planning + execute via superpowers |
 | `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic, judgment-heavy. `dream.py` (read-only) emits a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphans, unacted decisions, gaps, dangling scopes); Claude judges, superpowers executes |
 | `draw` | `reference/draw.md` | Create canvas / base / mermaid diagram — hand-authored or generated from vault data via `graph.py` (relations / board / tiers) |
@@ -72,6 +72,7 @@ For specialized content types, load the matching reference on demand:
 - `reference/content-markdown.md` — Obsidian-flavoured markdown (callouts, embeds, wikilinks)
 - `reference/content-clipper.md` — Web Clipper templates
 - `reference/content-cli.md` — Obsidian CLI
+- `reference/repo-standards.md` — code-repo conventions (the `check`/`tidy` `[repo|all]` target)
 
 ## Templates
 
