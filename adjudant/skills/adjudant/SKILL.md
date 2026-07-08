@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), and a self-hosted kanban board. Also fires whenever decisions, sessions, or notes are written into a linked vault.
-version: 0.12.0
+version: 0.13.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board] [args]"
 license: MIT
