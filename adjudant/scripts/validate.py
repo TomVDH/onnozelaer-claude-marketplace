@@ -21,6 +21,11 @@ Validators:
  15. verb-surface-parity     — every verb name appears in plugin.json / README.md / marketplace description; spelled-out verb counts match
  16. reference-doc-links     — every relative markdown link inside reference/*.md resolves on disk
  17. verb-description-length — command-metadata verb descriptions stay router-line short (≤ 220 chars)
+ 18. repo-helper-parity      — repo_walk/repo_scan/repo_tidy each exist with a matching test_*.py
+ 19. repo-standards-coverage — reference/repo-standards.md exists and names each detector category
+ 20. repo-tidy-preview-coherence — if repo-tidy preview dir exists, it has summary.md + changes.json + files/
+ 21. repo-tidy-backup-integrity   — repo-tidy backup subdirs with files carry at least one .legacy
+ 22. gitignore-includes-repo-tidy-dirs — .gitignore lists the repo-tidy dirs if either exists
 """
 
 import json
@@ -561,6 +566,102 @@ def validate_verb_description_length(r: Result) -> None:
     r.add_pass(name)
 
 
+def validate_repo_helper_parity(r: Result) -> None:
+    """The repo-target trio mirrors the vault trio: each helper ships with a
+    paired test module (the plugin's helper/test doctrine)."""
+    name = "repo-helper-parity"
+    scripts = ROOT / "scripts"
+    missing = []
+    for base in ("repo_walk", "repo_scan", "repo_tidy"):
+        if not (scripts / f"{base}.py").is_file():
+            missing.append(f"{base}.py")
+        if not (scripts / f"test_{base}.py").is_file():
+            missing.append(f"test_{base}.py")
+    if missing:
+        r.add_fail(name, f"missing repo helper/test files: {missing}")
+        return
+    r.add_pass(name)
+
+
+REPO_STANDARD_CATEGORIES = ("version coherence", "symlink integrity", "context files", "plan age", "registration")
+
+
+def validate_repo_standards_coverage(r: Result) -> None:
+    """reference/repo-standards.md is the single source of truth for the repo
+    detector categories — it must exist and name each one."""
+    name = "repo-standards-coverage"
+    f = REFERENCE / "repo-standards.md"
+    if not f.is_file():
+        r.add_fail(name, "reference/repo-standards.md missing")
+        return
+    text = f.read_text().lower()
+    missing = [c for c in REPO_STANDARD_CATEGORIES if c not in text]
+    if missing:
+        r.add_fail(name, f"repo-standards.md missing categories: {missing}")
+        return
+    r.add_pass(name)
+
+
+def validate_repo_tidy_preview_coherence(r: Result) -> None:
+    name = "repo-tidy-preview-coherence"
+    preview = ROOT / ".adjudant-repo-tidy-preview"
+    if not preview.is_dir():
+        r.add_pass(name)
+        return
+    missing = [f for f in TIDY_PREVIEW_REQUIRED if not (preview / f).is_file()]
+    if missing:
+        r.add_fail(name, f"repo-tidy preview dir missing required files: {missing}")
+        return
+    if not (preview / "files").is_dir():
+        r.add_fail(name, "repo-tidy preview dir missing files/ subdir")
+        return
+    r.add_pass(name)
+
+
+def validate_repo_tidy_backup_integrity(r: Result) -> None:
+    name = "repo-tidy-backup-integrity"
+    backup_root = ROOT / ".adjudant-repo-tidy-backup"
+    if not backup_root.is_dir():
+        r.add_pass(name)
+        return
+    for subdir in backup_root.iterdir():
+        if subdir.is_dir():
+            files = [p for p in subdir.rglob("*") if p.is_file()]
+            if not files:
+                continue
+            has_legacy = any(p.name.endswith(".legacy") for p in files)
+            if not has_legacy:
+                r.add_fail(name, f"repo-tidy backup dir {subdir.name} has files but no .legacy: {[p.name for p in files]}")
+                return
+    r.add_pass(name)
+
+
+def validate_gitignore_includes_repo_tidy_dirs(r: Result) -> None:
+    name = "gitignore-includes-repo-tidy-dirs"
+    preview = ROOT / ".adjudant-repo-tidy-preview"
+    backup = ROOT / ".adjudant-repo-tidy-backup"
+    if not preview.is_dir() and not backup.is_dir():
+        r.add_pass(name)
+        return
+    gi = ROOT / ".gitignore"
+    if not gi.is_file():
+        gi = ROOT.parent / ".gitignore"
+    if not gi.is_file():
+        r.add_fail(name, "repo-tidy directories exist but .gitignore is missing")
+        return
+    entries = _gitignore_active_entries(gi)
+    required = []
+    if preview.is_dir():
+        required.append(".adjudant-repo-tidy-preview/")
+    if backup.is_dir():
+        required.append(".adjudant-repo-tidy-backup/")
+    missing = [e for e in required if e not in entries]
+    if missing:
+        r.add_fail(name, f".gitignore missing entries: {missing}")
+        return
+    r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -581,6 +682,11 @@ def main() -> int:
     validate_verb_surface_parity(r)
     validate_reference_doc_links(r)
     validate_verb_description_length(r)
+    validate_repo_helper_parity(r)
+    validate_repo_standards_coverage(r)
+    validate_repo_tidy_preview_coherence(r)
+    validate_repo_tidy_backup_integrity(r)
+    validate_gitignore_includes_repo_tidy_dirs(r)
     return r.report()
 
 

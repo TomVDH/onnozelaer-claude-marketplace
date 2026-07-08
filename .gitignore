@@ -30,6 +30,8 @@ __pycache__/
 .adjudant-port-backup/
 .adjudant-tidy-preview/
 .adjudant-tidy-backup/
+.adjudant-repo-tidy-preview/
+.adjudant-repo-tidy-backup/
 .adjudant-dream-backup/
 .adjudant-dream-*/
 

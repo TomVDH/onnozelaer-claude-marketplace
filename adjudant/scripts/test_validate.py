@@ -463,5 +463,110 @@ class TestVerbDescriptionLength(_PatchedTree):
         self.assertIn("reference/*.md", r.failures[0])
 
 
+class TestRepoHelperParity(_PatchedTree):
+
+    def _make_helpers(self):
+        scripts = self.plugin / "scripts"
+        for base in ("repo_walk", "repo_scan", "repo_tidy"):
+            (scripts / f"{base}.py").write_text("# helper\n")
+            (scripts / f"test_{base}.py").write_text("# test\n")
+
+    def test_passes_when_all_present(self):
+        self._make_helpers()
+        r = Result()
+        validate.validate_repo_helper_parity(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_a_test_is_missing(self):
+        self._make_helpers()
+        (self.plugin / "scripts" / "test_repo_scan.py").unlink()
+        r = Result()
+        validate.validate_repo_helper_parity(r)
+        self.assertTrue(any("repo-helper-parity" in f for f in r.failures))
+        self.assertIn("test_repo_scan.py", r.failures[0])
+
+
+class TestRepoStandardsCoverage(_PatchedTree):
+
+    def _write_standards(self, text):
+        (self.plugin / "skills" / "adjudant" / "reference" / "repo-standards.md").write_text(text)
+
+    def test_passes_with_all_categories(self):
+        self._write_standards(
+            "version coherence\nsymlink integrity\ncontext files\nplan age\nregistration\n")
+        r = Result()
+        validate.validate_repo_standards_coverage(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_category_missing(self):
+        self._write_standards("version coherence\ncontext files\nplan age\nregistration\n")
+        r = Result()
+        validate.validate_repo_standards_coverage(r)
+        self.assertTrue(any("repo-standards-coverage" in f for f in r.failures))
+        self.assertIn("symlink integrity", r.failures[0])
+
+    def test_fails_when_file_absent(self):
+        r = Result()
+        validate.validate_repo_standards_coverage(r)
+        self.assertTrue(any("repo-standards-coverage" in f for f in r.failures))
+
+
+class TestRepoTidyPreviewCoherence(_PatchedTree):
+
+    def test_passes_when_coherent(self):
+        d = self.plugin / ".adjudant-repo-tidy-preview"
+        (d / "files").mkdir(parents=True)
+        (d / "summary.md").write_text("# s\n")
+        (d / "changes.json").write_text("{}\n")
+        r = Result()
+        validate.validate_repo_tidy_preview_coherence(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_files_dir_missing(self):
+        d = self.plugin / ".adjudant-repo-tidy-preview"
+        d.mkdir(parents=True)
+        (d / "summary.md").write_text("# s\n")
+        (d / "changes.json").write_text("{}\n")
+        r = Result()
+        validate.validate_repo_tidy_preview_coherence(r)
+        self.assertTrue(any("repo-tidy-preview-coherence" in f for f in r.failures))
+
+
+class TestRepoTidyBackupIntegrity(_PatchedTree):
+
+    def test_passes_with_legacy_file(self):
+        d = self.plugin / ".adjudant-repo-tidy-backup" / "20260707-000000"
+        d.mkdir(parents=True)
+        (d / "alpha__source__skills__alpha.legacy").write_text("prior\n")
+        r = Result()
+        validate.validate_repo_tidy_backup_integrity(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_files_but_no_legacy(self):
+        d = self.plugin / ".adjudant-repo-tidy-backup" / "20260707-000000"
+        d.mkdir(parents=True)
+        (d / "note.txt").write_text("not a backup\n")
+        r = Result()
+        validate.validate_repo_tidy_backup_integrity(r)
+        self.assertTrue(any("repo-tidy-backup-integrity" in f for f in r.failures))
+
+
+class TestGitignoreIncludesRepoTidyDirs(_PatchedTree):
+
+    def test_passes_with_entry(self):
+        (self.plugin / ".adjudant-repo-tidy-preview").mkdir()
+        (self.plugin / ".gitignore").write_text(".adjudant-repo-tidy-preview/\n")
+        r = Result()
+        validate.validate_gitignore_includes_repo_tidy_dirs(r)
+        self.assertEqual(r.failures, [])
+
+    def test_fails_when_missing(self):
+        (self.plugin / ".adjudant-repo-tidy-backup").mkdir()
+        (self.plugin / ".gitignore").write_text("# nothing\n")
+        r = Result()
+        validate.validate_gitignore_includes_repo_tidy_dirs(r)
+        self.assertTrue(any("gitignore-includes-repo-tidy-dirs" in f for f in r.failures))
+
+
 if __name__ == "__main__":
     unittest.main()
