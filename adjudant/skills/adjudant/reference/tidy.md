@@ -2,6 +2,33 @@
 
 Mechanical vault sweep. Idempotent — second run with no fresh drift = no changes. **Two-phase preview → apply** (mirrors `/adjudant port`).
 
+## Target `[vault|repo|all]`
+
+`tidy` takes an optional target; default is `vault` (the sweep described below —
+exact back-compat, `/adjudant tidy` is unchanged).
+
+- **`repo`** — safe mechanical repair of the *code repo*: **harness symlink
+  repair only**. Two-phase via `repo_tidy.py`:
+
+  ```bash
+  python3 "$(dirname "$0")/../../../scripts/repo_tidy.py" preview --project-dir "$REPO_ROOT"
+  # review .adjudant-repo-tidy-preview/summary.md, then:
+  python3 "$(dirname "$0")/../../../scripts/repo_tidy.py" apply --project-dir "$REPO_ROOT"
+  ```
+
+  `apply` backs the prior link state up to `.adjudant-repo-tidy-backup/{ts}/*.legacy`,
+  recreates each missing/dangling harness symlink on an **already-adopted**
+  plugin as a relative link to its canonical `skills/<name>`, and deletes the
+  preview. It **never** creates a harness for a plugin that lacks one
+  (auto-adoption is deferred `ramasse` work), and it does **not** touch versions
+  (the `check_marketplace_versions.py` pre-commit gate owns those). On a clean
+  repo `tidy repo` is a no-op — it is the repair arm of `check repo`'s detect
+  (`harness-parity` fails the build when a symlink breaks; `tidy repo` fixes it).
+  Repo conventions: `reference/repo-standards.md`.
+- **`all`** — run the vault sweep *and* the repo repair.
+
+Repo ops use `--project-dir` as the repo root directly (no breadcrumb).
+
 ## When to run
 
 - Routine — daily/weekly cadence, opposite of `ramasse` (heavy, deliberate)

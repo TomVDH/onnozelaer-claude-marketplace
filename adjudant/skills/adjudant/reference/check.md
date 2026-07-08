@@ -2,6 +2,25 @@
 
 Read-only summary. Never writes. Backed by `check.py` which scans the project mechanically and emits structured JSON; this skill consumes the JSON and renders the 3-section block.
 
+## Target `[vault|repo|all]`
+
+`check` takes an optional target; default is `vault` (the sections below —
+exact back-compat, `/adjudant check` is unchanged).
+
+- **`repo`** — audit the *code repo* instead of the vault. Runs
+  `python3 "$(dirname "$0")/../../../scripts/repo_scan.py" --project-dir "$REPO_ROOT"`
+  and renders the JSON: a version-coherence table (marketplace.json ↔ each
+  plugin.json), a symlink-integrity matrix (skills-bearing plugins only), a
+  registration check (every plugin registered, every `source` path resolves),
+  a stale-plan list, the repo-root context-file + `@AGENTS.md` import check, and
+  a single `drift_items` score. Per-plugin context files are shown
+  *informational* (not counted). Repo conventions live in
+  `reference/repo-standards.md`. Never writes.
+- **`all`** — run the vault check *and* the repo scan; render both blocks.
+
+Repo ops use `--project-dir` as the repo root directly (no breadcrumb — the repo
+*is* the project dir).
+
 ## The 3 features (locked spec)
 
 1. **Current project state** — brief summary (title, type, status), recent sessions/decisions (last by date), handoff freshness (timestamp + delta vs now)
