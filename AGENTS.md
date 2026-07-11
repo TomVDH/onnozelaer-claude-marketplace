@@ -7,12 +7,12 @@
 ```
 .
 ├── .claude-plugin/
-│   └── marketplace.json     # Marketplace manifest — lists every plugin with version + description
-├── adjudant/                # v0.13.0 — Vault editor/writer + project initializer, /adjudant with ten verbs and a three-tier cleanup model (successor to the retired obsidian-bridge)
-├── cabinet-of-imd/          # v3.0.0 — Crew/persona flavor layer (functionality sunset; character-only)
-├── cli-wrapper-helper/      # v2.0.0 — Operating language for agent-built helper CLIs (bash TUI + python helper)
-├── gemineye/               # v0.5.0 — Sandboxed Gemini second opinion via the agy CLI
-├── iteration-shelf/         # v0.1.0 — Terminal-aesthetic in-browser design review boards
+│   └── marketplace.json     # Marketplace manifest — source of truth for every plugin's version + description
+├── adjudant/                # Vault editor/writer + project initializer, /adjudant with ten verbs and a three-tier cleanup model (successor to the retired obsidian-bridge)
+├── cabinet-of-imd/          # Crew/persona flavor layer (functionality sunset; character-only)
+├── cli-wrapper-helper/      # Operating language for agent-built helper CLIs (bash TUI + python helper)
+├── gemineye/                # Sandboxed Gemini second opinion via the agy CLI
+├── iteration-shelf/         # Terminal-aesthetic in-browser design review boards
 ├── docs/                    # cross-plugin documentation
 ├── .pre-commit-config.yaml  # validators that fail the build on drift
 ├── README.md
