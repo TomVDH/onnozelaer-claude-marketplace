@@ -165,7 +165,37 @@ Quick test: "When was this decided?" — clear answer = decision; "it's just how
 
 ---
 
-## 5. Folder structure
+## 5. Project status and zones (locked 2026-07-16)
+
+`status:` on a brief takes exactly one of: `active` | `stale` | `fridge` | `done` | `dead` | `seed`.
+
+- `active`: being worked
+- `stale`: declared active but quiet past `stale_after_days` (the only machine-suggested state)
+- `fridge`: deliberately paused, intent to return
+- `done`: shipped and complete (a success, not an abandonment)
+- `dead`: abandoned
+- `seed`: captured idea, not yet started
+
+Physical placement follows status:
+
+| Zone | Holds |
+|---|---|
+| `projects/` | active, stale, seed |
+| `projects/_fridge/` | fridge |
+| `projects/_archive/` | done, dead |
+
+Transitions run through `/adjudant shelf` (two-phase preview/apply): brief frontmatter,
+a dated `## Status log` line (newest first), the zone folder move, a vault-wide
+`[[projects/...]]` prefix rewrite, and a `projects/_index.md` row refresh. Full-path
+wikilinks into a project therefore survive zone moves; the `[[{slug}/brief\|{slug}]]`
+index-row form resolves across zones by Obsidian suffix matching and is never rewritten.
+Machines suggest only along the active/stale axis; `fridge`, `done`, `dead`, `seed`
+are deliberate, user-set states. Breadcrumb key `stale_after_days:` (default 30)
+tunes the staleness threshold per project.
+
+---
+
+## 6. Folder structure
 
 ### Per-`project_type` defaults
 
@@ -204,7 +234,7 @@ Every folder under a project (or at vault root) that holds ≥2 sibling `.md` fi
 
 ---
 
-## 6. Wikilink rules
+## 7. Wikilink rules
 
 All vault-internal links use `[[note-name]]` form.
 
@@ -223,6 +253,6 @@ Briefs always carry `aliases: [{slug}]` so bare `[[my-project]]` resolves cleanl
 
 ---
 
-## 7. Content style
+## 8. Content style
 
 Body copy is **actionable, clear, unambiguous, and short**. Style is judgment, not mechanically enforced — `/adjudant dream` flags suspected style violations for human review (banned generic-AI-fluff terms, em dashes overused, three-word taglines, etc. — full list in the global voice rules, not duplicated here).

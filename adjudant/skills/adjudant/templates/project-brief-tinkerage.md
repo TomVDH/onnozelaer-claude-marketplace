@@ -4,7 +4,7 @@ project_type: tinkerage
 slug: {kebab-slug}
 aliases:
   - {kebab-slug}
-status: active
+status: active                # active | stale | fridge | done | dead | seed
 created: {YYYY-MM-DD}
 updated: {YYYY-MM-DD}
 tags:
