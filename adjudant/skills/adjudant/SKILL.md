@@ -1,15 +1,15 @@
 ---
 name: adjudant
-description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), and a self-hosted kanban board. Also fires whenever decisions, sessions, or notes are written into a linked vault.
+description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), a self-hosted kanban board, and lifecycle transitions (shelf). Also fires whenever decisions, sessions, or notes are written into a linked vault.
 version: 0.13.0
 user-invocable: true
-argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board] [args]"
+argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf] [args]"
 license: MIT
 ---
 
 # Adjudant
 
-Vault editor/writer and project initializer. One skill, one command, ten verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
+Vault editor/writer and project initializer. One skill, one command, eleven verbs. Pairs with hookify for universal drift-defense hooks, and with Gemineye for Gemini-assisted review hand-off.
 
 ## Verb router
 
@@ -25,6 +25,7 @@ Vault editor/writer and project initializer. One skill, one command, ten verbs. 
 | `dream` | `reference/dream.md` | Content/knowledge/memory refresh — semantic, judgment-heavy. `dream.py` (read-only) emits a 10-category comparator catalog (staleness, supersession, contradictions, redundancy, stale refs, orphans, unacted decisions, gaps, dangling scopes); Claude judges, superpowers executes |
 | `draw` | `reference/draw.md` | Create canvas / base / mermaid diagram — hand-authored or generated from vault data via `graph.py` (relations / board / tiers) |
 | `board` | `reference/board.md` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. `--project <slug>` for one project, `--all` for the whole vault; `status` prints terminal column counts |
+| `shelf` | `reference/shelf.md` | Project lifecycle: status table across zones (list) and confirmed transitions (preview/apply): brief + status log + zone move + wikilink rewrite + index row |
 
 When a verb is invoked, load **only** the matching reference file. Do not bring all reference files into context.
 
@@ -65,6 +66,7 @@ Every file-touching verb is backed by a Python helper. Helpers follow the `.clau
 | `sitrep` | `sitrep.py` + `_vault_walk.py` | JSON orientation briefing (recent activity, NEXT, vault location + counts); Claude renders ELI5 |
 | `board` | `board.py` + `_vault_walk.py` | scaffold per-project `board-data.json` + a self-contained `board.html`; resolves any project by slug (or `--all`) via `enumerate_projects`. Refresh-without-clobber: re-seeding from `tasks/` merges, preserving dragged columns (idempotent; `--force` rebuilds with a `.bak`). `status` prints per-column counts |
 | `draw` | `graph.py` + `_vault_walk.py` | generated mermaid fences from vault data — `relations` (wikilink graph, node-capped), `board` (kanban snapshot), `tiers` (cleanup model). Read-only |
+| `shelf` | `shelf.py` + `_vault_walk.py` | lifecycle list JSON across zones; two-phase transition (preview/apply with backup): brief status + status log + zone folder move + vault-wide wikilink prefix rewrite + `projects/_index.md` row refresh |
 
 `_vault_walk.py` is the shared primitives module (frontmatter, wikilinks, tags, vault index, vault/project resolvers, schema constants). Read-only CLI smoke-test: `python3 _vault_walk.py --project-dir PATH [--vault-dir PATH]`.
 

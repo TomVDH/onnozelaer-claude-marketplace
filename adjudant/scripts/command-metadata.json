@@ -71,6 +71,13 @@
       "argumentHint": "[scaffold|serve|status] [--project SLUG|--all] [--from-tasks] [--force]",
       "reference": "reference/board.md",
       "weight": "light"
+    },
+    {
+      "name": "shelf",
+      "description": "Project lifecycle: status table across vault zones (list) and confirmed transitions (preview/apply): brief + status log + zone move + wikilink rewrite + index row.",
+      "argumentHint": "[<slug> <state>] [--reason \"...\"]",
+      "reference": "reference/shelf.md",
+      "weight": "light"
     }
   ]
 }

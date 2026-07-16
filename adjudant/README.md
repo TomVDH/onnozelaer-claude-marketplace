@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, ten verbs, Python helpers under each.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, eleven verbs, Python helpers under each.
 
 ## Install
 
@@ -15,11 +15,11 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | | |
 |---|---|
 | Command | `/adjudant {verb}` |
-| Verbs | `connect`, `port`, `sync`, `check`, `sitrep`, `tidy`, `ramasse`, `dream`, `draw`, `board` |
+| Verbs | `connect`, `port`, `sync`, `check`, `sitrep`, `tidy`, `ramasse`, `dream`, `draw`, `board`, `shelf` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
-| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
 | Drift defense | `python3 scripts/validate.py` — 22 validators, runs via pre-commit |
 | Tests | 479 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
@@ -47,6 +47,7 @@ Risk tolerance is the dividing line: tidy never breaks anything; ramasse can bre
 | `/adjudant dream` | Content/knowledge/memory refresh — semantic. Analysis via `dream.py` (read-only comparator catalog), judge + plan + execute via the superpowers chain, backups for destructive content ops. | `dream.py` |
 | `/adjudant draw <canvas\|base\|diagram> <name\|type>` | Create visual artefacts — canvases, bases, mermaid diagrams (hand-authored or generated from vault data). | `graph.py` |
 | `/adjudant board [scaffold\|serve\|status] [--project <slug>\|--all]` | Scaffold a self-hosted work-order kanban — drag-to-move, disk-persisted, seeded from `tasks/`. One project, a named one, or the whole vault. Re-seeds without clobbering dragged cards or custom columns; `status` prints terminal column counts. | `board.py` |
+| `/adjudant shelf [<slug> <state>] [--reason "..."]` | Project lifecycle: status table across zones (list) and confirmed transitions (preview/apply): brief + status log + zone move + wikilink rewrite + index row. | `shelf.py` |
 
 All helpers follow the breadcrumb: pass `--project-dir` (connect/port also accept it as an alias of their original `--project-root`) pointed at your **code project root** (where `.claude/adjudant` lives) and the helper auto-resolves to the vault project. Direct vault-project paths still work for backward compatibility.
 

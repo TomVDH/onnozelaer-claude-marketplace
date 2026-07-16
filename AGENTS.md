@@ -8,7 +8,7 @@
 .
 ├── .claude-plugin/
 │   └── marketplace.json     # Marketplace manifest — source of truth for every plugin's version + description
-├── adjudant/                # Vault editor/writer + project initializer, /adjudant with ten verbs and a three-tier cleanup model (successor to the retired obsidian-bridge)
+├── adjudant/                # Vault editor/writer + project initializer, /adjudant with eleven verbs and a three-tier cleanup model (successor to the retired obsidian-bridge)
 ├── cabinet-of-imd/          # Crew/persona flavor layer (functionality sunset; character-only)
 ├── cli-wrapper-helper/      # Operating language for agent-built helper CLIs (bash TUI + python helper)
 ├── gemineye/                # Sandboxed Gemini second opinion via the agy CLI
