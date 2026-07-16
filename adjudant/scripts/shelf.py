@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Adjudant shelf — project lifecycle manager (verb #11).
+"""Adjudant shelf: project lifecycle manager (verb #11).
 
 list:    read-only status table of every project across zones, with the
          machine suggestion (active/stale axis only) beside the declared state.
 preview: plan one transition; writes {vault}/.adjudant-shelf-preview/.
-apply:   execute the transition — brief status + dated status-log line +
+apply:   execute the transition (brief status + dated status-log line +
          zone folder move + vault-wide wikilink prefix rewrite +
-         projects/_index.md row refresh. Backs up every modified file first.
+         projects/_index.md row refresh). Backs up every modified file first.
 
 CLI:
     python3 shelf.py list    (--project-dir PATH | --vault-dir PATH) [--stale-days N] [--today YYYY-MM-DD]
@@ -92,7 +92,7 @@ def run_list(vault: Path, stale_days: int, today: date) -> dict[str, Any]:
 def cli_main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="shelf.py",
-        description="Adjudant shelf — project lifecycle (list / preview / apply).")
+        description="Adjudant shelf: project lifecycle (list / preview / apply).")
     parser.add_argument("phase", choices=["list", "preview", "apply"])
     parser.add_argument("--project-dir", default=".",
                         help="Code project root, breadcrumb flow (default: cwd)")
@@ -120,7 +120,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(json.dumps(run_list(vault, stale_days, today), indent=2))
         return 0
 
-    # preview / apply — implemented in Task 8
+    # preview / apply: implemented in Task 8
     print("error: preview/apply not yet implemented", file=sys.stderr)
     return 1
 
