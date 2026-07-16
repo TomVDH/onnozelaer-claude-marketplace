@@ -1,6 +1,6 @@
 # Adjudant
 
-Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, eleven verbs, Python helpers under each.
+Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Successor to `obsidian-bridge`. One skill, one command, eleven verbs, Python helpers under each. Cost-gated heavy verbs, a shelf-driven project lifecycle across vault zones, a five-field connect contract, and a locked voice layer round out the surface.
 
 ## Install
 
@@ -20,8 +20,8 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
 | Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
-| Drift defense | `python3 scripts/validate.py` — 22 validators, runs via pre-commit |
-| Tests | 479 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
+| Drift defense | `python3 scripts/validate.py` — 24 validators, runs via pre-commit |
+| Tests | 560 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 

@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), a self-hosted kanban board, and lifecycle transitions (shelf). Also fires whenever decisions, sessions, or notes are written into a linked vault.
-version: 0.13.0
+version: 0.14.0
 user-invocable: true
 argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf] [args]"
 license: MIT
@@ -49,6 +49,14 @@ Verb weights live in `scripts/command-metadata.json` (`weight: light | medium | 
 - `check all` sums two estimates: `check.py --estimate-only` plus `repo_scan.py --estimate-only`.
 - If an estimate cannot be computed (unresolvable vault or breadcrumb), treat it as `warn: true` and ask before proceeding.
 - Threshold default is 30000 estimated read tokens; per-project override via `cost_warn_tokens:` in `.claude/adjudant`.
+
+## Voice (locked)
+
+Load `reference/voice.md` with every verb (the one exception to
+load-only-the-matching-reference; it is small). It defines the banned lexicon, the
+glazing ban, the pushback contract, the ELI5/ELI12/ELICTO explanation modes with
+per-verb defaults, and typography (no em dashes in rendered output or vault writes).
+The `voice-lexicon` validator enforces the machine-checkable subset.
 
 ## Python helper layer (v0.4.0)
 

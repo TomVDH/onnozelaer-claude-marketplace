@@ -1,6 +1,6 @@
 {
   "name": "adjudant",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Obsidian vault editor/writer and project initializer. One command, /adjudant, with eleven verbs — connect, port, sync, check, sitrep, tidy, ramasse, dream, draw, board, shelf — each backed by a stdlib-only Python helper that follows the .claude/adjudant breadcrumb to the vault (cross-machine via vault_name fallback and OB_VAULT). Locked three-tier cleanup model: tidy (surface mechanical, routine), ramasse (deep structural, sparing), dream (semantic content/knowledge refresh, judgment-heavy). draw creates canvases, bases, and mermaid diagrams — hand-authored or generated from vault data; board scaffolds a self-hosted drag-to-move kanban seeded from tasks/; shelf manages the six-state project lifecycle across vault zones. Five vault-aware hooks keep session notes and a freshness-headed handoff current; vault standards are schema-enforced and drift-guarded by pre-commit validators. Pairs with hookify and Gemineye.",
   "author": {
     "name": "Onnozelaer"

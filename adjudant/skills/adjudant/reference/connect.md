@@ -17,7 +17,8 @@ connect is three phases; the card in the middle is the only thing the user must 
 3. **Apply + receipt.** Run connect.py with the confirmed values (`--purpose`,
    `--initial-status`, plus the usual flags). Render `summary.receipt` back as the same
    card with per-artifact marks: created / already-present / updated. A re-run on a
-   healthy project shows all already-present and writes nothing new.
+   healthy project shows all already-present and writes nothing new (the
+   `projects/_index.md` stats row is refreshed in place).
 
 Config knobs land in the breadcrumb at init with defaults visible on the card:
 `cost_warn_tokens: 30000`, `stale_after_days: 30`. Existing overrides survive re-connect.

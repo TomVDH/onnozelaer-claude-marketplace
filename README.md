@@ -6,7 +6,7 @@ Personal collection of Claude Code plugins by Onnozelaer.
 
 | Plugin | Version | Description |
 |--------|---------|-------------|
-| [adjudant](./adjudant) | 0.10.1 | Obsidian vault editor/writer and project initializer. One command, `/adjudant`, with ten verbs (connect, port, sync, check, sitrep, tidy, ramasse, dream, draw, board) — each backed by a Python helper. Locked three-tier cleanup model (tidy / ramasse / dream), vault-aware hooks, drift-defense validators. Successor to the retired `obsidian-bridge`. |
+| [adjudant](./adjudant) | 0.14.0 | Obsidian vault editor/writer and project initializer. One command, `/adjudant`, with eleven verbs (connect, port, sync, check, sitrep, tidy, ramasse, dream, draw, board, shelf) — each backed by a Python helper. Locked three-tier cleanup model (tidy / ramasse / dream), vault-aware hooks, drift-defense validators. Successor to the retired `obsidian-bridge`. |
 | [cabinet-of-imd](./cabinet-of-imd) | 3.0.0 | The Cabinet of IMD Agents — a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, and disciplines serve as specialised web-development agents. Flavour-only (characters, voices, pairings, working disciplines); persistence is delegated to `adjudant` when active. |
 | [iteration-shelf](./iteration-shelf) | 0.1.0 | Terminal-aesthetic review boards for in-browser design iteration — curated shelves and monster indexes with on-demand iframe loading, sidebar outliner, and browser-safety guards. Explicit invocation only. |
 | [cli-wrapper-helper](./cli-wrapper-helper) | 2.0.0 | The shared operating language for agent-built helper CLIs — one visual + interaction + safety language across interactive bash TUIs and python helper scripts. Two skills: `bash-tui` and `python-helper`. |
@@ -48,7 +48,7 @@ Personal collection of Claude Code plugins by Onnozelaer.
 ```
 ├── .claude-plugin/
 │   └── marketplace.json    # Marketplace manifest — lists all plugins with versions
-├── adjudant/               # Plugin: Adjudant (v0.10.1, 1 skill, ten verbs, 5 hooks)
+├── adjudant/               # Plugin: Adjudant (1 skill, eleven verbs, 5 hooks)
 │   ├── .claude-plugin/     # Plugin metadata (plugin.json)
 │   ├── skills/adjudant/    # Canonical skill — SKILL.md + reference/ + templates/
 │   ├── scripts/            # Python helpers (connect, port, sync, check, sitrep, tidy, …) + validate.py
