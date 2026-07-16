@@ -27,7 +27,7 @@ Validators:
  21. repo-tidy-backup-integrity   — repo-tidy backup subdirs with files carry at least one .legacy
  22. gitignore-includes-repo-tidy-dirs — .gitignore lists the repo-tidy dirs if either exists
  23. status-vocabulary            — _vault_walk constants, vault-standards, and brief templates all agree on the six-state vocabulary
- 24. voice-lexicon                — no banned/glazing terms in templates/, SKILL.md, reference/ (voice.md excepted); no em dashes in templates/
+ 24. voice-lexicon                : no banned/glazing terms in templates/, SKILL.md, reference/ (voice.md excepted); no em dashes in templates/
 """
 
 import json
@@ -716,7 +716,7 @@ def _parse_voice_lists() -> tuple[list[str], list[str]]:
 
 
 def validate_voice_lexicon(r: Result) -> None:
-    """24. voice-lexicon — no banned/glazing terms in templates/, SKILL.md,
+    """24. voice-lexicon: no banned/glazing terms in templates/, SKILL.md,
     reference/ (voice.md excepted); no em dashes in templates/."""
     name = "voice-lexicon"
     if not VOICE_MD.is_file():
