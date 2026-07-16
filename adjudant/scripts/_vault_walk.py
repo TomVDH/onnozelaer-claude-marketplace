@@ -33,6 +33,7 @@ import re
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
@@ -312,6 +313,7 @@ DEFAULT_SKIP: tuple[str, ...] = (
     # adjudant's own scratch dirs — never scan a pending preview/backup
     ".adjudant-tidy-preview", ".adjudant-tidy-backup",
     ".adjudant-port-preview", ".adjudant-port-backup",
+    ".adjudant-shelf-preview", ".adjudant-shelf-backup",
 )
 
 
@@ -566,11 +568,12 @@ def resolve_project_from_cwd(cwd: Optional[Path] = None) -> Optional[ProjectCont
     vault = resolve_vault(root)
     if not vault:
         return None
+    vpd = find_project_dir(vault, bc["slug"]) or (vault / "projects" / bc["slug"])
     return ProjectContext(
         code_root=root,
         vault_path=vault,
         slug=bc["slug"],
-        vault_project_dir=vault / "projects" / bc["slug"],
+        vault_project_dir=vpd,
     )
 
 
@@ -685,6 +688,129 @@ AUTO_CREATED_FOLDERS: frozenset[str] = frozenset({"dreams", "canvases", "bases"}
 INDEX_EXEMPT_FOLDERS: frozenset[str] = frozenset({
     "sessions", "images", "assets", "previews", "iterations", "_archive", "templates",
 })
+
+
+# ============================================================
+# Project status lifecycle + zones (locked 2026-07-16)
+# ============================================================
+
+PROJECT_STATUS_VALUES: tuple[str, ...] = ("active", "stale", "fridge", "done", "dead", "seed")
+ZONE_FOR_STATUS: dict[str, str] = {
+    "active": "", "stale": "", "seed": "",
+    "fridge": "_fridge", "done": "_archive", "dead": "_archive",
+}
+PROJECT_ZONES: tuple[str, ...] = ("", "_fridge", "_archive")
+DEFAULT_STALE_DAYS = 30
+FRIDGE_NUDGE_DAYS = 180
+
+_DATED_STEM_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
+
+def newest_dated_stem(folder: Path) -> Optional[str]:
+    """Most recent YYYY-MM-DD stem prefix among .md files in folder, else None."""
+    if not folder.is_dir():
+        return None
+    dates: list[str] = []
+    for f in folder.iterdir():
+        if f.is_file() and f.suffix == ".md":
+            m = _DATED_STEM_RE.match(f.stem)
+            if m:
+                dates.append(m.group(1))
+    return max(dates) if dates else None
+
+
+def suggest_status(
+    declared: Optional[str],
+    project_dir: Path,
+    today: date,
+    stale_after_days: int = DEFAULT_STALE_DAYS,
+) -> dict[str, Any]:
+    """Machine suggestion along the active/stale axis ONLY.
+
+    fridge gets a nudge string after FRIDGE_NUDGE_DAYS; seed, done, dead are
+    never suggested away. An invalid declared value is flagged
+    (declared_valid=False) and treated as active for suggestion purposes.
+    Never writes.
+    """
+    last = newest_dated_stem(project_dir / "sessions")
+    days_quiet: Optional[int] = None
+    if last:
+        try:
+            days_quiet = (today - datetime.strptime(last, "%Y-%m-%d").date()).days
+        except ValueError:
+            days_quiet = None
+    valid = declared in PROJECT_STATUS_VALUES
+    effective = declared if valid else "active"
+    out: dict[str, Any] = {
+        "declared": declared,
+        "declared_valid": valid,
+        "last_session": last,
+        "days_quiet": days_quiet,
+        "suggested": None,
+        "reason": None,
+        "nudge": None,
+    }
+    if effective == "active" and days_quiet is not None and days_quiet >= stale_after_days:
+        out["suggested"] = "stale"
+        out["reason"] = f"{days_quiet} days without a session note (threshold {stale_after_days})"
+    elif effective == "stale" and days_quiet is not None and days_quiet < stale_after_days:
+        out["suggested"] = "active"
+        out["reason"] = f"session activity {days_quiet} days ago (threshold {stale_after_days})"
+    elif effective == "fridge" and days_quiet is not None and days_quiet >= FRIDGE_NUDGE_DAYS:
+        out["nudge"] = f"in the fridge {days_quiet} days, still intentional?"
+    return out
+
+
+def find_project_dir(vault: Path, slug: str) -> Optional[Path]:
+    """Locate a project across zones. Prefers a dir containing brief.md."""
+    candidates = [
+        (vault / "projects" / zone / slug) if zone else (vault / "projects" / slug)
+        for zone in PROJECT_ZONES
+    ]
+    for c in candidates:
+        if (c / "brief.md").is_file():
+            return c
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return None
+
+
+def zone_of(project_dir: Path) -> str:
+    """'' | '_fridge' | '_archive' from the path shape projects[/zone]/slug."""
+    parent = project_dir.parent.name
+    return parent if parent in ("_fridge", "_archive") else ""
+
+
+def zone_matches_status(status: Optional[str], zone: str) -> bool:
+    """True when the folder zone agrees with the declared status.
+
+    Unknown status values return True: the vocabulary problem is reported
+    separately (declared_valid), not double-counted as a zone mismatch.
+    """
+    if status not in PROJECT_STATUS_VALUES:
+        return True
+    return ZONE_FOR_STATUS[status] == zone
+
+
+def enumerate_projects_all_zones(vault: Path) -> list[tuple[str, Path, str]]:
+    """Every project (slug, dir, zone) across projects/, _fridge/, _archive/.
+
+    A project is a directory containing brief.md. Leading-underscore and dot
+    dirs are skipped inside each zone. Sorted by zone order then slug.
+    """
+    out: list[tuple[str, Path, str]] = []
+    base = vault / "projects"
+    for zone in PROJECT_ZONES:
+        zdir = (base / zone) if zone else base
+        if not zdir.is_dir():
+            continue
+        for d in sorted(zdir.iterdir(), key=lambda p: p.name):
+            if not d.is_dir() or d.name.startswith("_") or d.name.startswith("."):
+                continue
+            if (d / "brief.md").is_file():
+                out.append((d.name, d, zone))
+    return out
 
 
 def is_bucket_d_tag(tag: str, project_slug: Optional[str] = None) -> bool:

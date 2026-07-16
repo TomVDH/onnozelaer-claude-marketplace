@@ -595,5 +595,151 @@ class TestVaultNameResolution(unittest.TestCase):
             self.assertEqual(resolved.resolve(), vault.resolve())
 
 
+from datetime import date
+
+from _vault_walk import (
+    DEFAULT_STALE_DAYS,
+    PROJECT_STATUS_VALUES,
+    PROJECT_ZONES,
+    ZONE_FOR_STATUS,
+    enumerate_projects_all_zones,
+    find_project_dir,
+    newest_dated_stem,
+    resolve_project_from_cwd,
+    suggest_status,
+    zone_matches_status,
+    zone_of,
+)
+
+
+def _mk_project(vault: Path, slug: str, zone: str = "", status: str = "active",
+                sessions: list = ()) -> Path:
+    pdir = vault / "projects" / zone / slug if zone else vault / "projects" / slug
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "brief.md").write_text(
+        f"---\ntype: project\nslug: {slug}\nproject_type: coding\nstatus: {status}\n---\n\n# {slug}\n")
+    if sessions:
+        (pdir / "sessions").mkdir(exist_ok=True)
+        for d in sessions:
+            (pdir / "sessions" / f"{d}.md").write_text("---\ntype: session\n---\n")
+    return pdir
+
+
+class TestStatusVocabulary(unittest.TestCase):
+
+    def test_locked_values(self):
+        self.assertEqual(PROJECT_STATUS_VALUES,
+                         ("active", "stale", "fridge", "done", "dead", "seed"))
+
+    def test_zone_map_total(self):
+        self.assertEqual(set(ZONE_FOR_STATUS), set(PROJECT_STATUS_VALUES))
+        self.assertEqual(ZONE_FOR_STATUS["fridge"], "_fridge")
+        self.assertEqual(ZONE_FOR_STATUS["done"], "_archive")
+        self.assertEqual(ZONE_FOR_STATUS["dead"], "_archive")
+        self.assertEqual(ZONE_FOR_STATUS["active"], "")
+
+
+class TestSuggestStatus(unittest.TestCase):
+
+    def test_active_goes_stale_after_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", sessions=["2026-05-01"])
+            out = suggest_status("active", pdir, date(2026, 7, 16))
+            self.assertEqual(out["suggested"], "stale")
+            self.assertEqual(out["days_quiet"], 76)
+            self.assertIn("76 days", out["reason"])
+
+    def test_active_stays_when_recent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", sessions=["2026-07-10"])
+            out = suggest_status("active", pdir, date(2026, 7, 16))
+            self.assertIsNone(out["suggested"])
+
+    def test_stale_suggests_active_on_new_activity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", status="stale", sessions=["2026-07-15"])
+            out = suggest_status("stale", pdir, date(2026, 7, 16))
+            self.assertEqual(out["suggested"], "active")
+
+    def test_deliberate_states_never_suggested_away(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for status in ("seed", "done", "dead"):
+                pdir = _mk_project(Path(tmp), f"p-{status}", status=status,
+                                   sessions=["2020-01-01"])
+                out = suggest_status(status, pdir, date(2026, 7, 16))
+                self.assertIsNone(out["suggested"], status)
+
+    def test_fridge_nudges_after_180_days(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", status="fridge", sessions=["2025-06-01"])
+            out = suggest_status("fridge", pdir, date(2026, 7, 16))
+            self.assertIsNone(out["suggested"])
+            self.assertIn("still intentional", out["nudge"])
+
+    def test_invalid_declared_flagged_and_treated_active(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", status="paused", sessions=["2026-01-01"])
+            out = suggest_status("paused", pdir, date(2026, 7, 16))
+            self.assertFalse(out["declared_valid"])
+            self.assertEqual(out["suggested"], "stale")
+
+    def test_no_sessions_no_suggestion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p")
+            out = suggest_status("active", pdir, date(2026, 7, 16))
+            self.assertIsNone(out["days_quiet"])
+            self.assertIsNone(out["suggested"])
+
+    def test_custom_threshold(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", sessions=["2026-07-06"])
+            out = suggest_status("active", pdir, date(2026, 7, 16), stale_after_days=7)
+            self.assertEqual(out["suggested"], "stale")
+
+
+class TestZones(unittest.TestCase):
+
+    def test_find_project_dir_across_zones(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            _mk_project(vault, "alive")
+            _mk_project(vault, "cold", zone="_fridge", status="fridge")
+            _mk_project(vault, "gone", zone="_archive", status="dead")
+            self.assertEqual(zone_of(find_project_dir(vault, "alive")), "")
+            self.assertEqual(zone_of(find_project_dir(vault, "cold")), "_fridge")
+            self.assertEqual(zone_of(find_project_dir(vault, "gone")), "_archive")
+            self.assertIsNone(find_project_dir(vault, "nope"))
+
+    def test_zone_matches_status(self):
+        self.assertTrue(zone_matches_status("fridge", "_fridge"))
+        self.assertFalse(zone_matches_status("fridge", ""))
+        self.assertTrue(zone_matches_status("active", ""))
+        self.assertFalse(zone_matches_status("dead", ""))
+        self.assertTrue(zone_matches_status("not-a-status", "_archive"))
+
+    def test_enumerate_all_zones(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            _mk_project(vault, "a")
+            _mk_project(vault, "b", zone="_fridge", status="fridge")
+            (vault / "projects" / "_index.md").write_text("idx")
+            rows = enumerate_projects_all_zones(vault)
+            self.assertEqual([(s, z) for s, _p, z in rows], [("a", ""), ("b", "_fridge")])
+
+    def test_resolve_project_from_cwd_finds_archived(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            _mk_project(vault, "proj", zone="_archive", status="done")
+            code = root / "code"
+            (code / ".claude").mkdir(parents=True)
+            (code / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: vault\nslug: proj\nmode: project\n")
+            ctx = resolve_project_from_cwd(code)
+            self.assertTrue(ctx.is_connected)
+            self.assertEqual(ctx.vault_project_dir,
+                             vault / "projects" / "_archive" / "proj")
+
+
 if __name__ == "__main__":
     unittest.main()
