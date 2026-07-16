@@ -2,8 +2,9 @@
 """Adjudant connect — automate the 5-step project init.
 
 Onboards a code-side project to the vault:
-  1. Write `.claude/adjudant` breadcrumb (vault_path, vault_name, slug, mode)
-  2. Provision AGENTS.md + CLAUDE.md at project root (skip if exist)
+  1. Write `.claude/adjudant` breadcrumb (vault_path, vault_name, slug, mode,
+     cost_warn_tokens, stale_after_days)
+  2. Provision AGENTS.md + CLAUDE.md + GEMINI.md at project root (skip if exist)
   3. Scaffold vault project: brief.md (from project_type template) + per-type
      subfolders + per-folder `_index.md` (skip per-folder indexes for
      INDEX_EXEMPT_FOLDERS like sessions/ and images/)
@@ -251,14 +252,17 @@ def write_breadcrumb(
     vault_path: Path,
     vault_name: str,
     slug: str,
-) -> Path:
+) -> str:
+    """Write the .claude/adjudant breadcrumb (six keys). Existing
+    cost_warn_tokens / stale_after_days overrides are preserved; a
+    byte-identical rewrite is skipped.
+
+    Returns 'created' | 'updated' | 'already-present'.
+    """
     existing = parse_breadcrumb(project_root) or {}
     cwt = existing.get("cost_warn_tokens", "30000")
     sad = existing.get("stale_after_days", "30")
-    bc_dir = project_root / ".claude"
-    bc_dir.mkdir(parents=True, exist_ok=True)
-    bc = bc_dir / "adjudant"
-    bc.write_text(
+    content = (
         f"vault_path: {vault_path}\n"
         f"vault_name: {vault_name}\n"
         f"slug: {slug}\n"
@@ -266,7 +270,15 @@ def write_breadcrumb(
         f"cost_warn_tokens: {cwt}\n"
         f"stale_after_days: {sad}\n"
     )
-    return bc
+    bc = project_root / ".claude" / "adjudant"
+    if bc.is_file():
+        if bc.read_text() == content:
+            return "already-present"
+        bc.write_text(content)
+        return "updated"
+    bc.parent.mkdir(parents=True, exist_ok=True)
+    bc.write_text(content)
+    return "created"
 
 
 # ============================================================
@@ -643,9 +655,8 @@ def run_connect(
     }
 
     # Step 1
-    bc_existed = (project_root / ".claude" / "adjudant").is_file()
-    write_breadcrumb(project_root, vault_path, vault_name, slug)
-    summary["steps"]["breadcrumb"] = "updated" if bc_existed else "created"
+    summary["steps"]["breadcrumb"] = write_breadcrumb(
+        project_root, vault_path, vault_name, slug)
 
     # Step 2
     summary["steps"]["context_files"] = provision_context_files(

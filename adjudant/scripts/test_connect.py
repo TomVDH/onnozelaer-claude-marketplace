@@ -124,12 +124,29 @@ class TestWriteBreadcrumb(unittest.TestCase):
     def test_writes_correct_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             proj = Path(tmp)
-            bc = write_breadcrumb(proj, Path("/v"), "Vault", "my-slug")
-            content = bc.read_text()
+            mark = write_breadcrumb(proj, Path("/v"), "Vault", "my-slug")
+            self.assertEqual(mark, "created")
+            content = (proj / ".claude" / "adjudant").read_text()
             self.assertIn("vault_path: /v", content)
             self.assertIn("vault_name: Vault", content)
             self.assertIn("slug: my-slug", content)
             self.assertIn("mode: project", content)
+
+    def test_identical_rewrite_is_already_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            write_breadcrumb(proj, Path("/v"), "Vault", "my-slug")
+            mark = write_breadcrumb(proj, Path("/v"), "Vault", "my-slug")
+            self.assertEqual(mark, "already-present")
+
+    def test_changed_content_is_updated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp)
+            write_breadcrumb(proj, Path("/v"), "Vault", "my-slug")
+            mark = write_breadcrumb(proj, Path("/other"), "Vault", "my-slug")
+            self.assertEqual(mark, "updated")
+            content = (proj / ".claude" / "adjudant").read_text()
+            self.assertIn("vault_path: /other", content)
 
 
 # ============================================================
@@ -522,6 +539,7 @@ class TestApplyContract(unittest.TestCase):
             self.assertEqual(states["AGENTS.md"], "already-present")
             self.assertEqual(states["GEMINI.md"], "already-present")
             self.assertEqual(states["session note"], "already-present")
+            self.assertEqual(states[".claude/adjudant"], "already-present")
 
 
 if __name__ == "__main__":
