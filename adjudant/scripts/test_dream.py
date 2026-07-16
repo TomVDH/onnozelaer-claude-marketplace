@@ -1,12 +1,15 @@
 """Tests for adjudant/scripts/dream.py."""
 
+import contextlib
 import datetime as dt
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from dream import (
+    cli_main as dream_cli,
     detect_contradiction_candidates,
     detect_dangling_scopes,
     detect_documentation_gaps,
@@ -511,6 +514,37 @@ class TestOpenLoopMarkers(unittest.TestCase):
         from dream import OPEN_LOOP_RE
         self.assertTrue(OPEN_LOOP_RE.search("there is a TODO here"))
         self.assertFalse(OPEN_LOOP_RE.search("TODOS are plural"))  # \b intact
+
+
+class TestDreamCost(unittest.TestCase):
+
+    def test_estimate_only_is_cost_only_and_stat_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            (root / "notes").mkdir()
+            (root / "notes" / "big.md").write_text("x" * 8000)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = dream_cli(["--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+            self.assertGreaterEqual(payload["cost"]["est_read_tokens"], 2000)
+
+    def test_normal_run_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = dream_cli(["--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertIn("summary", payload)
 
 
 if __name__ == "__main__":

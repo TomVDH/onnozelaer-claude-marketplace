@@ -43,6 +43,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Optional
 
+from _cost import cost_block, read_threshold, stat_walk
 from _vault_walk import (
     BUCKET_A_TYPES,
     VaultFile,
@@ -785,6 +786,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         help=f"Staleness age threshold in days (default: {DEFAULT_STALE_DAYS})",
     )
     parser.add_argument("--include-legacy", action="store_true", help="Include _legacy/ in scan")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Print only the cost block (stat-only walk) and exit")
     args = parser.parse_args(argv)
 
     today: Optional[_dt.date] = None
@@ -810,6 +813,13 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
             print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
         return 1
 
+    code_root = Path(args.project_dir).expanduser().resolve()
+    files_n, n_bytes = stat_walk(project_dir)
+    cost = cost_block(files_n, n_bytes, read_threshold(code_root))
+    if args.estimate_only:
+        print(json.dumps({"cost": cost}, indent=2))
+        return 0
+
     vault_dir: Optional[Path]
     if args.vault_dir:
         vault_dir = Path(args.vault_dir).expanduser().resolve()
@@ -822,6 +832,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         vault_dir = None
 
     report = run_dream(project_dir, vault_dir, today=today, stale_days=args.stale_days)
+    report["cost"] = cost
 
     payload = json.dumps(report, indent=2, default=str)
     if args.out:

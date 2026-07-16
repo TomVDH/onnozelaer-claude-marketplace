@@ -1,5 +1,7 @@
 """Tests for adjudant/scripts/tidy.py."""
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -10,6 +12,7 @@ from tidy import (
     BACKUP_DIR_NAME,
     apply_preview,
     build_preview,
+    cli_main as tidy_cli,
     detect_phase,
     fix_wikilink_form,
     generate_index_content,
@@ -433,6 +436,38 @@ class TestPreviewApplyRoundTrip(unittest.TestCase):
             # First pass — clean already
             cs = build_preview(root, set(), project_slug="t")
             self.assertEqual(cs["summary"]["total_changes"], 0)
+
+
+class TestTidyCost(unittest.TestCase):
+
+    def _project(self, root: Path) -> None:
+        _w(root / "brief.md",
+            "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+        _w(root / "notes" / "big.md", "x" * 8000)
+
+    def test_estimate_only_is_cost_only_and_stat_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = tidy_cli(["detect", "--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+            self.assertGreaterEqual(payload["cost"]["est_read_tokens"], 2000)
+
+    def test_normal_detect_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = tidy_cli(["detect", "--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertEqual(payload["state"], "fresh")
 
 
 if __name__ == "__main__":

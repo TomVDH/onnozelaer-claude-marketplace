@@ -1,11 +1,14 @@
 """Tests for adjudant/scripts/ramasse_scan.py."""
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from ramasse_scan import (
+    cli_main as ramasse_cli,
     detect_broken_wikilinks,
     detect_doc_decision_flags,
     detect_folder_drift,
@@ -440,6 +443,37 @@ class TestArtefactNaming(unittest.TestCase):
             report = run_scan(root, root)
             files = [x["file"] for x in report["naming_violations"]]
             self.assertIn("canvases/BadName.canvas", files)
+
+
+class TestRamasseCost(unittest.TestCase):
+
+    def test_estimate_only_is_cost_only_and_stat_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            (root / "notes").mkdir()
+            (root / "notes" / "big.md").write_text("x" * 8000)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = ramasse_cli(["--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+            self.assertGreaterEqual(payload["cost"]["est_read_tokens"], 2000)
+
+    def test_normal_run_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = ramasse_cli(["--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertIn("summary", payload)
 
 
 if __name__ == "__main__":

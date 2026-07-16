@@ -21,6 +21,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
+from _cost import cost_block, read_threshold, stat_walk
 from repo_walk import (
     context_files_status,
     is_marketplace_repo,
@@ -125,14 +126,24 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--today", help="YYYY-MM-DD override (testing/determinism)")
     parser.add_argument("--json", action="store_true", help="(default) emit JSON on stdout")
     parser.add_argument("--out", help="Write JSON to FILE instead of stdout")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Print only the cost block (stat-only walk) and exit")
     args = parser.parse_args(argv)
 
     root = Path(args.project_dir).expanduser().resolve()
     if not root.is_dir():
         print(f"error: project-dir not found: {root}", file=sys.stderr)
         return 1
+
+    files_n, n_bytes = stat_walk(root, exts=(".md", ".py", ".json"))
+    cost = cost_block(files_n, n_bytes, read_threshold(root))
+    if args.estimate_only:
+        print(json.dumps({"cost": cost}, indent=2))
+        return 0
+
     today = date.fromisoformat(args.today) if args.today else date.today()
     report = run_scan(root, today=today, stale_days=args.stale_days)
+    report["cost"] = cost
     payload = json.dumps(report, indent=2, default=str)
     if args.out:
         Path(args.out).expanduser().write_text(payload + "\n")

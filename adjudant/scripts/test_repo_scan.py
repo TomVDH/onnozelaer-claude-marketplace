@@ -1,4 +1,6 @@
 """Tests for repo_scan detectors + run_scan."""
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -78,6 +80,38 @@ class TestRepoScan(unittest.TestCase):
             _marketplace(root, [("alpha", "1.0.0")])
             report = rs.run_scan(root, today=date(2026, 7, 7))
             json.loads(json.dumps(report, default=str))
+
+
+class TestRepoScanCost(unittest.TestCase):
+
+    def _project(self, root: Path) -> None:
+        _write(root / "README.md", "# repo\n" + "x" * 4000)
+        _write(root / "scripts" / "helper.py", "# helper\nprint('hi')\n")
+        _write(root / "data" / "config.json", "{}\n")
+
+    def test_estimate_only_is_cost_only_and_stat_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = rs.cli_main(["--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+            self.assertEqual(payload["cost"]["files"], 3)
+
+    def test_normal_run_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = rs.cli_main(["--project-dir", str(root), "--today", "2026-07-07"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertIn("summary", payload)
 
 
 if __name__ == "__main__":

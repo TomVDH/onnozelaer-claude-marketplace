@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+from _cost import cost_block, read_threshold, stat_walk
 from _vault_walk import (
     BUCKET_A_TYPES,
     BUCKET_B_MIGRATIONS,
@@ -706,6 +707,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("phase", choices=["detect", "preview", "apply"])
     parser.add_argument("--project-dir", default=".", help="Project root (default: cwd)")
     parser.add_argument("--vault-dir", help="Vault root (default: resolved from breadcrumb)")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Print only the cost block (stat-only walk) and exit")
     args = parser.parse_args(argv)
 
     try:
@@ -724,8 +727,15 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
             print(f"error: project-dir not found: {project_dir}", file=sys.stderr)
         return 1
 
+    code_root = Path(args.project_dir).expanduser().resolve()
+    files_n, n_bytes = stat_walk(project_dir)
+    cost = cost_block(files_n, n_bytes, read_threshold(code_root))
+    if args.estimate_only:
+        print(json.dumps({"cost": cost}, indent=2))
+        return 0
+
     if args.phase == "detect":
-        print(detect_phase(project_dir))
+        print(json.dumps({"state": detect_phase(project_dir), "cost": cost}, indent=2))
         return 0
 
     # Resolve vault for both preview + apply (preview needs index for feature 4;
