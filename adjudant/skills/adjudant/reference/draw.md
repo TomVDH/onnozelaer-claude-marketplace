@@ -6,7 +6,7 @@ Create visual artefacts in the vault. Sub-verb router for canvas / base / diagra
 
 1. `/adjudant draw canvas <name>` — create or open `{vault}/projects/{slug}/canvases/{kebab-name}.canvas`. Loads `reference/content-canvas.md`.
 2. `/adjudant draw base <name>` — create or open `{vault}/projects/{slug}/bases/{kebab-name}.base`. Loads `reference/content-bases.md`.
-3. `/adjudant draw diagram [type]` — insert a fenced `mermaid` block into the current note. `type` optional: `flowchart | sequence | class | state | erd | gantt | mindmap | timeline | gitGraph | pie | quadrant | C4`. Loads `reference/content-mermaid.md` + `reference/mermaid-generation-rules.md`.
+3. `/adjudant draw diagram [type]` — insert a fenced `mermaid` block into the current note. `type` optional: `flowchart | sequence | class | state | erd | gantt | mindmap | timeline | gitGraph | pie | quadrant | journey | C4`. Loads `reference/content-mermaid.md` + `reference/mermaid-generation-rules.md`.
 
 ## Inputs
 
@@ -34,6 +34,7 @@ The `type` tokens map to these first-line keywords (see `content-mermaid.md` for
 | Branch/merge history | `gitGraph` | `gitGraph` |
 | Proportions | `pie` | `pie` |
 | Effort/impact sort | `quadrant` | `quadrantChart` |
+| User-flow stages | `journey` | `journey` |
 | System architecture | `C4` | `C4Context` / `C4Container` / `C4Component` |
 
 ## Generated diagrams (helper-backed)

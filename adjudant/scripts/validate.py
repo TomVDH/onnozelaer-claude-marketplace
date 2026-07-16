@@ -717,7 +717,11 @@ def _parse_voice_lists() -> tuple[list[str], list[str]]:
 
 def validate_voice_lexicon(r: Result) -> None:
     """24. voice-lexicon: no banned/glazing terms in templates/, SKILL.md,
-    reference/ (voice.md excepted); no em dashes in templates/."""
+    reference/ (voice.md excepted); no em dashes in templates/.
+
+    Fenced blocks and inline code spans are exempt from the lexicon scan:
+    code is syntax, not prose (e.g. mermaid's `journey` diagram keyword).
+    The em-dash arm stays on raw text; templates are vault-bound prose."""
     name = "voice-lexicon"
     if not VOICE_MD.is_file():
         r.add_fail(name, "reference/voice.md missing")
@@ -733,7 +737,7 @@ def validate_voice_lexicon(r: Result) -> None:
                 for t in banned + glazing]
     hits: list[str] = []
     for f in surfaces:
-        text = f.read_text()
+        text = _strip_fences_and_code(f.read_text())
         for term, rx in patterns:
             if rx.search(text):
                 hits.append(f"{f.relative_to(ROOT)}: {term!r}")

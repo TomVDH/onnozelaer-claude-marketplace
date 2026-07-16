@@ -590,6 +590,38 @@ class TestVoiceLexicon(unittest.TestCase):
         validate.validate_voice_lexicon(r)
         self.assertEqual(r.failures, [], r.failures)
 
+    def test_code_spans_are_exempt(self):
+        # Code is syntax, not prose: a banned term inside a fenced block or an
+        # inline code span must not fail the validator; the same term in prose must.
+        with tempfile.TemporaryDirectory() as tmp:
+            plugin = _build(Path(tmp))
+            canonical = plugin / "skills" / "adjudant"
+            (canonical / "reference" / "voice.md").write_text(
+                "# Voice\n\n## Banned lexicon\n\n- seamless\n\n"
+                "## Glazing phrases\n\n- Great question\n"
+            )
+            orig = {k: getattr(validate, k)
+                    for k in ("ROOT", "CANONICAL", "TEMPLATES", "REFERENCE", "VOICE_MD")}
+            try:
+                validate.ROOT = plugin
+                validate.CANONICAL = canonical
+                validate.TEMPLATES = canonical / "templates"
+                validate.REFERENCE = canonical / "reference"
+                validate.VOICE_MD = canonical / "reference" / "voice.md"
+                doc = canonical / "reference" / "check.md"
+                doc.write_text(
+                    "# check\n\n```mermaid\nseamless\n```\n\nUse `seamless` in code.\n")
+                r = Result()
+                validate.validate_voice_lexicon(r)
+                self.assertEqual(r.failures, [], r.failures)
+                doc.write_text("# check\n\nA seamless experience.\n")
+                r = Result()
+                validate.validate_voice_lexicon(r)
+                self.assertTrue(any("voice-lexicon" in f for f in r.failures))
+            finally:
+                for k, v in orig.items():
+                    setattr(validate, k, v)
+
 
 if __name__ == "__main__":
     unittest.main()
