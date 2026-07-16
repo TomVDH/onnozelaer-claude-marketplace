@@ -1,4 +1,4 @@
-# shelf — project lifecycle
+# shelf: project lifecycle
 
 One small verb for the six-state lifecycle: `active | stale | fridge | done | dead | seed`.
 Physical placement follows status: `projects/` holds active+stale+seed, `projects/_fridge/`

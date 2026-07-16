@@ -5,7 +5,7 @@ updated: {YYYY-MM-DD}
 
 # Vault
 
-Persistent knowledge base. Project briefs, decisions, session history — all interlinked and queryable.
+Persistent knowledge base. Project briefs, decisions, session history: all interlinked and queryable.
 
 ## Active Projects
 

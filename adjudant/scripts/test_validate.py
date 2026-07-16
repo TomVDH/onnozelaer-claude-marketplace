@@ -577,5 +577,19 @@ class TestStatusVocabulary(unittest.TestCase):
         self.assertIn("status-vocabulary", r.passes)
 
 
+class TestVoiceLexicon(unittest.TestCase):
+
+    def test_parse_voice_lists(self):
+        banned, glazing = validate._parse_voice_lists()
+        self.assertIn("forward-thinking", banned)
+        self.assertIn("leverage", banned)          # qualifier stripped
+        self.assertIn("You're absolutely right", glazing)
+
+    def test_validator_passes_on_repo(self):
+        r = validate.Result()
+        validate.validate_voice_lexicon(r)
+        self.assertEqual(r.failures, [], r.failures)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7,10 +7,10 @@ tags:
   - handoff
 ---
 
-# Handoff — {project}
+# Handoff: {project}
 
 *Mirrored from `.remember/remember.md` on {YYYY-MM-DD HH:MM}.*
 
 ---
 
-{body — pulled from .remember by /adjudant sync}
+{body, pulled from .remember by /adjudant sync}

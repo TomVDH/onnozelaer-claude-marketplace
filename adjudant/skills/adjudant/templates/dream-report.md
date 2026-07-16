@@ -6,6 +6,6 @@ tags:
   - dream-report
 ---
 
-# Dream report — {YYYY-MM-DD}
+# Dream report: {YYYY-MM-DD}
 
-{body — auto-populated by /adjudant dream}
+{body, auto-populated by /adjudant dream}

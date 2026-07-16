@@ -27,6 +27,7 @@ Validators:
  21. repo-tidy-backup-integrity   — repo-tidy backup subdirs with files carry at least one .legacy
  22. gitignore-includes-repo-tidy-dirs — .gitignore lists the repo-tidy dirs if either exists
  23. status-vocabulary            — _vault_walk constants, vault-standards, and brief templates all agree on the six-state vocabulary
+ 24. voice-lexicon                — no banned/glazing terms in templates/, SKILL.md, reference/ (voice.md excepted); no em dashes in templates/
 """
 
 import json
@@ -692,6 +693,61 @@ def validate_status_vocabulary(r: Result) -> None:
     r.add_pass(name)
 
 
+VOICE_MD = REFERENCE / "voice.md"
+
+
+def _parse_voice_lists() -> tuple[list[str], list[str]]:
+    """(banned_lexicon, glazing) bullets parsed from reference/voice.md.
+    A trailing parenthetical on a bullet is a note, stripped before matching."""
+    banned: list[str] = []
+    glazing: list[str] = []
+    current = None
+    for line in VOICE_MD.read_text().splitlines():
+        if line.startswith("## "):
+            h = line[3:].strip().lower()
+            current = ("banned" if h.startswith("banned lexicon")
+                       else "glazing" if h.startswith("glazing") else None)
+            continue
+        m = re.match(r"^-\s+(.+)$", line.strip())
+        if m and current:
+            term = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(1).strip())
+            (banned if current == "banned" else glazing).append(term)
+    return banned, glazing
+
+
+def validate_voice_lexicon(r: Result) -> None:
+    """24. voice-lexicon — no banned/glazing terms in templates/, SKILL.md,
+    reference/ (voice.md excepted); no em dashes in templates/."""
+    name = "voice-lexicon"
+    if not VOICE_MD.is_file():
+        r.add_fail(name, "reference/voice.md missing")
+        return
+    banned, glazing = _parse_voice_lists()
+    if not banned or not glazing:
+        r.add_fail(name, "voice.md lists are empty")
+        return
+    surfaces = ([CANONICAL / "SKILL.md"]
+                + sorted(TEMPLATES.glob("*.md"))
+                + [p for p in sorted(REFERENCE.glob("*.md")) if p.name != "voice.md"])
+    patterns = [(t, re.compile(r"(?<![\w-])" + re.escape(t) + r"(?![\w-])", re.IGNORECASE))
+                for t in banned + glazing]
+    hits: list[str] = []
+    for f in surfaces:
+        text = f.read_text()
+        for term, rx in patterns:
+            if rx.search(text):
+                hits.append(f"{f.relative_to(ROOT)}: {term!r}")
+    for t in sorted(TEMPLATES.glob("*.md")):
+        if "—" in t.read_text():
+            hits.append(f"{t.relative_to(ROOT)}: em dash")
+    if hits:
+        shown = "; ".join(hits[:8])
+        more = f" (+{len(hits) - 8} more)" if len(hits) > 8 else ""
+        r.add_fail(name, shown + more)
+    else:
+        r.add_pass(name)
+
+
 def main() -> int:
     print(f"adjudant validators — running from {ROOT}")
     r = Result()
@@ -718,6 +774,7 @@ def main() -> int:
     validate_repo_tidy_backup_integrity(r)
     validate_gitignore_includes_repo_tidy_dirs(r)
     validate_status_vocabulary(r)
+    validate_voice_lexicon(r)
     return r.report()
 
 

@@ -209,21 +209,6 @@ quadrantChart
   Rename folder: [0.1, 0.2]
 ```
 
-### User Journey
-
-```mermaid
-journey
-  title Onboarding flow
-  section Signup
-    Land on page: 5: User
-    Fill form:    3: User
-  section First use
-    Create vault: 4: User
-    Hit error:    1: User, System
-```
-
-Score scale 0–5 per actor; multiple actors comma-separated.
-
 ### C4 (Context / Container / Component)
 
 ```mermaid

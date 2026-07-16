@@ -2,7 +2,7 @@
 
 # Claude-specific overrides
 
-Project context, conventions, vault references, and working-files index live in `AGENTS.md` (imported above). Any agent — Claude, Gemini, Codex, Cursor — reads from there.
+Project context, conventions, vault references, and working-files index live in `AGENTS.md` (imported above). Any agent (Claude, Gemini, Codex, Cursor) reads from there.
 
 This file is for **Claude Code-specific overrides only**:
 - Slash-command behavior hints
