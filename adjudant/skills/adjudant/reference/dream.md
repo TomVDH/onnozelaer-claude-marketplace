@@ -28,6 +28,8 @@ Dream cleans semantically: mark decisions superseded, consolidate duplicates, ar
 
 ## The 5-phase shape (superpowers chain)
 
+> **Cost pre-flight (locked).** Run the analyser with `--estimate-only` before the real scan. If `cost.warn` is true, stop and confirm with the user per the SKILL.md cost gate.
+
 | Phase | Skill | Output |
 |---|---|---|
 | 1. Analyse | `dream.py` + Claude | Content/staleness comparator catalog (JSON → narrative) |

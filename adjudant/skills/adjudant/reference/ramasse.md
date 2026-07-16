@@ -24,6 +24,8 @@ Ramasse handles everything tidy refuses to auto-fix:
 
 ## The 5-phase shape (superpowers chain)
 
+> **Cost pre-flight (locked).** Run the analyser with `--estimate-only` before the real scan. If `cost.warn` is true, stop and confirm with the user per the SKILL.md cost gate.
+
 | Phase | Skill | Output |
 |---|---|---|
 | 1. Analyse | `ramasse_scan.py` + Claude | Full structural drift catalog (JSON → narrative) |

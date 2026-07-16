@@ -45,6 +45,8 @@ Repo ops use `--project-dir` as the repo root directly (no breadcrumb).
 
 ## Run
 
+> Render the JSON `cost` block as one line: `cost: ~{est_read_tokens/1000}k tokens, {files} files`.
+
 ```bash
 # Phase 1 — preview (writes .adjudant-tidy-preview/, never touches live files)
 python3 "$(dirname "$0")/../../../scripts/tidy.py" preview \
@@ -61,7 +63,7 @@ python3 "$(dirname "$0")/../../../scripts/tidy.py" apply --project-dir "$PROJECT
 
 # Or: detect what state we're in without touching anything
 python3 "$(dirname "$0")/../../../scripts/tidy.py" detect --project-dir "$PROJECT_ROOT"
-# → 'fresh' | 'preview' | 'applied'
+# → {"state": "fresh|preview|applied", "cost": {...}}
 ```
 
 ## Apply: what happens

@@ -31,6 +31,8 @@ JSON output shape (top-level keys):
 
 ## Render — the ELI5 briefing
 
+> Render the JSON `cost` block as one line: `cost: ~{est_read_tokens/1000}k tokens, {files} files`.
+
 Output **at most four labeled lines**. Plain words a newcomer understands; no schema
 jargon (don't say "frontmatter", "wikilink", "drift"). Lead with the traffic-light.
 One sentence per line. Concise, yet very clear.

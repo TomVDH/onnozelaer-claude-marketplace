@@ -45,6 +45,8 @@ JSON output shape (top-level keys):
 
 ## Render
 
+> Render the JSON `cost` block as one line: `cost: ~{est_read_tokens/1000}k tokens, {files} files`.
+
 Output a single rendered block:
 
 ```
