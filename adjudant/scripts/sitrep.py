@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
+from _cost import cost_block, read_threshold, stat_walk
 from _handoff_freshness import (
     age_hours,
     fmt_age,
@@ -101,6 +102,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--project-dir", default=".", help="Project root (default: cwd)")
     parser.add_argument("--vault-dir", help="Vault root (informational; auto-resolved otherwise)")
     parser.add_argument("--out", help="Write JSON to FILE instead of stdout")
+    parser.add_argument("--estimate-only", action="store_true",
+                        help="Print only the cost block (stat-only walk) and exit")
     args = parser.parse_args(argv)
 
     try:
@@ -129,7 +132,14 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         # check/dream/tidy use) so the briefing can still name the vault.
         vault_path = resolve_vault(project_dir)
     code_root = Path(args.project_dir).expanduser().resolve()
+    files, n_bytes = stat_walk(project_dir)
+    cost = cost_block(files, n_bytes, read_threshold(code_root))
+    if args.estimate_only:
+        print(json.dumps({"cost": cost}, indent=2))
+        return 0
+
     report = run_sitrep(project_dir, vault_path, code_root=code_root)
+    report["cost"] = cost
 
     payload = json.dumps(report, indent=2, default=str)
     if args.out:

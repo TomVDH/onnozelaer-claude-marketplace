@@ -1,11 +1,14 @@
 """Tests for adjudant/scripts/sitrep.py."""
 
+import contextlib
+import io
+import json as _json
 import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 
-from sitrep import run_sitrep, _next_step
+from sitrep import cli_main as sitrep_cli, run_sitrep, _next_step
 
 
 def _write(path: Path, content: str) -> None:
@@ -102,6 +105,32 @@ class TestRunSitrep(unittest.TestCase):
             self.assertIsNone(rep["were_doing"])
             self.assertEqual(rep["freshness"]["light"], "⚪")  # white — age unknown
             self.assertEqual(rep["whats_done"]["counts"], {})
+
+
+class TestSitrepCost(unittest.TestCase):
+
+    def test_estimate_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = sitrep_cli(["--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = _json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+
+    def test_normal_run_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "brief.md").write_text(
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = sitrep_cli(["--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            self.assertIn("cost", _json.loads(buf.getvalue()))
 
 
 if __name__ == "__main__":

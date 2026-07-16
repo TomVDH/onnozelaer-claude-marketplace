@@ -1,11 +1,14 @@
 """Tests for adjudant/scripts/check.py."""
 
+import contextlib
+import io
+import json as _json
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from check import run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal
+from check import cli_main as check_cli, run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal
 
 
 def _write(path: Path, content: str) -> None:
@@ -133,6 +136,41 @@ class TestRunCheck(unittest.TestCase):
             self.assertEqual(report["counts"]["decisions"], 1)
             self.assertEqual(report["recent"]["last_decision"], "2026-05-26")
             self.assertTrue(report["handoff"]["present"])
+
+
+class TestCheckCost(unittest.TestCase):
+
+    def _project(self, root: Path) -> None:
+        _write(root / "brief.md",
+            "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+        _write(root / "notes" / "a.md", "x" * 4000)
+
+    def test_estimate_only_prints_cost_block_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check_cli(["--project-dir", str(root), "--estimate-only"])
+            self.assertEqual(rc, 0)
+            payload = _json.loads(buf.getvalue())
+            self.assertEqual(set(payload), {"cost"})
+            self.assertEqual(
+                set(payload["cost"]),
+                {"est_read_tokens", "files", "bytes", "threshold", "warn"})
+            self.assertEqual(payload["cost"]["files"], 2)
+
+    def test_normal_run_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check_cli(["--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            payload = _json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertIn("project", payload)
 
 
 if __name__ == "__main__":
