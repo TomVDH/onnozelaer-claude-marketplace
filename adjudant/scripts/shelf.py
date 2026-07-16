@@ -89,6 +89,204 @@ def run_list(vault: Path, stale_days: int, today: date) -> dict[str, Any]:
     return {"vault": str(vault), "stale_after_days": stale_days, "projects": rows}
 
 
+def set_brief_status(text: str, new_status: str, today_str: str) -> str:
+    """Rewrite status: and updated: inside the frontmatter block only."""
+    fm, body = parse_frontmatter(text)
+    lines = fm.raw.split("\n") if fm.has_block else []
+    replaced = bumped = False
+    for i, ln in enumerate(lines):
+        if ln.startswith("status:"):
+            lines[i] = f"status: {new_status}"
+            replaced = True
+        elif ln.startswith("updated:"):
+            lines[i] = f"updated: {today_str}"
+            bumped = True
+    if not replaced:
+        lines.append(f"status: {new_status}")
+    if not bumped:
+        lines.append(f"updated: {today_str}")
+    return "---\n" + "\n".join(lines) + "\n---\n" + body
+
+
+def append_status_log(text: str, from_state: Optional[str], to_state: str,
+                      today_str: str, reason: Optional[str]) -> str:
+    """Dated transition line under ## Status log (newest first; section
+    created at end of file on first transition)."""
+    entry = f"- {today_str}: {from_state or 'unset'} → {to_state}"
+    if reason:
+        entry += f" ({reason})"
+    lines = text.split("\n")
+    for i, ln in enumerate(lines):
+        if ln.strip() == STATUS_LOG_HEADING:
+            j = i + 1
+            while j < len(lines) and lines[j].strip() == "":
+                j += 1
+            lines.insert(j, entry)
+            return "\n".join(lines)
+    tail = "" if text.endswith("\n") else "\n"
+    return text + tail + f"\n{STATUS_LOG_HEADING}\n\n{entry}\n"
+
+
+def plan_transition(vault: Path, slug: str, to_state: str,
+                    reason: Optional[str], today_str: str) -> dict[str, Any]:
+    """Read-only plan: zones, folder move, vault-wide wikilink rewrites."""
+    if to_state not in PROJECT_STATUS_VALUES:
+        raise ValueError(
+            f"invalid state {to_state!r}; one of: {', '.join(PROJECT_STATUS_VALUES)}")
+    pdir = find_project_dir(vault, slug)
+    if pdir is None or not (pdir / "brief.md").is_file():
+        raise ValueError(
+            f"project {slug!r} not found in projects/, projects/_fridge/, projects/_archive/")
+    from_zone = zone_of(pdir)
+    to_zone = ZONE_FOR_STATUS[to_state]
+    fm, _ = parse_frontmatter((pdir / "brief.md").read_text(errors="replace"))
+    from_state = fm.fields.get("status")
+    old_prefix = f"[[projects/{from_zone + '/' if from_zone else ''}{slug}/"
+    new_prefix = f"[[projects/{to_zone + '/' if to_zone else ''}{slug}/"
+    move_required = old_prefix != new_prefix
+    to_dir = (vault / "projects" / to_zone / slug) if to_zone else (vault / "projects" / slug)
+
+    link_rewrites: list[dict[str, Any]] = []
+    if move_required:
+        skip_set = set(DEFAULT_SKIP) | {"_legacy"}
+        for f in sorted(vault.rglob("*.md")):
+            rel = f.relative_to(vault)
+            if any(part in skip_set for part in rel.parts):
+                continue
+            try:
+                n = f.read_text(errors="replace").count(old_prefix)
+            except OSError:
+                continue
+            if n:
+                link_rewrites.append({"file": str(rel), "count": n})
+
+    return {
+        "slug": slug,
+        "reason": reason,
+        "from_state": from_state if isinstance(from_state, str) else None,
+        "to_state": to_state,
+        "from_zone": from_zone,
+        "to_zone": to_zone,
+        "from_dir": str(pdir.relative_to(vault)),
+        "to_dir": str(to_dir.relative_to(vault)),
+        "move_required": move_required,
+        "old_link_prefix": old_prefix,
+        "new_link_prefix": new_prefix,
+        "link_rewrites": link_rewrites,
+        "today": today_str,
+    }
+
+
+def write_preview(vault: Path, plan: dict[str, Any]) -> Path:
+    pdir = vault / PREVIEW_DIR
+    if pdir.exists():
+        shutil.rmtree(pdir)
+    pdir.mkdir(parents=True)
+    (pdir / "changes.json").write_text(json.dumps(plan, indent=2))
+    (pdir / "summary.md").write_text("\n".join([
+        f"# shelf preview: {plan['slug']} to {plan['to_state']}",
+        "",
+        f"- from: {plan['from_state']} ({plan['from_dir']})",
+        f"- to:   {plan['to_state']} ({plan['to_dir']})",
+        f"- folder move: {'yes' if plan['move_required'] else 'no'}",
+        f"- files with links to rewrite: {len(plan['link_rewrites'])}",
+        f"- reason: {plan['reason'] or '(none)'}",
+        "",
+    ]))
+    return pdir
+
+
+def apply_transition(vault: Path, plan: dict[str, Any]) -> dict[str, Any]:
+    """Execute a planned transition. Backup first; abort before any write
+    if the move target already exists."""
+    slug = plan["slug"]
+    from_dir = vault / plan["from_dir"]
+    to_dir = vault / plan["to_dir"]
+    if plan["move_required"] and to_dir.exists():
+        raise RuntimeError(f"target dir already exists: {to_dir}")
+
+    # 1. backup every file that will be modified (rewrites + the brief)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_root = vault / BACKUP_DIR / ts
+    to_back_up = [r["file"] for r in plan["link_rewrites"]]
+    brief_rel = f"{plan['from_dir']}/brief.md"
+    if brief_rel not in to_back_up:
+        to_back_up.append(brief_rel)
+    backup_root.mkdir(parents=True)
+    for rel in to_back_up:
+        src = vault / rel
+        dst = backup_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+    (backup_root / "manifest.json").write_text(json.dumps(
+        {"plan": plan, "backed_up": to_back_up, "timestamp": ts}, indent=2))
+
+    # 2-4 are atomic from the caller's view: any failure restores from the
+    # backup taken above (spec: no half-moved project).
+    links_rewritten = 0
+    moved = False
+    try:
+        # 2. vault-wide wikilink prefix rewrite
+        for r in plan["link_rewrites"]:
+            f = vault / r["file"]
+            text = f.read_text(errors="replace")
+            new_text = text.replace(plan["old_link_prefix"], plan["new_link_prefix"])
+            if new_text != text:
+                f.write_text(new_text)
+                links_rewritten += r["count"]
+
+        # 3. zone folder move
+        if plan["move_required"]:
+            to_dir.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(from_dir), str(to_dir))
+            moved = True
+        final_dir = to_dir if moved else from_dir
+
+        # 4. brief: status + updated + status log
+        brief = final_dir / "brief.md"
+        text = brief.read_text(errors="replace")
+        text = set_brief_status(text, plan["to_state"], plan["today"])
+        text = append_status_log(text, plan["from_state"], plan["to_state"],
+                                 plan["today"], plan["reason"])
+        brief.write_text(text)
+    except (OSError, RuntimeError) as exc:
+        if moved and to_dir.exists() and not from_dir.exists():
+            shutil.move(str(to_dir), str(from_dir))
+        for rel in to_back_up:
+            src = backup_root / rel
+            if src.is_file():
+                (vault / rel).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, vault / rel)
+        raise RuntimeError(
+            f"apply failed and was rolled back from {backup_root.name}: {exc}") from exc
+
+    # 5. projects/_index.md row refresh
+    fm, _ = parse_frontmatter(brief.read_text(errors="replace"))
+    ptype = fm.fields.get("project_type") or "coding"
+    row = upsert_projects_index_row(
+        vault, slug, ptype, plan["to_state"],
+        count_non_index_files(final_dir / "decisions"),
+        count_non_index_files(final_dir / "sessions"),
+        newest_session_date(final_dir / "sessions"),
+    )
+
+    # 6. clear the consumed preview
+    preview = vault / PREVIEW_DIR
+    if preview.exists():
+        shutil.rmtree(preview)
+
+    return {
+        "slug": slug,
+        "from_state": plan["from_state"],
+        "to_state": plan["to_state"],
+        "moved": moved,
+        "final_dir": str(final_dir.relative_to(vault)),
+        "links_rewritten": links_rewritten,
+        "index_row": row,
+        "backup": str(backup_root.relative_to(vault)),
+    }
+
+
 def cli_main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="shelf.py",
@@ -120,9 +318,39 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(json.dumps(run_list(vault, stale_days, today), indent=2))
         return 0
 
-    # preview / apply: implemented in Task 8
-    print("error: preview/apply not yet implemented", file=sys.stderr)
-    return 1
+    if not args.slug or not args.to_state:
+        print("error: preview/apply need --slug and --to", file=sys.stderr)
+        return 1
+    today_str = today.isoformat()
+    try:
+        plan = plan_transition(vault, args.slug, args.to_state, args.reason, today_str)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+
+    if args.phase == "preview":
+        pdir = write_preview(vault, plan)
+        print(json.dumps({"preview_dir": str(pdir), "plan": plan}, indent=2))
+        return 0
+
+    # apply: require a matching prior preview, then execute the FRESH plan
+    changes = vault / PREVIEW_DIR / "changes.json"
+    if not changes.is_file():
+        print("error: no shelf preview found; run the preview phase first",
+              file=sys.stderr)
+        return 1
+    prior = json.loads(changes.read_text())
+    if prior.get("slug") != args.slug or prior.get("to_state") != args.to_state:
+        print("error: existing preview is for a different transition; re-run preview",
+              file=sys.stderr)
+        return 1
+    try:
+        result = apply_transition(vault, plan)
+    except (RuntimeError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2))
+    return 0
 
 
 if __name__ == "__main__":

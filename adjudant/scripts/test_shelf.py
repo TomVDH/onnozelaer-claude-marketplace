@@ -67,5 +67,153 @@ class TestListCli(unittest.TestCase):
             self.assertEqual(payload["stale_after_days"], 30)
 
 
+from shelf import (
+    append_status_log,
+    apply_transition,
+    plan_transition,
+    set_brief_status,
+    write_preview,
+)
+
+
+class TestBriefEdits(unittest.TestCase):
+
+    BRIEF = ("---\ntype: project\nslug: p\nproject_type: coding\nstatus: active\n"
+             "created: 2026-01-01\nupdated: 2026-01-01\ntags:\n  - project\n---\n\n# P\n")
+
+    def test_set_brief_status_rewrites_frontmatter_only(self):
+        text = self.BRIEF + "\nBody mentions status: active in prose.\n"
+        out = set_brief_status(text, "fridge", "2026-07-16")
+        self.assertIn("status: fridge", out)
+        self.assertIn("updated: 2026-07-16", out)
+        self.assertIn("Body mentions status: active in prose.", out)
+        self.assertEqual(out.count("status: fridge"), 1)
+
+    def test_append_status_log_creates_section(self):
+        out = append_status_log(self.BRIEF, "active", "fridge", "2026-07-16", "summer break")
+        self.assertIn("## Status log", out)
+        self.assertIn("- 2026-07-16: active → fridge (summer break)", out)
+
+    def test_append_status_log_prepends_to_existing_section(self):
+        first = append_status_log(self.BRIEF, "active", "fridge", "2026-07-01", None)
+        second = append_status_log(first, "fridge", "active", "2026-07-16", None)
+        self.assertEqual(second.count("## Status log"), 1)
+        idx_new = second.index("2026-07-16: fridge → active")
+        idx_old = second.index("2026-07-01: active → fridge")
+        self.assertLess(idx_new, idx_old)
+
+
+class TestTransition(unittest.TestCase):
+
+    def _vault(self, tmp: str) -> Path:
+        vault = Path(tmp)
+        _mk_project(vault, "p", sessions=["2026-07-01"])
+        other = vault / "projects" / "other"
+        other.mkdir(parents=True)
+        (other / "brief.md").write_text(
+            "---\ntype: project\nslug: other\nproject_type: coding\nstatus: active\n---\n\n"
+            "# Other\n\nSee [[projects/p/brief|p]] and [[projects/p/notes/idea]].\n")
+        return vault
+
+    def test_plan_counts_link_rewrites_and_move(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            plan = plan_transition(vault, "p", "fridge", "pause", "2026-07-16")
+            self.assertTrue(plan["move_required"])
+            self.assertEqual(plan["to_dir"], "projects/_fridge/p")
+            files = {r["file"]: r["count"] for r in plan["link_rewrites"]}
+            self.assertEqual(files.get("projects/other/brief.md"), 2)
+
+    def test_plan_rejects_bad_state_and_slug(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            with self.assertRaises(ValueError):
+                plan_transition(vault, "p", "paused", None, "2026-07-16")
+            with self.assertRaises(ValueError):
+                plan_transition(vault, "ghost", "fridge", None, "2026-07-16")
+
+    def test_same_zone_transition_needs_no_move(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            plan = plan_transition(vault, "p", "stale", None, "2026-07-16")
+            self.assertFalse(plan["move_required"])
+            self.assertEqual(plan["link_rewrites"], [])
+
+    def test_apply_end_to_end(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            plan = plan_transition(vault, "p", "fridge", "pause", "2026-07-16")
+            write_preview(vault, plan)
+            result = apply_transition(vault, plan)
+            new_dir = vault / "projects" / "_fridge" / "p"
+            self.assertTrue(new_dir.is_dir())
+            self.assertFalse((vault / "projects" / "p").exists())
+            brief = (new_dir / "brief.md").read_text()
+            self.assertIn("status: fridge", brief)
+            self.assertIn("- 2026-07-16: active → fridge (pause)", brief)
+            other = (vault / "projects" / "other" / "brief.md").read_text()
+            self.assertIn("[[projects/_fridge/p/brief|p]]", other)
+            self.assertIn("[[projects/_fridge/p/notes/idea]]", other)
+            idx = (vault / "projects" / "_index.md").read_text()
+            self.assertIn("| fridge |", idx)
+            backups = list((vault / ".adjudant-shelf-backup").iterdir())
+            self.assertEqual(len(backups), 1)
+            self.assertTrue((backups[0] / "manifest.json").is_file())
+            self.assertTrue((backups[0] / "projects" / "other" / "brief.md").is_file())
+            self.assertFalse((vault / ".adjudant-shelf-preview").exists())
+            self.assertEqual(result["moved"], True)
+
+    def test_apply_refuses_existing_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            (vault / "projects" / "_fridge" / "p").mkdir(parents=True)
+            plan = plan_transition(vault, "p", "fridge", None, "2026-07-16")
+            with self.assertRaises(RuntimeError):
+                apply_transition(vault, plan)
+            # original untouched
+            self.assertTrue((vault / "projects" / "p" / "brief.md").is_file())
+
+    def test_apply_rolls_back_on_midflight_failure(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = self._vault(tmp)
+            before = (vault / "projects" / "other" / "brief.md").read_text()
+            plan = plan_transition(vault, "p", "fridge", None, "2026-07-16")
+            with mock.patch("shelf.shutil.move", side_effect=OSError("disk says no")):
+                with self.assertRaises(RuntimeError):
+                    apply_transition(vault, plan)
+            # link rewrites reverted, folder never moved, brief untouched
+            self.assertEqual(
+                (vault / "projects" / "other" / "brief.md").read_text(), before)
+            self.assertTrue((vault / "projects" / "p" / "brief.md").is_file())
+            self.assertFalse((vault / "projects" / "_fridge" / "p").exists())
+
+
+class TestTransitionCli(unittest.TestCase):
+
+    def test_apply_without_preview_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            _mk_project(vault, "p")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = shelf_cli(["apply", "--vault-dir", str(vault),
+                                "--slug", "p", "--to", "fridge"])
+            self.assertEqual(rc, 1)
+
+    def test_preview_then_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            _mk_project(vault, "p")
+            for phase in ("preview", "apply"):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    rc = shelf_cli([phase, "--vault-dir", str(vault),
+                                    "--slug", "p", "--to", "done",
+                                    "--today", "2026-07-16"])
+                self.assertEqual(rc, 0)
+            self.assertTrue((vault / "projects" / "_archive" / "p" / "brief.md").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()
