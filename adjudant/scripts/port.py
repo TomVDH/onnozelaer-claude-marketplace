@@ -265,7 +265,7 @@ def render_agents_md(
 
 ## Vault is canonical
 
-When asked "is X documented?" or "do we know Y?", check the vault first — repos document code, the vault documents decisions and context. Use the `adjudant` skill to read/write vault files.
+When asked "is X documented?" or "do we know Y?", check the vault first: repos document code, the vault documents decisions and context. Use the `adjudant` skill to read/write vault files.
 
 ## Claude-specific overrides
 

@@ -772,7 +772,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
 
     if args.contract:
         ptype_arg = args.project_type
-        existing_brief = vault_path / "projects" / slug / "brief.md"
+        existing_brief = _project_dir(vault_path, slug) / "brief.md"
         ptype = derive_project_type(ptype_arg, existing_brief if existing_brief.is_file() else None)
         if ptype:
             type_signal = "explicit --project-type or existing brief"
@@ -792,8 +792,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(detect_state(project_root, vault_path, slug))
         return 0
 
-    # Resolve project_type
-    existing_brief = vault_path / "projects" / slug / "brief.md"
+    # Resolve project_type (zone-aware: a shelved project's brief still wins)
+    existing_brief = _project_dir(vault_path, slug) / "brief.md"
     project_type = derive_project_type(args.project_type, existing_brief if existing_brief.is_file() else None)
     if not project_type:
         project_type = infer_project_type(project_root)[0]

@@ -619,6 +619,29 @@ class TestZoneAwareReconnect(unittest.TestCase):
             self.assertTrue((sess_dir / f"{today}.md").is_file())
             self.assertFalse((vault / "projects" / "p" / "sessions").exists())
 
+    def test_zoned_brief_drives_project_type_on_reconnect(self):
+        """A fridged brief declaring project_type plugin must win over
+        re-inference when --project-type is omitted."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            proj_dir = vault / "projects" / "_fridge" / "p"
+            scaffold_vault_project(
+                vault, "p", "plugin", "P", "2026-05-27",
+                initial_status="fridge", proj_dir=proj_dir)
+            code = root / "p"; code.mkdir()
+            # A code file would make infer_project_type() say "coding"
+            (code / "main.py").write_text("print('x')")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = connect_cli([
+                    "--project-root", str(code), "--vault-path", str(vault),
+                    "--slug", "p"])
+            self.assertEqual(rc, 0)
+            summary = json.loads(buf.getvalue())
+            self.assertEqual(summary["project_type"], "plugin")
+
 
 if __name__ == "__main__":
     unittest.main()
