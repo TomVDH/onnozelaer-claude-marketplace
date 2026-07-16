@@ -180,7 +180,7 @@ def mirror_handoff(
 
     new_content = (
         f"{frontmatter}"
-        f"# Handoff — {slug}\n\n"
+        f"# Handoff: {slug}\n\n"
         f"{fresh_block}"
         f"*Mirrored from `.remember/{source.name}` on {today}.*\n\n"
         f"---\n\n"

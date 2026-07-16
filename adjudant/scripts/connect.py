@@ -45,9 +45,11 @@ from _vault_walk import (
     INDEX_EXEMPT_FOLDERS,
     PROJECT_TYPE_DEFAULT_FOLDERS,
     _candidate_vault_paths,
+    find_project_dir,
     parse_breadcrumb,
     parse_frontmatter,
     resolve_vault,
+    zone_of,
 )
 
 
@@ -77,6 +79,17 @@ def validate_slug(slug: str) -> Optional[str]:
 
 def slug_to_title(slug: str) -> str:
     return " ".join(part.capitalize() for part in slug.replace("_", "-").split("-") if part)
+
+
+def _project_dir(vault_path: Path, slug: str) -> Path:
+    """Resolve a project's vault dir across zones (live / _fridge / _archive).
+
+    Falls back to the default live-zone path when the project doesn't exist
+    yet anywhere (fresh connect). Zone-aware so re-connecting a shelved
+    project fills gaps in place instead of forking a duplicate in
+    `projects/{slug}`.
+    """
+    return find_project_dir(vault_path, slug) or (vault_path / "projects" / slug)
 
 
 # ============================================================
@@ -153,7 +166,7 @@ def build_contract(
 ) -> dict[str, Any]:
     """The connect contract: five required fields + per-agent artifact
     disclosure. Read-only."""
-    vault_proj = (vault_path / "projects" / slug) if vault_path else None
+    vault_proj = _project_dir(vault_path, slug) if vault_path else None
     present = {
         "AGENTS.md": (project_root / "AGENTS.md").exists(),
         "CLAUDE.md": (project_root / "CLAUDE.md").exists(),
@@ -182,6 +195,7 @@ def build_contract(
             for a, rdr in ARTIFACT_READERS
         ],
         "state": detect_state(project_root, vault_path, slug),
+        "zone": zone_of(vault_proj) if vault_proj is not None else "",
     }
 
 
@@ -366,12 +380,18 @@ def scaffold_vault_project(
     today: str,
     initial_status: str = "active",
     purpose: Optional[str] = None,
+    proj_dir: Optional[Path] = None,
 ) -> dict[str, list[str]]:
     """Create vault project folder, brief, subfolders, per-folder indexes.
 
+    `proj_dir` lets the caller pass a zone-resolved dir (e.g. `_fridge/{slug}`)
+    so gaps are filled in place instead of forking `projects/{slug}`. Defaults
+    to the live-zone path when omitted, matching prior behavior.
+
     Returns dict with 'created' / 'preserved' filenames lists.
     """
-    proj_dir = vault_path / "projects" / slug
+    if proj_dir is None:
+        proj_dir = vault_path / "projects" / slug
     created: list[str] = []
     preserved: list[str] = []
 
@@ -443,8 +463,13 @@ def write_session_note(
     slug: str,
     today: str,
     now_hhmm: str,
+    proj_dir: Optional[Path] = None,
 ) -> str:
-    sess_dir = vault_path / "projects" / slug / "sessions"
+    """`proj_dir` lets the caller pass a zone-resolved dir; defaults to the
+    live-zone path when omitted, matching prior behavior."""
+    if proj_dir is None:
+        proj_dir = vault_path / "projects" / slug
+    sess_dir = proj_dir / "sessions"
     sess_dir.mkdir(parents=True, exist_ok=True)
     sess_file = sess_dir / f"{today}.md"
     if sess_file.is_file():
@@ -599,7 +624,7 @@ def detect_state(project_root: Path, vault_path: Optional[Path], slug: Optional[
     bc_exists = (project_root / ".claude" / "adjudant").is_file()
     vault_proj_exists = False
     if vault_path and slug:
-        vault_proj_exists = (vault_path / "projects" / slug).is_dir()
+        vault_proj_exists = _project_dir(vault_path, slug).is_dir()
     if bc_exists and vault_proj_exists:
         return "connected"
     if bc_exists or vault_proj_exists:
@@ -654,6 +679,10 @@ def run_connect(
         "steps": {},
     }
 
+    # Zone-aware project dir: an existing shelved project is filled in place
+    # rather than forked into a fresh `projects/{slug}` (v0.14.0 zones).
+    proj_dir = _project_dir(vault_path, slug)
+
     # Step 1
     summary["steps"]["breadcrumb"] = write_breadcrumb(
         project_root, vault_path, vault_name, slug)
@@ -665,16 +694,16 @@ def run_connect(
     # Step 3
     summary["steps"]["vault_scaffold"] = scaffold_vault_project(
         vault_path, slug, project_type, project_name, today,
-        initial_status=initial_status, purpose=purpose)
+        initial_status=initial_status, purpose=purpose, proj_dir=proj_dir)
 
     # Step 4
-    summary["steps"]["session_note"] = write_session_note(vault_path, slug, today, now_hhmm)
+    summary["steps"]["session_note"] = write_session_note(
+        vault_path, slug, today, now_hhmm, proj_dir=proj_dir)
 
     # Step 5
     summary["steps"]["gitignore"] = append_gitignore(project_root)
 
     # Step 6
-    proj_dir = vault_path / "projects" / slug
     decisions_n = count_non_index_files(proj_dir / "decisions")
     sessions_n = count_non_index_files(proj_dir / "sessions")
     last_session = newest_session_date(proj_dir / "sessions")

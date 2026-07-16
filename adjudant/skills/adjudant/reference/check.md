@@ -42,6 +42,8 @@ JSON output shape (top-level keys):
 - `recent` — last_session, last_decision, last_dream (YYYY-MM-DD)
 - `handoff` — present, updated, stale_hours
 - `drift_signal` — latest dream date + drift_items count if parseable
+- `status` — declared vs. machine-suggested lifecycle status: `declared`, `declared_valid`,
+  `last_session`, `days_quiet`, `suggested`, `reason`, `nudge`, `zone`, `zone_matches`
 
 ## Render
 
@@ -71,6 +73,12 @@ Created: {created} · Updated: {updated}
 ```
 
 Adapt phrasing to be conversational; the shape above is the data layout, not a rigid template.
+
+### Status nudges (conditional)
+
+- If `status.suggested` is set, render one line: "brief says {status.declared}, looks {status.suggested}: {status.reason} → run /adjudant shelf".
+- If `status.nudge` is set, render the nudge as its own line.
+- If `status.zone_matches` is false, flag the mismatch: the declared status doesn't match the vault zone the project actually sits in.
 
 ## Inputs
 

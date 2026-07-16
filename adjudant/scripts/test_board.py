@@ -510,5 +510,22 @@ class TestStatus(unittest.TestCase):
             self.assertIn("no board", line)
 
 
+class TestZoneAwareProjectFlag(unittest.TestCase):
+
+    def test_scaffold_project_finds_fridged_project(self):
+        from board import cli_main
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            pdir = vault / "projects" / "_fridge" / "p"
+            _write(pdir / "brief.md", "---\ntype: project\nproject_type: coding\n---\n# P\n")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = cli_main(["scaffold", "--project", "p", "--vault", str(vault)])
+            self.assertEqual(rc, 0)
+            self.assertTrue((pdir / "board" / "board-data.json").is_file())
+            # No duplicate scaffolded into the live zone
+            self.assertFalse((vault / "projects" / "p").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

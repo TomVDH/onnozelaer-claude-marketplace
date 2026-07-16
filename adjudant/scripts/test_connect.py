@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from connect import (
@@ -540,6 +541,83 @@ class TestApplyContract(unittest.TestCase):
             self.assertEqual(states["GEMINI.md"], "already-present")
             self.assertEqual(states["session note"], "already-present")
             self.assertEqual(states[".claude/adjudant"], "already-present")
+
+
+# ============================================================
+# Zone-awareness (v0.14.0): re-connecting a shelved project
+# ============================================================
+
+
+class TestZoneAwareReconnect(unittest.TestCase):
+
+    def _fridge_project(self, vault: Path, slug: str = "p") -> Path:
+        """A fully-scaffolded project already living in the _fridge zone
+        (mirrors what a prior connect + shelf would have produced)."""
+        proj_dir = vault / "projects" / "_fridge" / slug
+        scaffold_vault_project(
+            vault, slug, "coding", slug.title(), "2026-05-27",
+            initial_status="fridge", proj_dir=proj_dir)
+        write_session_note(vault, slug, "2026-05-27", "09:00", proj_dir=proj_dir)
+        return proj_dir
+
+    def test_contract_on_fridged_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            self._fridge_project(vault, "p")
+            code = root / "p"; code.mkdir()
+            (code / ".claude").mkdir()
+            (code / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: vault\nslug: p\nmode: project\n"
+            )
+            contract = build_contract(
+                project_root=code, vault_path=vault, vault_name="vault",
+                slug="p", project_type="coding", type_signal="test",
+                initial_status="active", status_signal="test", purpose=None)
+            self.assertEqual(contract["state"], "connected")
+            self.assertEqual(contract["zone"], "_fridge")
+            states = {a["artifact"]: a["state"] for a in contract["artifacts"]}
+            self.assertEqual(states["vault scaffold"], "already-present")
+
+    def test_reconnect_does_not_fork_a_duplicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            self._fridge_project(vault, "p")
+            code = root / "p"; code.mkdir()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = connect_cli([
+                    "--project-root", str(code), "--vault-path", str(vault),
+                    "--slug", "p", "--project-type", "coding"])
+            self.assertEqual(rc, 0)
+            summary = json.loads(buf.getvalue())
+            # No duplicate forked into the live zone
+            self.assertFalse((vault / "projects" / "p").exists())
+            # The fridged project is still exactly one dir
+            self.assertTrue((vault / "projects" / "_fridge" / "p" / "brief.md").is_file())
+            states = {r["artifact"]: r["state"] for r in summary["receipt"]}
+            self.assertEqual(states["vault scaffold"], "already-present")
+
+    def test_session_note_lands_in_zoned_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            self._fridge_project(vault, "p")
+            code = root / "p"; code.mkdir()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = connect_cli([
+                    "--project-root", str(code), "--vault-path", str(vault),
+                    "--slug", "p", "--project-type", "coding"])
+            self.assertEqual(rc, 0)
+            today = datetime.now().strftime("%Y-%m-%d")
+            sess_dir = vault / "projects" / "_fridge" / "p" / "sessions"
+            self.assertTrue((sess_dir / f"{today}.md").is_file())
+            self.assertFalse((vault / "projects" / "p" / "sessions").exists())
 
 
 if __name__ == "__main__":

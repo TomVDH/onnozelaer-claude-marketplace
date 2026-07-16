@@ -159,7 +159,7 @@ def freshness_header(light: str, age_str: str, next_line: Optional[str], stale: 
     block = f"{light} **handoff age: {age_str}** · NEXT: {next_disp}"
     if stale:
         block += (
-            "\n\n\U0001f534 **STALE** — session activity is newer than this "
+            "\n\n\U0001f534 **STALE**: session activity is newer than this "
             "handoff. Rebuild it before trusting NEXT."
         )
     return block

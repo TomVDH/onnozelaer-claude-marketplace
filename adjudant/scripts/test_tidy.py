@@ -469,6 +469,18 @@ class TestTidyCost(unittest.TestCase):
             self.assertIn("cost", payload)
             self.assertEqual(payload["state"], "fresh")
 
+    def test_preview_includes_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._project(root)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = tidy_cli(["preview", "--project-dir", str(root)])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("cost", payload)
+            self.assertGreaterEqual(payload["cost"]["est_read_tokens"], 2000)
+
 
 if __name__ == "__main__":
     unittest.main()

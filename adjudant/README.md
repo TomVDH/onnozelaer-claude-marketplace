@@ -18,7 +18,7 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | Verbs | `connect`, `port`, `sync`, `check`, `sitrep`, `tidy`, `ramasse`, `dream`, `draw`, `board`, `shelf` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
-| Templates | 18 file-type scaffolds + `board.html` (self-hosted kanban) |
+| Templates | 19 file-type scaffolds + `board.html` (self-hosted kanban) |
 | Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
 | Drift defense | `python3 scripts/validate.py` — 24 validators, runs via pre-commit |
 | Tests | 560 unit tests; `python3 -m unittest discover -p 'test_*.py'` |

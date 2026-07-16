@@ -44,8 +44,8 @@ dream   = content/knowledge/memory refresh (semantic; judgment-heavy)
 Verb weights live in `scripts/command-metadata.json` (`weight: light | medium | heavy`). The estimate approximates what Claude will read back into context; helpers compute it with a stat-only walk (`bytes // 4`).
 
 - **Heavy verbs** (`dream`, `ramasse`, `check all`): run the backing helper with `--estimate-only` FIRST. If `cost.warn` is true, stop and show the numbers ("dream would pull ~85k tokens into context: 210 files, 1.1 MB prose") and ask the user to choose: proceed, scope down (offer only where the verb has a real scoping flag), or abort. Proceed only on explicit confirmation. If `warn` is false, run normally and include the estimate as one line in the rendered output.
-- **Medium verbs** (`check`, `sitrep`, `tidy`, `port`): no pre-flight. The helper's JSON carries a `cost` block; render it as one line ("cost: ~12k tokens, 96 files").
-- **Light verbs** (`connect`, `sync`, `draw`, `board`, `shelf`): no estimate; the static weight badge is enough.
+- **Medium verbs** (`check`, `sitrep`, `tidy`): no pre-flight. The helper's JSON carries a `cost` block; render it as one line ("cost: ~12k tokens, 96 files").
+- **Light verbs** (`connect`, `sync`, `draw`, `board`, `shelf`, `port`): no estimate; the static weight badge is enough.
 - `check all` sums two estimates: `check.py --estimate-only` plus `repo_scan.py --estimate-only`.
 - If an estimate cannot be computed (unresolvable vault or breadcrumb), treat it as `warn: true` and ask before proceeding.
 - Threshold default is 30000 estimated read tokens; per-project override via `cost_warn_tokens:` in `.claude/adjudant`.

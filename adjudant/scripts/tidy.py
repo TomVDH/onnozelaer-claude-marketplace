@@ -773,7 +773,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
             file=sys.stderr,
         )
         # Stdout: compact JSON of the summary block for Claude
-        print(json.dumps(summary))
+        print(json.dumps({**summary, "cost": cost}))
         return 0
 
     if args.phase == "apply":

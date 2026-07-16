@@ -42,8 +42,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from _vault_walk import (
-    enumerate_projects_all_zones, parse_frontmatter, resolve_vault,
-    smart_project_dir, VaultUnresolvableError,
+    enumerate_projects_all_zones, find_project_dir, parse_frontmatter,
+    resolve_vault, smart_project_dir, VaultUnresolvableError,
 )
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "skills" / "adjudant" / "templates" / "board.html"
@@ -398,7 +398,7 @@ def cmd_scaffold(args: argparse.Namespace) -> int:
         return rc
 
     if args.project:
-        pdir = vault / "projects" / args.project
+        pdir = find_project_dir(vault, args.project) or (vault / "projects" / args.project)
         if not pdir.is_dir():
             have = ", ".join(s for s, _ in enumerate_projects(vault)) or "(none)"
             print(f"error: project '{args.project}' not found under {vault}/projects (have: {have})", file=sys.stderr)
@@ -510,7 +510,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         return rc
 
     if args.project:
-        pdir = vault / "projects" / args.project
+        pdir = find_project_dir(vault, args.project) or (vault / "projects" / args.project)
         if not pdir.is_dir():
             have = ", ".join(s for s, _ in enumerate_projects(vault)) or "(none)"
             print(f"error: project '{args.project}' not found under {vault}/projects (have: {have})", file=sys.stderr)

@@ -13,7 +13,8 @@ connect is three phases; the card in the middle is the only thing the user must 
    already-present or will-create.
 2. **Confirm.** Render the contract as ONE card, both halves. Ask the user to approve or
    correct the five fields once. purpose is the one field with no inference: ask for it
-   if empty; it becomes the brief's opening line and what sitrep orients from.
+   if empty; it becomes the brief's opening line and what sitrep orients from. If
+   `contract.zone` is `_fridge` or `_archive`, add one nudge line: project is shelved; run /adjudant shelf <slug> active.
 3. **Apply + receipt.** Run connect.py with the confirmed values (`--purpose`,
    `--initial-status`, plus the usual flags). Render `summary.receipt` back as the same
    card with per-artifact marks: created / already-present / updated. A re-run on a
@@ -57,7 +58,7 @@ Re-running on an already-connected project fills gaps; never overwrites user con
 ## Fail conditions
 
 - Vault path can't be resolved AND user declines to provide one → exit non-zero with message
-- `project_type` not provided and not promptable → exit non-zero
+- `project_type` not provided → inferred from repo signals (never exits non-zero for this)
 - Slug contains invalid characters (spaces, dots, uppercase) → exit non-zero with rename suggestion
 
 ## Per-`project_type` default subfolders

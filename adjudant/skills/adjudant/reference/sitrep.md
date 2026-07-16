@@ -28,6 +28,8 @@ JSON output shape (top-level keys):
 - `whats_done` — `{last_session, last_decision, counts, total_files}`
 - `next_step` — the single NEXT action parsed from `_handoff.md` (or null)
 - `open_signals` — latest dream drift signal, if any
+- `status` — declared vs. machine-suggested lifecycle status: `declared`, `declared_valid`,
+  `last_session`, `days_quiet`, `suggested`, `reason`, `nudge`, `zone`, `zone_matches`
 
 ## Render — the ELI5 briefing
 
@@ -49,6 +51,7 @@ Rules:
 - If `freshness.light` is 🔴 or age is large: add a half-clause noting it's been a while.
 - If `open_signals` shows pending drift: append a gentle "(housekeeping waiting: run /adjudant tidy)" — never alarm.
 - Keep the whole thing scannable in five seconds. Prose over tables.
+- OPTIONAL fifth line, only when a status mismatch or nudge exists (this doesn't count against the four labeled lines above): if `status.suggested` is set, "brief says {status.declared}, looks {status.suggested}: {status.reason} → run /adjudant shelf"; else if `status.nudge` is set, render the nudge; else if `status.zone_matches` is false, flag the zone mismatch. Skip the line entirely when none apply.
 
 Adapt phrasing to be conversational; the shape above is the data layout, not a rigid
 template.
