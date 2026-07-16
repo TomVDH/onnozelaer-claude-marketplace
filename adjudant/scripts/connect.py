@@ -79,6 +79,112 @@ def slug_to_title(slug: str) -> str:
 
 
 # ============================================================
+# Contract inference (v0.14.0)
+# ============================================================
+
+_CODE_EXTS = {".py", ".ts", ".js", ".tsx", ".jsx", ".go", ".rs", ".rb",
+              ".sh", ".swift", ".c", ".cpp", ".java"}
+_INFER_SKIP = {".git", "node_modules", "__pycache__", ".venv", "venv"}
+
+
+def infer_project_type(project_root: Path) -> tuple[str, str]:
+    """(project_type, signal) from repo signals. Cheapest signal first."""
+    if (project_root / ".claude-plugin" / "plugin.json").is_file() or \
+       (project_root / "plugin.json").is_file():
+        return "plugin", "plugin.json present"
+    code = md = 0
+    for f in project_root.rglob("*"):
+        if not f.is_file():
+            continue
+        if any(p in _INFER_SKIP for p in f.relative_to(project_root).parts):
+            continue
+        if f.suffix in _CODE_EXTS:
+            code += 1
+        elif f.suffix == ".md":
+            md += 1
+    if code > 0:
+        return "coding", f"{code} code file(s)"
+    if md >= 3:
+        return "knowledge", f"{md} markdown files, no code"
+    return "tinkerage", "no dominant signal"
+
+
+def infer_initial_status(project_root: Path) -> tuple[str, str]:
+    """seed when the repo is nearly empty (fewer than 3 visible top-level
+    entries), else active."""
+    n = 0
+    for f in project_root.iterdir():
+        if f.name.startswith("."):
+            continue
+        n += 1
+        if n >= 3:
+            return "active", "3+ top-level entries"
+    return "seed", f"{n} top-level entr{'y' if n == 1 else 'ies'}"
+
+
+ARTIFACT_READERS: list[tuple[str, str]] = [
+    ("AGENTS.md", "Codex, Gemini/agy, any agent"),
+    ("CLAUDE.md", "Claude Code"),
+    ("GEMINI.md", "agy / Antigravity"),
+    (".claude/adjudant", "adjudant helpers"),
+    ("vault scaffold", "the user, in Obsidian"),
+    (".gitignore entries", "git"),
+]
+
+
+def _gitignore_has_breadcrumb(project_root: Path) -> bool:
+    gi = project_root / ".gitignore"
+    if not gi.is_file():
+        return False
+    return any(line.strip() == ".claude/adjudant" for line in gi.read_text().splitlines())
+
+
+def build_contract(
+    project_root: Path,
+    vault_path: Optional[Path],
+    vault_name: Optional[str],
+    slug: str,
+    project_type: str,
+    type_signal: str,
+    initial_status: str,
+    status_signal: str,
+    purpose: Optional[str],
+) -> dict[str, Any]:
+    """The connect contract: five required fields + per-agent artifact
+    disclosure. Read-only."""
+    vault_proj = (vault_path / "projects" / slug) if vault_path else None
+    present = {
+        "AGENTS.md": (project_root / "AGENTS.md").exists(),
+        "CLAUDE.md": (project_root / "CLAUDE.md").exists(),
+        "GEMINI.md": (project_root / "GEMINI.md").exists(),
+        ".claude/adjudant": (project_root / ".claude" / "adjudant").is_file(),
+        "vault scaffold": bool(vault_proj and vault_proj.is_dir()),
+        ".gitignore entries": _gitignore_has_breadcrumb(project_root),
+    }
+    return {
+        "required": {
+            "vault": str(vault_path) if vault_path else None,
+            "vault_name": vault_name,
+            "slug": slug,
+            "project_type": project_type,
+            "initial_status": initial_status,
+            "purpose": purpose,
+        },
+        "inferred_from": {
+            "slug": "dirname / breadcrumb",
+            "project_type": type_signal,
+            "initial_status": status_signal,
+        },
+        "artifacts": [
+            {"artifact": a, "reader": rdr,
+             "state": "already-present" if present[a] else "will-create"}
+            for a, rdr in ARTIFACT_READERS
+        ],
+        "state": detect_state(project_root, vault_path, slug),
+    }
+
+
+# ============================================================
 # Vault path resolution for connect (more permissive — accepts unconnected case)
 # ============================================================
 
@@ -536,6 +642,12 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--project-name", help="Human-readable display name")
     parser.add_argument("--detect-only", action="store_true",
                         help="Print state ('fresh' | 'partial' | 'connected') and exit")
+    parser.add_argument("--contract", action="store_true",
+                        help="Print the init contract (inferred fields + artifact disclosure) and exit; writes nothing")
+    parser.add_argument("--purpose", help="One-line project purpose (lands in AGENTS.md + brief INTRO)")
+    parser.add_argument("--initial-status",
+                        choices=[s for s in ("active", "seed", "fridge", "done", "dead")],
+                        help="Initial brief status (default: inferred seed|active)")
     args = parser.parse_args(argv)
 
     project_root = Path(args.project_root).expanduser().resolve()
@@ -564,6 +676,24 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(f"error: {err}", file=sys.stderr)
         return 1
 
+    if args.contract:
+        ptype_arg = args.project_type
+        existing_brief = vault_path / "projects" / slug / "brief.md"
+        ptype = derive_project_type(ptype_arg, existing_brief if existing_brief.is_file() else None)
+        if ptype:
+            type_signal = "explicit --project-type or existing brief"
+        else:
+            ptype, type_signal = infer_project_type(project_root)
+        if args.initial_status:
+            istatus, status_signal = args.initial_status, "explicit --initial-status"
+        else:
+            istatus, status_signal = infer_initial_status(project_root)
+        contract = build_contract(
+            project_root, vault_path, vault_name, slug,
+            ptype, type_signal, istatus, status_signal, args.purpose)
+        print(json.dumps({"contract": contract}, indent=2, default=str))
+        return 0
+
     if args.detect_only:
         print(detect_state(project_root, vault_path, slug))
         return 0
@@ -572,8 +702,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     existing_brief = vault_path / "projects" / slug / "brief.md"
     project_type = derive_project_type(args.project_type, existing_brief if existing_brief.is_file() else None)
     if not project_type:
-        print("error: --project-type required (one of: " + ", ".join(VALID_PROJECT_TYPES) + ")", file=sys.stderr)
-        return 1
+        project_type = infer_project_type(project_root)[0]
 
     # Resolve project_name
     project_name = derive_project_name(args.project_name, existing_brief if existing_brief.is_file() else None, slug)

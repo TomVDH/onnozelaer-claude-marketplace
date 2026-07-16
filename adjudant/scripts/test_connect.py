@@ -1,5 +1,8 @@
 """Tests for adjudant/scripts/connect.py."""
 
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,10 +10,13 @@ from pathlib import Path
 from connect import (
     VALID_PROJECT_TYPES,
     append_gitignore,
+    build_contract,
     count_non_index_files,
     derive_project_name,
     derive_project_type,
     detect_state,
+    infer_initial_status,
+    infer_project_type,
     newest_session_date,
     provision_context_files,
     resolve_vault_for_connect,
@@ -22,6 +28,7 @@ from connect import (
     write_breadcrumb,
     write_session_note,
 )
+from connect import cli_main as connect_cli
 
 
 def _w(p: Path, content: str) -> None:
@@ -355,6 +362,96 @@ class TestCounts(unittest.TestCase):
             for date in ["2026-05-25", "2026-05-27", "2026-05-26"]:
                 (d / f"{date}.md").write_text("x")
             self.assertEqual(newest_session_date(d), "2026-05-27")
+
+
+# ============================================================
+# Contract inference
+# ============================================================
+
+
+class TestInference(unittest.TestCase):
+
+    def test_plugin_signal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".claude-plugin").mkdir()
+            (root / ".claude-plugin" / "plugin.json").write_text("{}")
+            ptype, signal = infer_project_type(root)
+            self.assertEqual(ptype, "plugin")
+            self.assertIn("plugin.json", signal)
+
+    def test_coding_signal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "main.py").write_text("print('x')")
+            self.assertEqual(infer_project_type(root)[0], "coding")
+
+    def test_knowledge_signal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for i in range(4):
+                (root / f"n{i}.md").write_text("# note")
+            self.assertEqual(infer_project_type(root)[0], "knowledge")
+
+    def test_tinkerage_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(infer_project_type(Path(tmp))[0], "tinkerage")
+
+    def test_initial_status_seed_when_nearly_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "README.md").write_text("x")
+            self.assertEqual(infer_initial_status(root)[0], "seed")
+
+    def test_initial_status_active_otherwise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("a.py", "b.py", "c.md", "d.md"):
+                (root / name).write_text("x")
+            self.assertEqual(infer_initial_status(root)[0], "active")
+
+
+class TestContract(unittest.TestCase):
+
+    def test_contract_shape_and_artifact_states(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "my-proj"
+            code.mkdir()
+            (code / "AGENTS.md").write_text("# existing")
+            contract = build_contract(
+                project_root=code, vault_path=vault, vault_name="vault",
+                slug="my-proj", project_type="coding", type_signal="test",
+                initial_status="active", status_signal="test", purpose=None)
+            self.assertEqual(
+                set(contract["required"]),
+                {"vault", "vault_name", "slug", "project_type",
+                 "initial_status", "purpose"})
+            states = {a["artifact"]: a["state"] for a in contract["artifacts"]}
+            self.assertEqual(states["AGENTS.md"], "already-present")
+            self.assertEqual(states["GEMINI.md"], "will-create")
+            self.assertEqual(states["vault scaffold"], "will-create")
+            self.assertEqual(contract["state"], "fresh")
+
+    def test_contract_cli_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"
+            code.mkdir()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = connect_cli([
+                    "--project-root", str(code), "--vault-path", str(vault),
+                    "--contract"])
+            self.assertEqual(rc, 0)
+            payload = json.loads(buf.getvalue())
+            self.assertIn("contract", payload)
+            self.assertFalse((code / ".claude" / "adjudant").exists())
+            self.assertFalse((vault / "projects" / "proj").exists())
 
 
 if __name__ == "__main__":
