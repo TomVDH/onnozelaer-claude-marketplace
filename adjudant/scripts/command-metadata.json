@@ -4,7 +4,7 @@
   "verbs": [
     {
       "name": "connect",
-      "description": "Onboard project to vault — rigid 5-step init (breadcrumb, AGENTS.md+CLAUDE.md, vault scaffold, session note, .gitignore). Idempotent.",
+      "description": "Onboard project to vault: contract flow: infer (slug/type/status/vault), confirm one card (5 required fields + per-agent artifact disclosure incl. GEMINI.md), apply with receipt. Idempotent.",
       "argumentHint": "(no args)",
       "reference": "reference/connect.md",
       "weight": "light"

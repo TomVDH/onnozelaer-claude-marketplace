@@ -454,5 +454,75 @@ class TestContract(unittest.TestCase):
             self.assertFalse((vault / "projects" / "proj").exists())
 
 
+from connect import build_receipt
+
+
+class TestApplyContract(unittest.TestCase):
+
+    def _connect(self, root: Path, vault: Path, extra: list = ()) -> dict:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+            rc = connect_cli([
+                "--project-root", str(root), "--vault-path", str(vault),
+                "--slug", "proj", "--project-type", "coding",
+                *extra])
+        assert rc == 0, buf.getvalue()
+        return json.loads(buf.getvalue())
+
+    def test_gemini_md_created_and_breadcrumb_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"; code.mkdir()
+            summary = self._connect(code, vault)
+            self.assertTrue((code / "GEMINI.md").is_file())
+            bc = (code / ".claude" / "adjudant").read_text()
+            self.assertIn("cost_warn_tokens: 30000", bc)
+            self.assertIn("stale_after_days: 30", bc)
+            self.assertIn("receipt", summary)
+            states = {r["artifact"]: r["state"] for r in summary["receipt"]}
+            self.assertEqual(states["GEMINI.md"], "created")
+
+    def test_breadcrumb_overrides_preserved_on_reconnect(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"; code.mkdir()
+            self._connect(code, vault)
+            bc_path = code / ".claude" / "adjudant"
+            bc_path.write_text(bc_path.read_text().replace(
+                "cost_warn_tokens: 30000", "cost_warn_tokens: 99000"))
+            self._connect(code, vault)
+            self.assertIn("cost_warn_tokens: 99000", bc_path.read_text())
+
+    def test_purpose_and_initial_status_land(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"; code.mkdir()
+            self._connect(code, vault,
+                          extra=["--purpose", "Track the garden irrigation build.",
+                                 "--initial-status", "seed"])
+            agents = (code / "AGENTS.md").read_text()
+            self.assertIn("> Track the garden irrigation build.", agents)
+            self.assertNotIn("{Project Name}", agents)
+            self.assertNotIn("{slug}", agents)
+            brief = (vault / "projects" / "proj" / "brief.md").read_text()
+            self.assertIn("status: seed", brief)
+            self.assertIn("Track the garden irrigation build.", brief)
+
+    def test_reconnect_receipt_all_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"; code.mkdir()
+            self._connect(code, vault)
+            summary = self._connect(code, vault)
+            states = {r["artifact"]: r["state"] for r in summary["receipt"]}
+            self.assertEqual(states["AGENTS.md"], "already-present")
+            self.assertEqual(states["GEMINI.md"], "already-present")
+            self.assertEqual(states["session note"], "already-present")
+
+
 if __name__ == "__main__":
     unittest.main()

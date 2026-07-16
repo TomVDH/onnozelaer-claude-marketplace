@@ -2,6 +2,26 @@
 
 Onboard project to vault. **One rigid path — no flags, no branching, idempotent.**
 
+## Contract flow (locked)
+
+connect is three phases; the card in the middle is the only thing the user must read.
+
+1. **Infer.** Run `connect.py --contract --project-root {code root} [flags]`. The JSON
+   contract carries the five required fields (vault, slug, project_type, initial_status,
+   purpose) with inferred values pre-filled, plus the per-agent artifact disclosure
+   (AGENTS.md, CLAUDE.md, GEMINI.md, breadcrumb, vault scaffold, .gitignore) each marked
+   already-present or will-create.
+2. **Confirm.** Render the contract as ONE card, both halves. Ask the user to approve or
+   correct the five fields once. purpose is the one field with no inference: ask for it
+   if empty; it becomes the brief's opening line and what sitrep orients from.
+3. **Apply + receipt.** Run connect.py with the confirmed values (`--purpose`,
+   `--initial-status`, plus the usual flags). Render `summary.receipt` back as the same
+   card with per-artifact marks: created / already-present / updated. A re-run on a
+   healthy project shows all already-present and writes nothing new.
+
+Config knobs land in the breadcrumb at init with defaults visible on the card:
+`cost_warn_tokens: 30000`, `stale_after_days: 30`. Existing overrides survive re-connect.
+
 ## The 5 features (locked spec)
 
 1. **Breadcrumb** — write `.claude/adjudant` at project root containing `vault_path`, `vault_name`, `slug`, `mode`

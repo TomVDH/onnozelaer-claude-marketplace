@@ -252,16 +252,20 @@ def write_breadcrumb(
     vault_name: str,
     slug: str,
 ) -> Path:
+    existing = parse_breadcrumb(project_root) or {}
+    cwt = existing.get("cost_warn_tokens", "30000")
+    sad = existing.get("stale_after_days", "30")
     bc_dir = project_root / ".claude"
     bc_dir.mkdir(parents=True, exist_ok=True)
     bc = bc_dir / "adjudant"
-    content = (
+    bc.write_text(
         f"vault_path: {vault_path}\n"
         f"vault_name: {vault_name}\n"
         f"slug: {slug}\n"
         f"mode: project\n"
+        f"cost_warn_tokens: {cwt}\n"
+        f"stale_after_days: {sad}\n"
     )
-    bc.write_text(content)
     return bc
 
 
@@ -270,13 +274,20 @@ def write_breadcrumb(
 # ============================================================
 
 
-def provision_context_files(project_root: Path) -> dict[str, str]:
-    """Copy AGENTS.md + CLAUDE.md from templates if missing.
+def provision_context_files(
+    project_root: Path,
+    slug: str = "",
+    project_type: str = "",
+    project_name: str = "",
+    purpose: Optional[str] = None,
+) -> dict[str, str]:
+    """Copy AGENTS.md + CLAUDE.md + GEMINI.md from templates if missing,
+    rendering placeholders in AGENTS.md. Existing files are never touched.
 
     Returns dict mapping filename → action ('created' | 'preserved').
     """
     actions: dict[str, str] = {}
-    for fname in ("AGENTS.md", "CLAUDE.md"):
+    for fname in ("AGENTS.md", "CLAUDE.md", "GEMINI.md"):
         live = project_root / fname
         if live.exists():
             actions[fname] = "preserved"
@@ -285,7 +296,17 @@ def provision_context_files(project_root: Path) -> dict[str, str]:
         if not template.is_file():
             actions[fname] = f"template missing: {template}"
             continue
-        live.write_text(template.read_text())
+        text = template.read_text()
+        if fname == "AGENTS.md":
+            if project_name:
+                text = text.replace("{Project Name}", project_name)
+            if slug:
+                text = text.replace("{slug}", slug)
+            if project_type:
+                text = text.replace("{coding|knowledge|plugin|tinkerage}", project_type)
+            if purpose:
+                text = text.replace("> One-line purpose of this project.", f"> {purpose}")
+        live.write_text(text)
         actions[fname] = "created"
     return actions
 
@@ -331,6 +352,8 @@ def scaffold_vault_project(
     project_type: str,
     project_name: str,
     today: str,
+    initial_status: str = "active",
+    purpose: Optional[str] = None,
 ) -> dict[str, list[str]]:
     """Create vault project folder, brief, subfolders, per-folder indexes.
 
@@ -356,6 +379,9 @@ def scaffold_vault_project(
                 .replace("{YYYY-MM-DD}", today)
                 .replace("{Project Name}", project_name)
         )
+        text = text.replace("status: active", f"status: {initial_status}", 1)
+        if purpose:
+            text = text.replace("## INTRO\n", f"## INTRO\n\n{purpose}\n", 1)
         brief_path.write_text(text)
         created.append("brief.md")
     else:
@@ -569,6 +595,29 @@ def detect_state(project_root: Path, vault_path: Optional[Path], slug: Optional[
     return "fresh"
 
 
+_RECEIPT_MARK = {
+    "created": "created", "preserved": "already-present",
+    "added": "updated", "updated": "updated", "inserted": "updated",
+    "created-index": "created",
+}
+
+
+def build_receipt(summary: dict[str, Any]) -> list[dict[str, str]]:
+    steps = summary["steps"]
+    cf = steps["context_files"]
+    scaffold = steps["vault_scaffold"]
+    return [
+        {"artifact": "AGENTS.md", "state": _RECEIPT_MARK.get(cf.get("AGENTS.md", ""), cf.get("AGENTS.md", "missing"))},
+        {"artifact": "CLAUDE.md", "state": _RECEIPT_MARK.get(cf.get("CLAUDE.md", ""), cf.get("CLAUDE.md", "missing"))},
+        {"artifact": "GEMINI.md", "state": _RECEIPT_MARK.get(cf.get("GEMINI.md", ""), cf.get("GEMINI.md", "missing"))},
+        {"artifact": ".claude/adjudant", "state": steps["breadcrumb"]},
+        {"artifact": "vault scaffold", "state": "created" if scaffold["created"] else "already-present"},
+        {"artifact": "session note", "state": _RECEIPT_MARK.get(steps["session_note"], steps["session_note"])},
+        {"artifact": ".gitignore entries", "state": _RECEIPT_MARK.get(steps["gitignore"], steps["gitignore"])},
+        {"artifact": "projects/_index.md row", "state": _RECEIPT_MARK.get(steps["projects_index_row"], steps["projects_index_row"])},
+    ]
+
+
 def run_connect(
     project_root: Path,
     vault_path: Path,
@@ -578,6 +627,8 @@ def run_connect(
     project_name: str,
     today: str,
     now_hhmm: str,
+    initial_status: str = "active",
+    purpose: Optional[str] = None,
 ) -> dict[str, Any]:
     """Idempotent connect. Returns summary dict."""
     summary: dict[str, Any] = {
@@ -592,16 +643,18 @@ def run_connect(
     }
 
     # Step 1
+    bc_existed = (project_root / ".claude" / "adjudant").is_file()
     write_breadcrumb(project_root, vault_path, vault_name, slug)
-    summary["steps"]["breadcrumb"] = "written"
+    summary["steps"]["breadcrumb"] = "updated" if bc_existed else "created"
 
     # Step 2
-    summary["steps"]["context_files"] = provision_context_files(project_root)
+    summary["steps"]["context_files"] = provision_context_files(
+        project_root, slug, project_type, project_name, purpose)
 
     # Step 3
     summary["steps"]["vault_scaffold"] = scaffold_vault_project(
-        vault_path, slug, project_type, project_name, today
-    )
+        vault_path, slug, project_type, project_name, today,
+        initial_status=initial_status, purpose=purpose)
 
     # Step 4
     summary["steps"]["session_note"] = write_session_note(vault_path, slug, today, now_hhmm)
@@ -625,6 +678,7 @@ def run_connect(
         vault_path, slug, project_type, status, decisions_n, sessions_n, last_session
     )
 
+    summary["receipt"] = build_receipt(summary)
     return summary
 
 
@@ -707,6 +761,12 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     # Resolve project_name
     project_name = derive_project_name(args.project_name, existing_brief if existing_brief.is_file() else None, slug)
 
+    # Resolve initial_status
+    if args.initial_status:
+        initial_status = args.initial_status
+    else:
+        initial_status, _sig = infer_initial_status(project_root)
+
     today = datetime.now().strftime("%Y-%m-%d")
     now_hhmm = datetime.now().strftime("%H:%M")
 
@@ -719,6 +779,8 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         project_name=project_name,
         today=today,
         now_hhmm=now_hhmm,
+        initial_status=initial_status,
+        purpose=args.purpose,
     )
 
     print(f"[connect] state: {detect_state(project_root, vault_path, slug)}", file=sys.stderr)
