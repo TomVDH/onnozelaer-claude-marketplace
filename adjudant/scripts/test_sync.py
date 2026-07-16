@@ -5,11 +5,15 @@ was removed in v0.7.0 — the hook is mechanical-only — so the harvest tests t
 used to live here are gone with it.)
 """
 
+import contextlib
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from sync import (
+    cli_main as sync_cli,
     find_remember_source,
     mirror_handoff,
     refresh_brief_updated,
@@ -201,6 +205,43 @@ class TestRunSyncEndToEnd(unittest.TestCase):
             # No breadcrumb
             with self.assertRaises(RuntimeError):
                 run_sync(Path(tmp))
+
+
+class TestStatusVocabularyGuard(unittest.TestCase):
+
+    def _fixture(self, tmp: str, status: str, zone: str = "") -> Path:
+        root = Path(tmp)
+        vault = root / "vault"
+        proj = vault / "projects" / zone / "p" if zone else vault / "projects" / "p"
+        proj.mkdir(parents=True)
+        (proj / "brief.md").write_text(
+            f"---\ntype: project\nslug: p\nproject_type: coding\nstatus: {status}\n---\n\n# P\n")
+        code = root / "code"
+        (code / ".claude").mkdir(parents=True)
+        (code / ".claude" / "adjudant").write_text(
+            f"vault_path: {vault}\nvault_name: vault\nslug: p\nmode: project\n")
+        return code
+
+    def test_off_vocabulary_status_warns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._fixture(tmp, "paused")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = sync_cli(["--project-dir", str(code)])
+            self.assertEqual(rc, 0)
+            summary = json.loads(buf.getvalue())
+            self.assertTrue(any("paused" in w for w in summary.get("warnings", [])),
+                            summary)
+
+    def test_fridged_project_row_still_refreshes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            code = self._fixture(tmp, "fridge", zone="_fridge")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = sync_cli(["--project-dir", str(code)])
+            self.assertEqual(rc, 0)
+            summary = json.loads(buf.getvalue())
+            self.assertNotEqual(summary["steps"]["projects_index_row"], "project-missing")
 
 
 if __name__ == "__main__":

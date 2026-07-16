@@ -95,6 +95,20 @@ class TestRunSitrep(unittest.TestCase):
             self.assertEqual(rep["freshness"]["light"], "\U0001f7e2")
             self.assertEqual(rep["freshness"]["age"], "30m")
 
+    def test_status_block_with_suggestion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "brief.md",
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            (root / "sessions").mkdir()
+            (root / "sessions" / "2026-01-01.md").write_text("---\ntype: session\n---\n")
+            now = datetime(2026, 7, 2, 12, 0)
+            rep = run_sitrep(root, now=now)
+            self.assertEqual(rep["status"]["declared"], "active")
+            self.assertEqual(rep["status"]["suggested"], "stale")
+            self.assertIn("zone", rep["status"])
+            self.assertIn("zone_matches", rep["status"])
+
     def test_empty_project_no_activity(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

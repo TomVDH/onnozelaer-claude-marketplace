@@ -137,6 +137,19 @@ class TestRunCheck(unittest.TestCase):
             self.assertEqual(report["recent"]["last_decision"], "2026-05-26")
             self.assertTrue(report["handoff"]["present"])
 
+    def test_status_block_with_suggestion(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "brief.md",
+                "---\ntype: project\nslug: t\nproject_type: coding\nstatus: active\n---\n\n# T\n")
+            (root / "sessions").mkdir()
+            (root / "sessions" / "2026-01-01.md").write_text("---\ntype: session\n---\n")
+            report = run_check(root)
+            self.assertEqual(report["status"]["declared"], "active")
+            self.assertEqual(report["status"]["suggested"], "stale")
+            self.assertIn("zone", report["status"])
+            self.assertIn("zone_matches", report["status"])
+
 
 class TestCheckCost(unittest.TestCase):
 

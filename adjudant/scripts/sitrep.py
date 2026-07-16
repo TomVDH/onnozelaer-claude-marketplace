@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-from _cost import cost_block, read_threshold, stat_walk
+from _cost import breadcrumb_int, cost_block, read_threshold, stat_walk
 from _handoff_freshness import (
     age_hours,
     fmt_age,
@@ -30,7 +30,10 @@ from _handoff_freshness import (
     parse_next_line,
     traffic_light,
 )
-from _vault_walk import resolve_vault, smart_project_dir, VaultUnresolvableError
+from _vault_walk import (
+    DEFAULT_STALE_DAYS, resolve_vault, smart_project_dir, suggest_status,
+    zone_matches_status, zone_of, VaultUnresolvableError,
+)
 from check import (
     _folder_counts,
     _latest_dream_signal,
@@ -82,6 +85,14 @@ def run_sitrep(
         "total_files": sum(counts.values()),
     }
 
+    stale_days = breadcrumb_int(code_root, "stale_after_days", DEFAULT_STALE_DAYS)
+    sug = suggest_status(
+        brief.get("status") if brief.get("present") else None,
+        project_dir, now.date(), stale_days)
+    zone = zone_of(project_dir)
+    status = {**sug, "zone": zone,
+              "zone_matches": zone_matches_status(brief.get("status"), zone)}
+
     return {
         "project": brief,
         "vault_path": str(vault_path) if vault_path else None,
@@ -91,6 +102,7 @@ def run_sitrep(
         "whats_done": whats_done,
         "next_step": _next_step(project_dir),
         "open_signals": _latest_dream_signal(project_dir),
+        "status": status,
     }
 
 

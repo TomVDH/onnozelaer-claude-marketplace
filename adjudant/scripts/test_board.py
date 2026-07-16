@@ -458,6 +458,19 @@ class TestDuplicateIds(unittest.TestCase):
             self.assertIn("using 'b~2' for b.md", err.getvalue())
 
 
+class TestEnumerateZones(unittest.TestCase):
+
+    def test_sees_fridge_and_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            vault = Path(tmp)
+            for zone, slug in (("", "a"), ("_fridge", "b"), ("_archive", "c")):
+                d = vault / "projects" / zone / slug if zone else vault / "projects" / slug
+                d.mkdir(parents=True)
+                (d / "brief.md").write_text("---\ntype: project\n---\n")
+            slugs = [s for s, _ in enumerate_projects(vault)]
+            self.assertEqual(slugs, ["a", "b", "c"])
+
+
 class TestStatus(unittest.TestCase):
 
     def test_status_line_counts_and_unknown_columns(self):

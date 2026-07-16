@@ -41,7 +41,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
-from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir, VaultUnresolvableError
+from _vault_walk import (
+    enumerate_projects_all_zones, parse_frontmatter, resolve_vault,
+    smart_project_dir, VaultUnresolvableError,
+)
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "skills" / "adjudant" / "templates" / "board.html"
 MARK_RE = re.compile(r"/\*BOARD_DATA_START\*/.*?/\*BOARD_DATA_END\*/", re.DOTALL)
@@ -175,23 +178,12 @@ def build_deck(
 
 
 def enumerate_projects(vault: Path) -> list[tuple[str, Path]]:
-    """Every project under `{vault}/projects/` — filesystem truth.
+    """Every project across projects/, projects/_fridge/, projects/_archive/.
 
-    A project is any `{vault}/projects/<slug>/` directory containing a
-    `brief.md`. Leading-underscore and dot dirs (`_index`, `_portfolio`,
-    `.obsidian`, …) are skipped. The fragile `_index.md` table is NOT consulted,
-    so malformed or duplicate index rows never affect discovery. Sorted by slug.
+    Filesystem truth (a dir containing brief.md); the _index.md table is
+    never consulted. Sorted by zone order then slug.
     """
-    base = vault / "projects"
-    if not base.is_dir():
-        return []
-    out: list[tuple[str, Path]] = []
-    for d in sorted(base.iterdir(), key=lambda p: p.name):
-        if not d.is_dir() or d.name.startswith("_") or d.name.startswith("."):
-            continue
-        if (d / "brief.md").is_file():
-            out.append((d.name, d))
-    return out
+    return [(slug, path) for slug, path, _zone in enumerate_projects_all_zones(vault)]
 
 
 def merge_deck(existing: dict[str, Any], fresh: dict[str, Any]) -> dict[str, Any]:

@@ -15,12 +15,15 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from _cost import cost_block, read_threshold, stat_walk
-from _vault_walk import parse_frontmatter, resolve_vault, smart_project_dir, VaultUnresolvableError
+from _cost import breadcrumb_int, cost_block, read_threshold, stat_walk
+from _vault_walk import (
+    DEFAULT_STALE_DAYS, parse_frontmatter, resolve_vault, smart_project_dir,
+    suggest_status, zone_matches_status, zone_of, VaultUnresolvableError,
+)
 
 
 def _read_brief(project_dir: Path) -> dict[str, Any]:
@@ -132,7 +135,8 @@ def _latest_dream_signal(project_dir: Path) -> dict[str, Any]:
     return info
 
 
-def run_check(project_dir: Path) -> dict[str, Any]:
+def run_check(project_dir: Path, code_root: Optional[Path] = None,
+              today: Optional[date] = None) -> dict[str, Any]:
     brief = _read_brief(project_dir)
     counts = _folder_counts(project_dir)
     recent = {
@@ -142,12 +146,20 @@ def run_check(project_dir: Path) -> dict[str, Any]:
     }
     handoff = _handoff_info(project_dir)
     drift_signal = _latest_dream_signal(project_dir)
+    stale_days = breadcrumb_int(code_root, "stale_after_days", DEFAULT_STALE_DAYS)
+    sug = suggest_status(
+        brief.get("status") if brief.get("present") else None,
+        project_dir, today or date.today(), stale_days)
+    zone = zone_of(project_dir)
+    status = {**sug, "zone": zone,
+              "zone_matches": zone_matches_status(brief.get("status"), zone)}
     return {
         "project": brief,
         "counts": counts,
         "recent": recent,
         "handoff": handoff,
         "drift_signal": drift_signal,
+        "status": status,
     }
 
 
@@ -188,7 +200,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
         print(json.dumps({"cost": cost}, indent=2))
         return 0
 
-    report = run_check(project_dir)
+    report = run_check(project_dir, code_root=code_root)
     report["cost"] = cost
 
     payload = json.dumps(report, indent=2, default=str)

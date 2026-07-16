@@ -28,9 +28,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from _vault_walk import (
+    find_project_dir,
     parse_breadcrumb,
     parse_frontmatter,
     resolve_project_from_cwd,
+    PROJECT_STATUS_VALUES,
 )
 from _handoff_freshness import compute_freshness, freshness_header
 from connect import (
@@ -195,7 +197,7 @@ def mirror_handoff(
 
 
 def refresh_projects_index_row(vault_path: Path, slug: str) -> str:
-    proj_dir = vault_path / "projects" / slug
+    proj_dir = find_project_dir(vault_path, slug) or (vault_path / "projects" / slug)
     if not proj_dir.is_dir():
         return "project-missing"
     brief_path = proj_dir / "brief.md"
@@ -245,6 +247,14 @@ def run_sync(project_root: Path) -> dict[str, Any]:
         project_root, handoff_path, ctx.slug, today
     )
     summary["steps"]["projects_index_row"] = refresh_projects_index_row(ctx.vault_path, ctx.slug)
+
+    fm, _ = parse_frontmatter(brief_path.read_text(errors="replace")) if brief_path.is_file() else (None, "")
+    if fm is not None:
+        status = fm.fields.get("status")
+        if isinstance(status, str) and status not in PROJECT_STATUS_VALUES:
+            summary.setdefault("warnings", []).append(
+                f"brief status {status!r} is off-vocabulary "
+                f"({' | '.join(PROJECT_STATUS_VALUES)}); row written as-is, fix via /adjudant shelf")
 
     return summary
 
