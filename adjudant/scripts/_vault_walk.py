@@ -707,7 +707,12 @@ _DATED_STEM_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 
 
 def newest_dated_stem(folder: Path) -> Optional[str]:
-    """Most recent YYYY-MM-DD stem prefix among .md files in folder, else None."""
+    """Most recent valid YYYY-MM-DD stem prefix among .md files in folder.
+
+    Calendar-validates each candidate: a malformed stem like 2026-99-01 is
+    skipped rather than lexicographically beating a valid older date. None
+    only when no valid dated stem exists.
+    """
     if not folder.is_dir():
         return None
     dates: list[str] = []
@@ -715,6 +720,10 @@ def newest_dated_stem(folder: Path) -> Optional[str]:
         if f.is_file() and f.suffix == ".md":
             m = _DATED_STEM_RE.match(f.stem)
             if m:
+                try:
+                    datetime.strptime(m.group(1), "%Y-%m-%d")
+                except ValueError:
+                    continue
                 dates.append(m.group(1))
     return max(dates) if dates else None
 

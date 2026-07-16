@@ -696,6 +696,32 @@ class TestSuggestStatus(unittest.TestCase):
             out = suggest_status("active", pdir, date(2026, 7, 16), stale_after_days=7)
             self.assertEqual(out["suggested"], "stale")
 
+    def test_malformed_date_cannot_mask_staleness(self):
+        # Regression: a lexicographically-larger malformed stem (month 99) must
+        # not beat a valid older date and collapse days_quiet to None.
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p",
+                               sessions=["2026-06-01", "2026-99-01-broken"])
+            out = suggest_status("active", pdir, date(2026, 7, 16))
+            self.assertEqual(out["last_session"], "2026-06-01")
+            self.assertEqual(out["days_quiet"], 45)
+            self.assertEqual(out["suggested"], "stale")
+
+    def test_boundary_exactly_at_threshold_goes_stale(self):
+        # days_quiet == stale_after_days is the >= edge: suggest stale.
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", sessions=["2026-06-16"])
+            out = suggest_status("active", pdir, date(2026, 7, 16))
+            self.assertEqual(out["days_quiet"], 30)
+            self.assertEqual(out["suggested"], "stale")
+
+    def test_declared_none_flagged_and_treated_active(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pdir = _mk_project(Path(tmp), "p", sessions=["2026-01-01"])
+            out = suggest_status(None, pdir, date(2026, 7, 16))
+            self.assertFalse(out["declared_valid"])
+            self.assertEqual(out["suggested"], "stale")
+
 
 class TestZones(unittest.TestCase):
 
