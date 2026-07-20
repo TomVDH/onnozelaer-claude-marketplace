@@ -56,8 +56,11 @@ res.cookie('session', token, { sameSite: 'strict' });
 ### During Development
 All markers are visible and informative. They help the team understand ownership, assumptions, and open items.
 
-### At the Build Prep Gate
-Bostrol scrapes ALL `## CABINET @` markers from the codebase:
+### Before a Release
+There is no gate machinery anymore (the gate protocol was removed
+in v3.0.0); this is an informal checklist the crew walks through
+when a build is about to ship. Bostrol scrapes ALL `## CABINET @`
+markers from the codebase:
 
 1. **Inventory:** List every marker with file, line number, member, and content
 2. **Categorise:** TODOs (resolved vs. deferred), sections (still needed?), knowledge drops (promote to docs or remove?)

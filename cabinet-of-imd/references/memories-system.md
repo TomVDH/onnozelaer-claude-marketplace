@@ -130,25 +130,22 @@ Written from the crew's perspective, not Tom's.
 
 ## Persistence — via adjudant
 
-When a lore question is answered or a project moment is noticed, the
-cabinet flags it. If `adjudant` is active, the bridge writes
-it to its memory store. The cabinet does not call any vault tool
-directly.
+When a lore question is answered or a project moment is noticed,
+the cabinet flags it in voice, in the chat. That is the whole
+mechanism. The cabinet does not call any vault tool directly, and
+adjudant has no dedicated memory store or `question | memory |
+achievement` note types; its actual surfaces are the session log
+and the `note` template.
 
-**Format hint** — for the bridge's benefit, the cabinet supplies a
-clean structured payload:
+If `adjudant` is active, a flagged moment can land in the vault two
+ways:
+- adjudant's own session logging picks it up as part of the running
+  session note, or
+- Tom asks for it explicitly (`/adjudant` note write), and the
+  moment becomes a vault note under adjudant's schema.
 
-```
-type: question | memory | achievement
-asker: <member, if applicable>
-observer: <member, if applicable>
-content: <one or two sentences>
-date: <YYYY-MM-DD>
-reactions: <list of {member: str, line: str}>  # optional
-```
-
-The bridge owns the file format, the path, and the schema. The
-cabinet owns the discipline — what's worth remembering, who notices,
+Adjudant owns the file format, the path, and the schema. The
+cabinet owns the discipline: what's worth remembering, who notices,
 how it sounds.
 
 If `adjudant` is not active, the moment is ephemeral.

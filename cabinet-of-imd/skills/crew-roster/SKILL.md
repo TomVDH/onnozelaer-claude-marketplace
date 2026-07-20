@@ -1,7 +1,7 @@
 ---
 name: crew-roster
 description: Display the Cabinet of IMD crew roster with colour accents and dynamic quips. Use when the user asks "show the roster", "who's on the crew", or "list the agents". Does not start project work.
-version: 3.0.0
+version: 3.0.1
 ---
 
 # The Cabinet of IMD Agents — Crew Roster

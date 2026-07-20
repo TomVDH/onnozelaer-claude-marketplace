@@ -1,4 +1,4 @@
-# The Cabinet of IMD Agents — v3.0.0
+# The Cabinet of IMD Agents — v3.0.1
 
 A **flavour layer** for Claude Code: eight college classmates with
 distinct personalities, voices, working disciplines, and pairings.
@@ -7,11 +7,12 @@ a role, terminal style, and colour accent. They speak in their own
 voices, collaborate through known pairings, and follow a set of
 working disciplines (handoffs, dissent, scope, version parity).
 
-**v3.0.0** is the flavour-only cut. Functionality is sunset:
+**v3.0.0** is the flavour-only cut, completed by **v3.0.1**.
+Functionality is sunset:
 - No vault writes from cabinet
 - No session anchors
 - No gate enforcement
-- No state-tracking hooks
+- No hooks of any kind (the last two scripts were removed in v3.0.1)
 
 What remains is the crew themselves and how they work. **Persistence
 is delegated to `adjudant`** when active. When it's not,
@@ -71,14 +72,11 @@ The `## CABINET @` marker system — `@TODO`, `@SECTION`,
 file ownership, and knowledge drops.
 
 ### Hooks
-Two flavour hooks run quietly:
-- **SessionStart → `boot-flair.sh`** — surfaces a historical lore
-  question, anniversary, or session counter (reads vault state via
-  the `adjudant` breadcrumb, never writes).
-- **Notification → `crew-notify.sh`** — rewrites generic Claude
-  Code notifications in crew voice.
-
-Both fail silently — they never block.
+None. v3.0.1 removed the last two hook scripts: both were dead
+code. One read the retired `obsidian-bridge` breadcrumb at a path
+no plugin writes anymore; the other relied on notification-text
+rewriting the hooks API does not support. The cabinet runs nothing
+in the background and never reads or writes anything.
 
 ## Commands
 

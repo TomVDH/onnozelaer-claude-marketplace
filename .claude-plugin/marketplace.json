@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "cabinet-of-imd",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "source": "./cabinet-of-imd",
       "description": "The Cabinet of IMD Agents — a flavour layer for Claude Code. Eight college classmates with distinct personalities, voices, disciplines, and pairings serve as specialised web-development agents. v3.0.0 sunsets all functionality (vault writes, session anchors, gate enforcement, state hooks) and keeps only character, voice, and working disciplines. Persistence is delegated to the adjudant plugin when active."
     },

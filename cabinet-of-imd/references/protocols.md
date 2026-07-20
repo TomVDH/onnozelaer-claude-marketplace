@@ -309,7 +309,7 @@ For the cabinet plugin itself, the canonical files are:
 ```
 cabinet-of-imd/.claude-plugin/plugin.json   → "version" field
 .claude-plugin/marketplace.json              → plugin entry "version" field
-cabinet-of-imd/CHANGELOG.md                  → ## [x.y.z] header
+cabinet-of-imd/CHANGELOG.md                  → dated ## x.y.z entry
 cabinet-of-imd/README.md                     → version mention
 ```
 

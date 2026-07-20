@@ -2,15 +2,40 @@
 
 All notable changes to the Cabinet of IMD plugin.
 
-## [Unreleased]
+## 3.0.1 - 2026-07-20
+
+**Sunset completion.** v3.0.0 declared the cabinet flavour-only but
+left machinery on disk; this release makes the claim true.
 
 ### Removed
+- **The entire hooks layer** (`hooks/hooks.json`, `hooks/scripts/boot-flair.sh`,
+  `hooks/scripts/crew-notify.sh`, `hooks/lib/running-jokes.txt`). Both hooks
+  were dead code that still spawned bash every session: `boot-flair.sh` read
+  the retired `obsidian-bridge` breadcrumb (`$CLAUDE_PROJECT_DIR/.obsidian-bridge`,
+  `key=value` format) which no plugin writes; `adjudant` writes `.claude/adjudant`
+  with different keys. `crew-notify.sh` relied on rewriting notification text,
+  which the Claude Code Notification hook has never supported. `running-jokes.txt`
+  was orphaned; `/cabinet` pulls running jokes from the character YAMLs.
 - Pruned the stale `vault-bridge` skill and `/dream` command that lingered on
   disk after the v2.3.0 extraction to the vault plugin. The cabinet is
   flavour-only; both now belong to `adjudant` (`/adjudant dream`).
 
 ### Changed
 - Updated retired `obsidian-bridge` references to its successor `adjudant`.
+- README and `commands/cabinet.md` no longer advertise hooks; both state
+  plainly that nothing runs in the background.
+- `commands/cabinet.md` frontmatter drops `Write` and `Edit` from
+  `allowed-tools`; the command's own Persistence section says the cabinet
+  never writes anything, and now the grant agrees.
+- `references/memories-system.md` persistence section aligned with adjudant
+  reality: no memory store, no `question | memory | achievement` payload
+  schema. Flagged moments live in chat; capture goes through adjudant's
+  session log or an explicit `/adjudant` note write.
+- `references/code-conventions.md` marker scrape recast from "At the Build
+  Prep Gate" (machinery deleted in v3.0.0) to an informal pre-release
+  checklist.
+- `references/protocols.md` canonical version-file list now describes the
+  CHANGELOG entry format actually in use (dated `## x.y.z`, unbracketed).
 
 ## 3.0.0 — 2026-05-01
 

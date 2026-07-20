@@ -1,6 +1,6 @@
 ---
 description: Wake up the Cabinet of IMD crew — flavour layer for sessions. Loads characters, dynamics, and protocols. No vault discovery, no anchor — persistence is delegated to adjudant.
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep
+allowed-tools: Read, Bash, Glob, Grep
 ---
 
 Wake up the Cabinet of IMD crew. Loads the personalities and the
@@ -170,15 +170,9 @@ is active, the bridge picks it up. If not, it's ephemeral.
 
 ## Hooks
 
-Two flavour hooks run quietly alongside the crew:
-
-| Hook | Event | Purpose |
-|---|---|---|
-| `boot-flair.sh` | `SessionStart` | Surfaces a historical question / anniversary / per-project stat |
-| `crew-notify.sh` | `Notification` | Rewrites generic Claude Code notifications in crew voice |
-
-Configured in `${CLAUDE_PLUGIN_ROOT}/hooks/hooks.json`. Both fail
-silently — they never block.
+None. The last two hook scripts were removed in v3.0.1 as dead
+code. Nothing runs in the background; the cabinet exists only in
+the conversation.
 
 ---
 
