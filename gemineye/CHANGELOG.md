@@ -6,6 +6,53 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-20
+
+The promised cleanup release: the `gemini` CLI fallback is gone, plus repairs
+found in audit (model pinning, the adjudant write contract, harvest scope).
+
+### Removed
+- **The deprecated `gemini` CLI fallback, everywhere.** The sunset date
+  (2026-06-18) has passed; `agy` is the sole backend. Backend detection is
+  now a single `command -v agy` check with a clear failure message when
+  `agy` is absent. Fallback paths dropped from SKILL.md,
+  invocation-patterns.md, and README.
+
+### Changed
+- **Gemini models are now pinned per tier.** v0.5.0 claimed `agy` exposes no
+  per-invocation model flag. That was false: `agy` has `--model`, and its
+  roster includes Claude and GPT-OSS models, so an unpinned call can silently
+  be served by a Claude model, defeating a cross-family second opinion. Fast
+  verbs pin `--model "Gemini 3.5 Flash (Medium)"`; `megareview` pins
+  `--model "Gemini 3.1 Pro (High)"`. A one-line override (swap the `--model`
+  value for any Gemini-family entry from `agy models`) is documented.
+- **Harvest template now covers its "any file" claim.** ROLE and SCOPE cover
+  any input file (transcript, doc, or code), with session-transcript
+  distillation kept as the primary case; placeholder renamed
+  `{transcript_chunk}` to `{input_chunk}`.
+- invocation-patterns.md retitled for `agy` (was "Gemini CLI").
+- plugin.json description rewritten as a plain summary; the release-notes
+  essay that lived there moved here where it belongs.
+
+### Fixed
+- **`/gemineye save` vault routing.** The save snippet branched on a
+  `$VAULT_PROJECT_DIR` variable that nothing sets; it now resolves the vault
+  project dir from the `.claude/adjudant` breadcrumb (`vault_path` + `slug`
+  keys).
+- **Adjudant pairing contract.** Persisted reviews still go to
+  `{vault}/projects/{slug}/gemineye/`, but the folder must be declared in
+  the brief's `extra_folders:` frontmatter: per adjudant vault-standards, an
+  undeclared folder is drift that `/adjudant dream` flags. The session-note
+  cross-link now appends under `## Log` (the section adjudant's session
+  template actually has), not an invented `## Gemini reviews` section.
+- **Sandbox rationale in anti-patterns.** "The folder is not trusted yet"
+  contradicted the v0.5.0 read-trusted reframe; now states the containment
+  rationale (the sandbox limits write side effects; read trust is granted
+  via `--add-dir`). The forbidden-flag anti-pattern updated from the
+  gemini-era `--yolo` to `agy --dangerously-skip-permissions`.
+- `harvest` added to the persisted-file frontmatter `subcommand` enum in
+  SKILL.md.
+
 ## [0.5.0] — 2026-06-01
 
 Migrate the review backend from the deprecated `gemini` CLI to Google's
@@ -84,6 +131,19 @@ Antigravity CLI (`agy`), and clear accumulated cross-plugin drift.
   re-install from the marketplace to pick up the new command.
 - Vault pairing references updated from the retired `obsidian-bridge`
   to its successor `adjudant` in the live skill docs.
+
+## [0.2.1] - 2026-05-27
+
+Backfilled entry (was missing from this changelog; commit 20bcdf8).
+
+### Fixed
+- **Namespace doubling on the slash command.** Claude Code registered the
+  command as `/gemineye:gemineye <subcommand>` because the plugin name and
+  the command file name collided into a double prefix. Deleted
+  `commands/gemineye.md` and moved invocation to the skill itself via
+  `user-invocable: true` + `argument-hint` in the SKILL.md frontmatter;
+  `/gemineye <verb>` now fires the skill directly. Mirrors the adjudant
+  v0.4.1 fix.
 
 ## [0.2.0] — 2026-05-01
 

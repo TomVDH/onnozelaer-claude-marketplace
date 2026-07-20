@@ -2,7 +2,7 @@
 name: gemineye
 description: Sandboxed second opinion from a Gemini-family model via the Antigravity CLI (`agy`). `/gemineye {review|megareview|wip|sanity|name|compare|save|harvest}` or phrases like "ask Gemini" / "second opinion". Review-only — Claude applies any proposed edits.
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep
-version: 0.5.0
+version: 0.6.0
 user-invocable: true
 argument-hint: "[review|megareview|wip|sanity|name|compare|save|harvest] [args]"
 ---
@@ -31,12 +31,16 @@ reads what's prepared, writes notes, leaves. No drawings on the walls.
 | `/gemineye save [topic]` | last review | — (file write) |
 | `/gemineye harvest <path>` | extract 5 durable bullets from any file | fast |
 
-**Tier under `agy` is informational.** The Antigravity CLI exposes **no
-per-invocation model flag** — model tier is governed by your Antigravity
-account/config, not by gemineye. So all subcommands use the same `agy`
-invocation; `megareview` differs only in prompt scope and depth, not in a
-model string. The plugin pins **no model IDs** under `agy`. (Legacy `gemini`
-fallback still honours `-m gemini-2.5-pro` for `pro` — see CLI backend below.)
+**Tier maps to a pinned `--model`.** The `agy` roster mixes model families
+(Gemini, Claude, GPT-OSS), so an unpinned call can silently be served by a
+Claude model, which defeats the point of a cross-family second opinion.
+Gemineye therefore pins Gemini models explicitly:
+
+- fast tier (every verb except `megareview`): `--model "Gemini 3.5 Flash (Medium)"`
+- pro tier (`megareview`): `--model "Gemini 3.1 Pro (High)"`
+
+One-line override: swap the `--model` value for any other Gemini-family entry
+from `agy models`. Never pin a non-Gemini model; that breaks the contract.
 
 Natural-language triggers ("ask Gemini", "second opinion", "Gemini
 take") default to `review` if a target is named, otherwise ask for
@@ -54,8 +58,8 @@ For the filled-in prompt templates per subcommand, read
    to the project root only). The reviewer can read the project; it
    cannot write the host or reach outside the root.
 2. **Review-only.** The CLI never writes project files. Never pass
-   `--dangerously-skip-permissions` (agy) or `--yolo` (gemini), and
-   never grant write tools. Edits come back as code blocks; Claude applies.
+   `--dangerously-skip-permissions`, and never grant write tools.
+   Edits come back as code blocks; Claude applies.
 3. **Edits as code blocks.** When Gemini proposes a change, the
    change appears in an elaborate code block (file, language, before
    / after, full surrounding context). Claude reviews and applies.
@@ -102,55 +106,47 @@ The rigidity is the point. Loose prompts produce loose reviews.
 
 ---
 
-## CLI backend — `agy` (Antigravity), with deprecated `gemini` fallback
+## CLI backend: `agy` (Antigravity), sole backend
 
 Gemineye drives a sandboxed CLI as its review oracle. **Antigravity CLI
-(`agy`) is the backend.** The old `gemini` CLI is **deprecated** — Google
-sunsets it for AI Pro/Ultra and free users on **2026-06-18** (it survives
-only on paid Gemini Code Assist Standard/Enterprise + API keys). gemineye
-keeps a `gemini` fallback **only as a transition crutch**.
+(`agy`) is the only backend.** The old `gemini` CLI is gone: Google sunset
+it for AI Pro/Ultra and free users on 2026-06-18, and gemineye v0.6.0
+removed the fallback path entirely.
 
-> ⚠️ **The `gemini` fallback is temporary.** Once you're on `agy`, a follow-up
-> gemineye release will remove the `gemini` path entirely. Do not build new
-> behaviour on it.
-
-**Backend detection (every invocation):**
+**Backend check (every invocation):**
 
 ```bash
-if command -v agy >/dev/null 2>&1; then
-  GEMEYE_CLI=agy
-elif command -v gemini >/dev/null 2>&1; then
-  GEMEYE_CLI=gemini
-  echo "⚠️  gemineye: using DEPRECATED 'gemini' CLI. Install Antigravity CLI" \
-       "(agy) before 2026-06-18 — a future gemineye update will drop gemini." >&2
-else
-  echo "gemineye: no review CLI found. Install Antigravity CLI (agy): https://antigravity.google" >&2
+if ! command -v agy >/dev/null 2>&1; then
+  echo "gemineye: Antigravity CLI (agy) not found on PATH. There is no fallback." \
+       "Install it: https://antigravity.google" >&2
   exit 1
 fi
 ```
 
-If neither is present, stop. Don't improvise. Tell Tom.
+If `agy` is absent, stop. Don't improvise. Tell Tom.
 
 ---
 
 ## Pre-flight
 
-Run the backend-detection block above. On `agy`, no version pinning is needed
-(no model flag). On the `gemini` fallback, the pro tier still uses
-`-m gemini-2.5-pro` — update that one string if ever needed.
+Run the backend check above. Confirm the two pinned models still appear in
+`agy models` output; if Google rotates names, update the pinned strings
+(fast and pro) here and in `invocation-patterns.md`. Replacements must be
+Gemini-family entries.
 
 ---
 
 ## Standard invocation
 
 ```bash
-# Antigravity CLI (agy) — all subcommands. Read-trusted to the project root,
-# write-sandboxed. $ROOT is the project/repo root being reviewed.
-agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
+# Read-trusted to the project root, write-sandboxed, model pinned to the
+# Gemini family. $ROOT is the project/repo root being reviewed.
 
-# Deprecated gemini fallback (transition only):
-#   fast tier — gemini --sandbox -p "$(cat prompt.txt)"
-#   pro tier  — gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"
+# fast tier (review, wip, sanity, name, compare, harvest)
+agy --sandbox --add-dir "$ROOT" --model "Gemini 3.5 Flash (Medium)" -p "$(cat prompt.txt)"
+
+# pro tier (megareview)
+agy --sandbox --add-dir "$ROOT" --model "Gemini 3.1 Pro (High)" -p "$(cat prompt.txt)"
 ```
 
 **The posture: read-trusted, write-sandboxed.** `--add-dir "$ROOT"` lets the
@@ -159,9 +155,9 @@ them; `--sandbox` keeps it from writing the host fs or escaping. The prepared
 bundle (see Context sourcing) stays the **primary** feed — `--add-dir` is for
 pulling supporting context within the root, not a licence to crawl.
 
-**Never pass `--dangerously-skip-permissions`** (agy) or `--yolo` (gemini),
-never grant write tools, never drop `--sandbox`, never `--add-dir` outside the
-project root. The reviewer reads the building; it holds no keys.
+**Never pass `--dangerously-skip-permissions`**, never grant write tools,
+never drop `--sandbox`, never `--add-dir` outside the project root, never
+pin a non-Gemini model. The reviewer reads the building; it holds no keys.
 
 ### Folder trust
 
@@ -213,6 +209,10 @@ Source in order:
 `/gemineye save` is the explicit persist trigger. In-line stays
 in-line until that command runs.
 
+Vault destinations resolve via the adjudant breadcrumb, and the vault
+`gemineye/` folder must be declared in the project brief; see "Pairing
+with adjudant" below.
+
 **Hard rule:** never write Gemini output into source folders. The
 one allowed scaffold is creating `docs/gemineye/`.
 
@@ -224,7 +224,7 @@ type: gemineye-review
 date: YYYY-MM-DD
 topic: <one-line topic>
 target: <file or area reviewed>
-subcommand: <review|megareview|wip|sanity|name|compare>
+subcommand: <review|megareview|wip|sanity|name|compare|harvest>
 model: <fast|pro>
 ---
 
@@ -274,15 +274,23 @@ Log overrides in the persisted file's frontmatter (`override: <phrase>`).
 
 ## Pairing with adjudant
 
-When `adjudant` is active:
+When `adjudant` is active (a `.claude/adjudant` breadcrumb exists at the
+project root):
 
-1. **Read** — pull project brief, recent decisions, last session note
+1. **Resolve:** read `vault_path` and `slug` from the breadcrumb; the
+   project's vault folder is `{vault_path}/projects/{slug}/`.
+2. **Read:** pull project brief, recent decisions, last session note
    into the bundle automatically.
-2. **Write** — persisted reviews go to `${VAULT}/projects/{slug}/gemineye/`.
-3. **Cross-link** — append a line under `## Gemini reviews` in the
-   current session note.
+3. **Write:** persisted reviews go to `{vault_path}/projects/{slug}/gemineye/`.
+   `gemineye` is not one of adjudant's default subfolders, so on first save
+   declare it in the brief's `extra_folders:` frontmatter list. Per adjudant
+   vault-standards, a folder that is neither a default nor declared in
+   `extra_folders` is drift that `/adjudant dream` flags.
+4. **Cross-link:** append a line under the `## Log` section of today's
+   session note. `## Log` is the section adjudant's session template
+   actually has; do not invent a reviews section.
 
-Standalone (no vault): persisted reviews go to `docs/gemineye/`.
+Standalone (no breadcrumb): persisted reviews go to `docs/gemineye/`.
 
 ---
 
@@ -290,8 +298,8 @@ Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
 | Symptom | Likely cause | Action |
 |---|---|---|
-| Neither `agy` nor `gemini` on PATH | No review CLI installed | Tell Tom, link Antigravity install, stop |
-| Using `gemini` fallback | `agy` not installed | Works, but warn: gemini is deprecated (sunset 2026-06-18); install `agy` |
+| `agy` not on PATH | Antigravity CLI not installed | Tell Tom, link Antigravity install, stop; there is no fallback |
+| Pinned model missing from `agy models` | Google rotated model names | Update the pinned strings (fast + pro); replacement must be Gemini-family |
 | `agy -p` prints nothing | Non-TTY stdout bug (#27466) | Re-run interactively, or read the latest agy session transcript |
 | `agy -p` hangs / asks to trust folder | Folder not trusted | Run one-time `cd "$ROOT" && agy` handshake, or add root to trusted-folders config |
 | `--sandbox: unknown option` | Older/odd CLI build | Tell Tom to update (`agy update`); do not run without sandbox |
@@ -305,6 +313,5 @@ Standalone (no vault): persisted reviews go to `docs/gemineye/`.
 
 ## Dependencies
 
-- **Antigravity CLI (`agy`) on `PATH`** — the review backend. Install: <https://antigravity.google>
-- Deprecated fallback: `gemini` CLI (transition only; sunset 2026-06-18).
+- **Antigravity CLI (`agy`) on `PATH`**: the sole review backend. Install: <https://antigravity.google>
 - Optional: `adjudant` (vault context auto-loading).

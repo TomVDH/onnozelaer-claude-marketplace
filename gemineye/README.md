@@ -16,9 +16,9 @@ subcommands, or natural-language phrases ("ask Gemini", "second
 opinion", "Gemini review").
 
 **Requires:** the **Antigravity CLI (`agy`)** on `PATH`. Install:
-<https://antigravity.google>. The old `gemini` CLI works as a **deprecated
-fallback** (Google sunsets it for AI Pro/Ultra and free users on 2026-06-18);
-once you're on `agy`, a follow-up release will drop the `gemini` path.
+<https://antigravity.google>. There is no fallback backend: the old `gemini`
+CLI was sunset for AI Pro/Ultra and free users on 2026-06-18, and v0.6.0
+removed its code path.
 
 **Pairs with (optional but recommended):**
 - `adjudant` — auto-loads project context from the Obsidian
@@ -37,18 +37,23 @@ once you're on `agy`, a follow-up release will drop the `gemini` path.
 /gemineye harvest <path>               Extract 5 durable bullets from any file
 ```
 
-`megareview` is the deepest pass; the rest are lighter. Under `agy` there's no
-per-call model flag, so "tier" is about prompt scope, not a model switch.
+`megareview` is the deepest pass; the rest are lighter. Tiers map to pinned
+Gemini models: fast verbs run `--model "Gemini 3.5 Flash (Medium)"`,
+`megareview` runs `--model "Gemini 3.1 Pro (High)"`. The pin matters because
+the `agy` roster also serves Claude and GPT-OSS models; an unpinned call can
+silently land on a Claude model, which defeats a cross-family second opinion.
+To use another Gemini model for one call, swap the `--model` value for any
+Gemini-family entry from `agy models`.
 
 ## Behaviour at a glance
 
 | Aspect | Default |
 |---|---|
 | Trigger | Explicit phrases or `/gemineye` subcommand |
-| Backend | `agy` (Antigravity CLI); deprecated `gemini` fallback during transition |
+| Backend | `agy` (Antigravity CLI), sole backend; no fallback |
 | Containment | Write-sandboxed (`--sandbox`), read-trusted to the project root (`--add-dir "$ROOT"`) |
-| Permissions | Review-only. Never `--dangerously-skip-permissions` / `--yolo`. No write tools |
-| Model | No per-call flag under `agy` (account/config governs); legacy `gemini` pro uses `-m gemini-2.5-pro` |
+| Permissions | Review-only. Never `--dangerously-skip-permissions`. No write tools |
+| Model | Pinned: `Gemini 3.5 Flash (Medium)` for fast verbs, `Gemini 3.1 Pro (High)` for `megareview`; override per call with any Gemini entry from `agy models` |
 | Prompt shape | Rigid ROLE / DO / DON'T / SCOPE / OUTPUT / CONTEXT |
 | Edits | Returned as elaborate code blocks; Claude applies |
 | Context | Claude-prepared bundle, project Markdown, vault if available |

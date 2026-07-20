@@ -1,4 +1,4 @@
-# Gemini CLI — invocation patterns for Gemineye
+# agy invocation patterns for Gemineye
 
 Filled-in prompt templates per subcommand, plus CLI usage and edit
 format. SKILL.md is enough for in-line work; come here when invoking
@@ -41,31 +41,32 @@ free", "consider"). Loose prompts get loose reviews.
 
 ## CLI invocation — sandboxed, read-trusted
 
-Backend is **`agy`** (Antigravity CLI). The `gemini` fallback is shown for the
-transition only — it's deprecated (sunset 2026-06-18). Detect the backend per
-SKILL.md → "CLI backend". `$ROOT` is the project/repo root under review.
+Backend is `agy` (Antigravity CLI), the sole backend since v0.6.0 (the
+deprecated `gemini` CLI was sunset 2026-06-18 and the fallback removed).
+Run the backend check per SKILL.md "CLI backend". `$ROOT` is the
+project/repo root under review.
 
 ```bash
-# Antigravity CLI (agy) — read-trusted to the project root, write-sandboxed
-agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
+# fast tier (review, wip, sanity, name, compare, harvest)
+agy --sandbox --add-dir "$ROOT" --model "Gemini 3.5 Flash (Medium)" -p "$(cat prompt.txt)"
+
+# pro tier (megareview)
+agy --sandbox --add-dir "$ROOT" --model "Gemini 3.1 Pro (High)" -p "$(cat prompt.txt)"
 
 # Long prompt via stdin
-cat prompt.txt | agy --sandbox --add-dir "$ROOT" -p
-
-# Deprecated gemini fallback (transition only):
-gemini --sandbox -p "$(cat prompt.txt)"                     # fast
-gemini --sandbox -m gemini-2.5-pro -p "$(cat prompt.txt)"   # pro (megareview)
+cat prompt.txt | agy --sandbox --add-dir "$ROOT" --model "Gemini 3.5 Flash (Medium)" -p
 ```
 
-`agy` exposes **no per-call model flag** — tier is governed by your Antigravity
-config, so the plugin pins no model IDs (`megareview` differs by prompt scope,
-not model). **There is no `--file` flag** in either CLI — `--add-dir "$ROOT"`
-grants read access to the project root, and Claude still inlines the focused
-bundle into CONTEXT.
+The `--model` pin is deliberate: `agy models` lists Gemini, Claude, and
+GPT-OSS models, and an unpinned call can silently be served by a Claude
+model, which defeats a cross-family second opinion. One-line override: swap
+the `--model` value for any other Gemini-family entry from `agy models`.
+**There is no `--file` flag**: `--add-dir "$ROOT"` grants read access to the
+project root, and Claude still inlines the focused bundle into CONTEXT.
 
-**Never** pass `--dangerously-skip-permissions` (agy) / `--yolo` (gemini).
-**Never** drop `--sandbox`. **Never** `--add-dir` outside `$ROOT`. **Never**
-grant write tools. The reviewer reads the building; Claude applies edits.
+**Never** pass `--dangerously-skip-permissions`. **Never** drop `--sandbox`.
+**Never** `--add-dir` outside `$ROOT`. **Never** grant write tools. **Never**
+pin a non-Gemini model. The reviewer reads the building; Claude applies edits.
 
 ---
 
@@ -388,8 +389,10 @@ CONTEXT
 
 ### `/gemineye harvest <path>`
 
-Extract 5 durable bullets from any file — transcript, doc, or code.
-Tier: fast. This is gemineye's on-demand harvest surface.
+Extract 5 durable bullets from any file: transcript, doc, or code. The
+primary case is distilling a session transcript before compaction; the
+same pass covers a doc or a code file. Tier: fast. This is gemineye's
+on-demand harvest surface.
 
 (Historical note: adjudant's PreCompact hook once auto-harvested via this
 same prompt, but as of adjudant v0.7.0 the hook is mechanical-only — no model
@@ -398,40 +401,42 @@ runtime dependency either way.)
 
 ```
 ROLE
-You are a session-end archivist for a Claude Code working session about to be compacted.
+You are an archivist distilling one input file (session transcript, doc, or code) into its durable facts.
 
 DO
-- Extract concrete decisions, problems solved, blockers, and unresolved questions
+- For a transcript: extract concrete decisions, problems solved, blockers, and unresolved questions
+- For a doc or code file: extract load-bearing facts, contracts, and open questions
 - One bullet per item, max 25 words
 - Reference specific files/commits/issues by name when possible
 
 DON'T
-- Summarise the chat
+- Summarise or narrate the input
 - Include code blocks
 - Use softening language ("we discussed", "considered")
 - Output anything except the bullets
 
 SCOPE — IN
-- The most recent {n_msgs} messages of the transcript (provided below)
+- The input file content provided below (for a transcript: the most recent {n_msgs} messages)
 
 SCOPE — OUT
 - Greetings, tool-call mechanics, status pings, hook output
-- Anything older than what's included
+- Anything outside the provided content
 
 OUTPUT
 - Exactly 5 bullets, no preamble, no trailing text. If fewer than 5 concrete items exist, output fewer.
 - Format: `- <bullet text>`
 
 CONTEXT
-{transcript_chunk}
+{input_chunk}
 ```
 
 Claude's prep for `harvest`: read the named file, pass its content
-(truncated to ~10,000 chars) as `{transcript_chunk}`. Set `{n_msgs}`
-to the approximate number of message turns included. Run:
+(truncated to ~10,000 chars) as `{input_chunk}`. For a transcript, set
+`{n_msgs}` to the approximate number of message turns included; for a
+doc or code file, drop the `{n_msgs}` clause. Run:
 
 ```bash
-agy --sandbox --add-dir "$ROOT" -p "$(cat prompt.txt)"
+agy --sandbox --add-dir "$ROOT" --model "Gemini 3.5 Flash (Medium)" -p "$(cat prompt.txt)"
 ```
 
 ---
@@ -465,12 +470,23 @@ the answer.
 `save` is a file write, not a Gemini call. It persists the LAST
 in-line review to disk.
 
+The vault destination resolves via the adjudant breadcrumb
+(`.claude/adjudant` at the project root, plain `key: value` lines with
+`vault_path` and `slug`), not an environment variable:
+
 ```bash
 TOPIC="${1:-$(date +%H%M)}"
 DATE=$(date +%Y-%m-%d)
 
-if [ -n "$VAULT_PROJECT_DIR" ]; then
-  OUT="${VAULT_PROJECT_DIR}/gemineye/${DATE}-${TOPIC}.md"
+BC="$ROOT/.claude/adjudant"
+VAULT_PATH=""; SLUG=""
+if [ -f "$BC" ]; then
+  VAULT_PATH=$(sed -n 's/^vault_path: //p' "$BC" | head -n1 | tr -d '\r')
+  SLUG=$(sed -n 's/^slug: //p' "$BC" | head -n1 | tr -d '\r')
+fi
+
+if [ -n "$VAULT_PATH" ] && [ -n "$SLUG" ]; then
+  OUT="${VAULT_PATH}/projects/${SLUG}/gemineye/${DATE}-${TOPIC}.md"
 else
   OUT="docs/gemineye/${DATE}-${TOPIC}.md"
 fi
@@ -481,6 +497,11 @@ mkdir -p "$(dirname "$OUT")"
 The file uses the template in SKILL.md "Persisted file template".
 Required: frontmatter (with `subcommand` and `model` fields), Prompt
 (full filled-in template + CONTEXT), Response, Claude's read.
+
+On a vault save, also honour the pairing contract (SKILL.md "Pairing
+with adjudant"): declare `gemineye` in the brief's `extra_folders:` list
+if it is not there yet, and append a cross-link line under `## Log` in
+today's session note.
 
 ---
 
@@ -496,8 +517,9 @@ Required: frontmatter (with `subcommand` and `model` fields), Prompt
   context degrades the answer.
 - **Don't** ask Gemini to "implement X end-to-end". Review and
   second-opinion only.
-- **Don't** drop `--sandbox`. The folder is not trusted yet.
-- **Don't** pass `--yolo`. Gemini reviews only.
+- **Don't** drop `--sandbox`. The sandbox is what limits write side
+  effects; read trust is granted separately via `--add-dir`.
+- **Don't** pass `--dangerously-skip-permissions`. Gemini reviews only.
 - **Don't** chain Gemini calls in a loop. Each is deliberate.
 - **Don't** accept edit suggestions outside the elaborate-code-block
   format. Re-prompt if violated.

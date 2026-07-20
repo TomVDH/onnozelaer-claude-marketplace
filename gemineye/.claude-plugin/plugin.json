@@ -1,7 +1,7 @@
 {
   "name": "gemineye",
-  "version": "0.5.0",
-  "description": "A sandboxed second opinion from a Gemini-family model via the Antigravity CLI (agy) — review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. The reviewer is read-trusted to the project root and write-sandboxed; it proposes edits as code blocks, Claude applies them. v0.5.0 migrates the backend from the deprecated gemini CLI (sunset 2026-06-18) to agy via a dual-CLI adapter (prefer agy, temporary gemini fallback). Pairs with adjudant for vault context.",
+  "version": "0.6.0",
+  "description": "A review-only, sandboxed second opinion from a Gemini-family model via the Antigravity CLI (agy). Eight subcommands (review, megareview, wip, sanity, name, compare, save, harvest) with pinned Gemini models so the answer never silently comes from another model family; the reviewer is read-trusted to the project root, write-sandboxed, and proposes edits as code blocks that Claude applies. Pairs with adjudant for vault context and persisted reviews.",
   "author": {
     "name": "Onnozelaer"
   },
