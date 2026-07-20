@@ -169,6 +169,60 @@ class TestSessionStartHook(unittest.TestCase):
             self.assertEqual(r.returncode, 0)
             self.assertIn("override-vault", r.stdout)
 
+    def _existing_note(self, home: Path) -> Path:
+        session_file = (home / "vault" / "projects" / "demo" / "sessions"
+                        / f"{date.today().isoformat()}.md")
+        session_file.parent.mkdir(parents=True, exist_ok=True)
+        session_file.write_text(
+            "---\ntype: session\n---\n\n> {One-line intent. Frozen after first write.}\n\n"
+            "## Log\n\n- 09:00 · session started\n")
+        return session_file
+
+    def test_compact_source_appends_no_resume_marker(self):
+        # SessionStart fires on source=compact too; the precompact hook already
+        # wrote a paused tombstone, so a resumed marker is pure double noise.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            note = self._existing_note(home)
+            r = _run("session-start.sh", project, home,
+                     stdin=json.dumps({"session_id": "s1", "source": "compact"}))
+            self.assertEqual(r.returncode, 0)
+            self.assertNotIn("session resumed", note.read_text())
+
+    def test_clear_source_appends_no_resume_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            note = self._existing_note(home)
+            r = _run("session-start.sh", project, home,
+                     stdin=json.dumps({"session_id": "s1", "source": "clear"}))
+            self.assertEqual(r.returncode, 0)
+            self.assertNotIn("session resumed", note.read_text())
+
+    def test_resume_source_appends_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            note = self._existing_note(home)
+            r = _run("session-start.sh", project, home,
+                     stdin=json.dumps({"session_id": "s1", "source": "resume"}))
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("session resumed", note.read_text())
+
+    def test_placeholder_nudge_in_context_until_replaced(self):
+        # The intent placeholder had no owner: three code sites create it,
+        # nothing fills it. The hook's context must hand the job to the model.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            r1 = _run("session-start.sh", project, home)
+            self.assertIn("Intent line is still the placeholder", r1.stdout)
+            session_file = (home / "vault" / "projects" / "demo" / "sessions"
+                            / f"{date.today().isoformat()}.md")
+            session_file.write_text(
+                session_file.read_text().replace(
+                    "{One-line intent. Frozen after first write.}",
+                    "Fix the handoff mirror guard."))
+            r2 = _run("session-start.sh", project, home)
+            self.assertNotIn("Intent line is still the placeholder", r2.stdout)
+
 
 class TestSessionEndHook(unittest.TestCase):
 
@@ -196,6 +250,51 @@ class TestSessionEndHook(unittest.TestCase):
             r = _run("sessionend.sh", project, home)
             self.assertEqual(r.returncode, 0)
             self.assertIn("session ended", session_file.read_text())
+
+    def test_no_ended_marker_when_nothing_logged_since_start(self):
+        # A quick open/close session must not stack "session ended" under a
+        # bare "session started": the pair is pure churn.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            sessions = home / "vault" / "projects" / "demo" / "sessions"
+            sessions.mkdir(parents=True)
+            session_file = sessions / f"{date.today().isoformat()}.md"
+            session_file.write_text("## Log\n\n- 10:00 · session started\n")
+            project = Path(tmp) / "code"
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / "adjudant").write_text("vault_path: ~/vault\nslug: demo\n")
+            r = _run("sessionend.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertNotIn("session ended", session_file.read_text())
+
+    def test_ended_marker_lands_after_real_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            sessions = home / "vault" / "projects" / "demo" / "sessions"
+            sessions.mkdir(parents=True)
+            session_file = sessions / f"{date.today().isoformat()}.md"
+            session_file.write_text(
+                "## Log\n\n- 10:00 · session started\n- 10:20 · Added: [[x]]\n")
+            project = Path(tmp) / "code"
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / "adjudant").write_text("vault_path: ~/vault\nslug: demo\n")
+            r = _run("sessionend.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("session ended", session_file.read_text())
+
+    def test_no_double_ended_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            sessions = home / "vault" / "projects" / "demo" / "sessions"
+            sessions.mkdir(parents=True)
+            session_file = sessions / f"{date.today().isoformat()}.md"
+            session_file.write_text("## Log\n\n- 10:20 · Added: [[x]]\n- 10:30 · session ended\n")
+            project = Path(tmp) / "code"
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / "adjudant").write_text("vault_path: ~/vault\nslug: demo\n")
+            r = _run("sessionend.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertEqual(session_file.read_text().count("session ended"), 1)
 
     def test_midnight_straddle_appends_to_latest_note(self):
         # No note exists for *today* (session started before midnight): the

@@ -133,6 +133,104 @@ class TestLatestSessionActivity(unittest.TestCase):
             _write(sf, "- 09:00 · session ended\n")
             self.assertIsNone(pc.latest_session_activity(sf, NOW))
 
+    def test_started_and_resumed_markers_are_noise_too(self):
+        # Regression: a note holding ONLY hook churn (started/resumed pairs)
+        # counted as real activity and raised a false STALE banner.
+        with tempfile.TemporaryDirectory() as tmp:
+            sf = Path(tmp) / "2026-06-01.md"
+            _write(sf, "- 10:00 · session started\n\n--- 10:05 session resumed ---\n")
+            self.assertIsNone(pc.latest_session_activity(sf, NOW))
+
+    def test_activity_dated_from_filename_not_from_now(self):
+        # Regression: a midnight-straddling sync read yesterday's note and
+        # stamped its 23:55 with TODAY's date, inventing future activity.
+        with tempfile.TemporaryDirectory() as tmp:
+            sf = Path(tmp) / "2026-05-31.md"
+            _write(sf, "- 23:55 · wrote the fix\n")
+            dt = pc.latest_session_activity(sf, NOW)
+            self.assertEqual(dt, datetime(2026, 5, 31, 23, 55))
+
+
+# ============================================================
+# latest_session_file (shared midnight fallback)
+# ============================================================
+
+
+class TestLatestSessionFile(unittest.TestCase):
+
+    def test_prefers_todays_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sessions = Path(tmp)
+            _write(sessions / "2026-06-01.md", "## Log\n")
+            _write(sessions / "2026-05-31.md", "## Log\n")
+            got = pc.latest_session_file(sessions, "2026-06-01")
+            self.assertEqual(got.name, "2026-06-01.md")
+
+    def test_falls_back_to_latest_dated_note(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sessions = Path(tmp)
+            _write(sessions / "2026-05-30.md", "## Log\n")
+            _write(sessions / "2026-05-31.md", "## Log\n")
+            _write(sessions / "abcd-ef-gh.md", "decoy\n")  # 4-2-2 shape, not a date
+            got = pc.latest_session_file(sessions, "2026-06-01")
+            self.assertEqual(got.name, "2026-05-31.md")
+
+    def test_returns_today_path_when_dir_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            got = pc.latest_session_file(Path(tmp), "2026-06-01")
+            self.assertEqual(got.name, "2026-06-01.md")
+            self.assertFalse(got.exists())
+
+
+# ============================================================
+# shared handoff renderer (single source of truth for both writers)
+# ============================================================
+
+
+class TestRenderHandoff(unittest.TestCase):
+
+    def test_render_shape_and_body_normalization(self):
+        fm = pc.HANDOFF_FRONTMATTER_TEMPLATE.format(
+            slug="p", today="2026-06-01", source_stem="now")
+        out = pc.render_handoff("p", "2026-06-01", "09:30", "now.md",
+                                "", "body line\n\n\n", fm)
+        self.assertIn("# Handoff: p\n", out)
+        self.assertIn("*Mirrored from `.remember/now.md` on 2026-06-01 09:30.*", out)
+        self.assertTrue(out.endswith("---\n\nbody line\n"))
+
+    def test_template_carries_source_stem(self):
+        fm = pc.HANDOFF_FRONTMATTER_TEMPLATE.format(
+            slug="p", today="2026-06-01", source_stem="remember")
+        self.assertIn("source: remember", fm)
+
+    def test_rendered_handoff_has_no_em_dash(self):
+        # voice.md: no em dashes in vault writes. The old hook heading had one.
+        fm = pc.HANDOFF_FRONTMATTER_TEMPLATE.format(
+            slug="p", today="2026-06-01", source_stem="now")
+        out = pc.render_handoff("p", "2026-06-01", "09:30", "now.md",
+                                pc.freshness_header("\U0001f7e2", "1h", None, False) + "\n\n",
+                                "plain body\n", fm)
+        self.assertNotIn("—", out)
+
+
+class TestPreservedFrontmatter(unittest.TestCase):
+
+    def test_keeps_custom_fields_and_bumps_updated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handoff = Path(tmp) / "_handoff.md"
+            handoff.write_text(
+                "---\ntype: handoff\ncodename: falcon\nupdated: 2026-05-01\n---\n\nbody\n")
+            block = pc.preserved_frontmatter(handoff, "2026-06-01")
+            self.assertIn("codename: falcon", block)
+            self.assertIn("updated: 2026-06-01", block)
+
+    def test_none_when_missing_or_fenceless(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(pc.preserved_frontmatter(Path(tmp) / "nope.md", "2026-06-01"))
+            plain = Path(tmp) / "plain.md"
+            plain.write_text("no frontmatter here\n")
+            self.assertIsNone(pc.preserved_frontmatter(plain, "2026-06-01"))
+
 
 # ============================================================
 # compute_freshness (stale logic + end-to-end header)

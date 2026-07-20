@@ -19,9 +19,9 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
 | Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
 | Templates | 19 file-type scaffolds + `board.html` (self-hosted kanban) |
-| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` · `_cost.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
 | Drift defense | `python3 scripts/validate.py` — 24 validators, runs via pre-commit |
-| Tests | 560 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
+| Tests | 591 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 
@@ -69,11 +69,11 @@ All five hooks are vault-aware:
 
 | Event | Script | Purpose |
 |---|---|---|
-| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note |
-| UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart vault reminder when project isn't linked and prompt has vault-y keywords |
-| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log |
-| PreCompact | `hooks/scripts/precompact.py` | Append `paused (compaction)` marker + sync handoff |
-| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker + sync handoff |
+| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume); no resumed marker on `compact`/`clear` sources; nudges the model to replace the intent placeholder until it's filled |
+| UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords (at most once per session) |
+| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`) |
+| PreCompact | `hooks/scripts/precompact.py` | Mechanical, no model calls (5s budget): append enriched pause tombstone with a `next:` pointer + mirror handoff with a freshness header (traffic light · age · NEXT · stale flag); a blank `.remember` source is never mirrored over a populated handoff |
+| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker only when something was logged since the last hook marker + sync handoff to vault |
 
 Universal drift-defense (git safety, voice checks, etc.) lives in `hookify` — not here.
 

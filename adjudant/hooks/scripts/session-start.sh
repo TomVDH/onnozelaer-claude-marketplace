@@ -15,19 +15,25 @@ main() {
   local project_dir="${CLAUDE_PROJECT_DIR:-}"
   [ -z "$project_dir" ] && return 0
 
-  # --- 0. Best-effort: read the Claude Code session UUID from stdin JSON.
-  # Hooks receive a JSON payload on stdin: { session_id, transcript_path, ... }.
-  # Stamping is advisory; this never blocks the hook.
-  local session_id=""
+  # --- 0. Best-effort: read the Claude Code session UUID + start source from
+  # stdin JSON. Hooks receive a payload: { session_id, source, ... } where
+  # source is startup | resume | compact | clear. Both reads are advisory;
+  # this never blocks the hook.
+  local session_id="" start_source=""
   if [ ! -t 0 ] && command -v python3 >/dev/null 2>&1; then
     local payload
     payload=$(cat 2>/dev/null || true)
     if [ -n "$payload" ]; then
-      session_id=$(printf '%s' "$payload" | python3 -c 'import json,sys
+      local parsed
+      parsed=$(printf '%s' "$payload" | python3 -c 'import json,sys
 try:
-    print(json.load(sys.stdin).get("session_id",""))
+    d = json.load(sys.stdin)
+    print(d.get("session_id",""))
+    print(d.get("source",""))
 except Exception:
     pass' 2>/dev/null || true)
+      session_id=$(printf '%s\n' "$parsed" | sed -n 1p)
+      start_source=$(printf '%s\n' "$parsed" | sed -n 2p)
     fi
   fi
 
@@ -127,8 +133,22 @@ EOF
     # (read-only vault, offline iCloud) must not inject a phantom-file claim.
     printf -- '- Session note created: `projects/%s/sessions/%s.md`\n' "$slug" "$today"
   elif [ -f "$session_file" ]; then
-    # brace group: silence stderr BEFORE the >> open (left→right redirections)
-    if { printf '\n--- %s session resumed ---\n\n' "$ts" >> "$session_file"; } 2>/dev/null; then
+    local resumed_ok=0
+    case "$start_source" in
+      compact|clear)
+        # No resumed marker for these sources: after a compaction the
+        # precompact hook already wrote a paused tombstone, and a /clear is
+        # not a return to the note. Appending "resumed" was pure churn.
+        if [ -w "$session_file" ]; then resumed_ok=1; fi
+        ;;
+      *)
+        # brace group: silence stderr BEFORE the >> open (left→right redirections)
+        if { printf '\n--- %s session resumed ---\n\n' "$ts" >> "$session_file"; } 2>/dev/null; then
+          resumed_ok=1
+        fi
+        ;;
+    esac
+    if [ "$resumed_ok" = "1" ]; then
       # Idempotently append this conversation's UUID to the session_id list.
       if [ -n "$session_id" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] \
          && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/_session_stamp.py" ] \
@@ -140,6 +160,13 @@ EOF
     fi
   fi
   # else: write failed and no file exists — stay silent, claim nothing.
+
+  # --- 4. Intent-line ownership: the hook creates the placeholder, the model
+  # fills it. Nudge in the context stream until someone replaces it.
+  if [ -f "$session_file" ] \
+     && grep -qF -- '{One-line intent. Frozen after first write.}' "$session_file" 2>/dev/null; then
+    printf -- "- Intent line is still the placeholder in \`projects/%s/sessions/%s.md\`: replace it with one plain sentence once the session's purpose is clear, then leave it frozen.\n" "$slug" "$today"
+  fi
 }
 
 main "$@" || exit 0

@@ -175,6 +175,92 @@ class TestFailClosedOnStaleVault(_EnvHygiene):
             self.assertNotIn("paused", decoy.read_text())  # digit glob, not ?
 
 
+class TestEmptySourceGuard(_EnvHygiene):
+    """A blank .remember source must never wipe a populated handoff. The
+    remember plugin rotates now.md to empty at session start; every quick
+    SessionEnd then mirrored nothing over the last surviving summary."""
+
+    def _fixture(self, tmp: Path, now_content: str) -> tuple[Path, Path, Path]:
+        project = tmp / "code"
+        vault = tmp / "vault"
+        (vault / "projects" / "demo").mkdir(parents=True)
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "adjudant").write_text(
+            f"vault_path: {vault}\nvault_name: vault\nslug: demo\nmode: project\n")
+        (project / ".remember").mkdir()
+        (project / ".remember" / "now.md").write_text(now_content)
+        handoff = vault / "projects" / "demo" / "_handoff.md"
+        handoff.write_text(
+            "---\ntype: handoff\nupdated: 2026-05-01\n---\n\n"
+            "# Handoff: demo\n\nprecious context\nNEXT: keep this\n")
+        return project, vault, handoff
+
+    def _run_sync_only(self, project: Path) -> int:
+        os.environ["CLAUDE_PROJECT_DIR"] = str(project)
+        argv_before = sys.argv
+        sys.argv = ["precompact.py", "--sync-only"]
+        try:
+            return precompact.main()
+        finally:
+            sys.argv = argv_before
+            del os.environ["CLAUDE_PROJECT_DIR"]
+
+    def test_empty_source_preserves_existing_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, vault, handoff = self._fixture(Path(tmp), "")
+            before = handoff.read_text()
+            rc = self._run_sync_only(project)
+            self.assertEqual(rc, 0)
+            self.assertEqual(handoff.read_text(), before)
+
+    def test_whitespace_source_preserves_existing_handoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, vault, handoff = self._fixture(Path(tmp), "\n  \n")
+            before = handoff.read_text()
+            rc = self._run_sync_only(project)
+            self.assertEqual(rc, 0)
+            self.assertEqual(handoff.read_text(), before)
+
+    def test_populated_source_still_mirrors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, vault, handoff = self._fixture(Path(tmp), "fresh state\n")
+            rc = self._run_sync_only(project)
+            self.assertEqual(rc, 0)
+            self.assertIn("fresh state", handoff.read_text())
+
+
+class TestPauseMarkerVoice(_EnvHygiene):
+
+    def test_pause_tombstone_uses_middle_dot_next_separator(self):
+        # voice.md bans em dashes in vault writes; the tombstone carried one.
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "code"
+            vault = Path(tmp) / "vault"
+            sessions = vault / "projects" / "demo" / "sessions"
+            sessions.mkdir(parents=True)
+            note = sessions / "2026-06-01.md"
+            note.write_text("## Log\n")
+            (project / ".claude").mkdir(parents=True)
+            (project / ".claude" / "adjudant").write_text(
+                f"vault_path: {vault}\nvault_name: vault\nslug: demo\nmode: project\n")
+            (project / ".remember").mkdir()
+            (project / ".remember" / "remember.md").write_text("NEXT: ship it\n")
+
+            os.environ["CLAUDE_PROJECT_DIR"] = str(project)
+            argv_before = sys.argv
+            sys.argv = ["precompact.py"]
+            try:
+                rc = precompact.main()
+            finally:
+                sys.argv = argv_before
+                del os.environ["CLAUDE_PROJECT_DIR"]
+
+            self.assertEqual(rc, 0)
+            text = note.read_text()
+            self.assertIn("paused (compaction) · next: ship it", text)
+            self.assertNotIn("—", text)
+
+
 class TestImportDegradation(_EnvHygiene):
     """A broken or mid-sync scripts/ module must only degrade its own
     capability. Runs the hook as a subprocess inside a fake plugin tree so the

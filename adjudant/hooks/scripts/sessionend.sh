@@ -58,9 +58,19 @@ print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true
   fi
 
   if [ -n "$session_file" ] && [ -f "$session_file" ]; then
-    # brace group so stderr is silenced BEFORE the >> open (redirections are
-    # processed left→right; a read-only vault must stay noiseless)
-    { printf -- '- %s · session ended\n' "$ts" >> "$session_file"; } 2>/dev/null || true
+    # Skip the marker when nothing was logged since the last hook marker: a
+    # bare started/resumed/paused/ended tail means the pair would be pure
+    # churn (quick open/close sessions used to stack noise lines daily).
+    local last_line
+    last_line=$(grep -v '^[[:space:]]*$' "$session_file" 2>/dev/null | tail -n 1 || true)
+    case "$last_line" in
+      *"· session started"*|*"session resumed ---"*|*"· session ended"*|*"paused (compaction)"*)
+        : ;;
+      *)
+        # brace group so stderr is silenced BEFORE the >> open (redirections
+        # are processed left→right; a read-only vault must stay noiseless)
+        { printf -- '- %s · session ended\n' "$ts" >> "$session_file"; } 2>/dev/null || true ;;
+    esac
   fi
 
   # Run handoff sync only — no pause marker (best effort, never block)

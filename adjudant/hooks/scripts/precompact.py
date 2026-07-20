@@ -5,7 +5,7 @@ MECHANICAL ONLY — no model calls. Must finish well inside the 5s hook budget.
 Two lanes, both cheap on-disk reads:
 
   1. Append an enriched pause tombstone to today's vault session log:
-       `- HH:MM · paused (compaction) — next: <NEXT line>`
+       `- HH:MM · paused (compaction) · next: <NEXT line>`
   2. Mirror `.remember/remember.md` (or `now.md`) → vault `_handoff.md`, with a
      freshness header (traffic light · age · NEXT · stale flag).
 
@@ -33,8 +33,27 @@ except Exception:  # pragma: no cover - defensive
     pass
 
 try:
-    from _handoff_freshness import compute_freshness, freshness_header, parse_next_line
+    from _handoff_freshness import (
+        HANDOFF_FRONTMATTER_TEMPLATE,
+        compute_freshness,
+        freshness_header,
+        latest_session_file,
+        parse_next_line,
+        preserved_frontmatter,
+        render_handoff,
+    )
 except Exception:  # pragma: no cover - degrade: mechanical work without freshness
+    HANDOFF_FRONTMATTER_TEMPLATE = (
+        "---\n"
+        "type: handoff\n"
+        "project: \"[[projects/{slug}/brief|{slug}]]\"\n"
+        "updated: {today}\n"
+        "source: {source_stem}\n"
+        "tags:\n"
+        "  - handoff\n"
+        "---\n\n"
+    )
+
     def parse_next_line(_text):  # type: ignore
         return None
 
@@ -43,6 +62,24 @@ except Exception:  # pragma: no cover - degrade: mechanical work without freshne
 
     def freshness_header(*_a, **_k):  # type: ignore
         return ""
+
+    def latest_session_file(sessions_dir, today):  # type: ignore
+        return sessions_dir / f"{today}.md"
+
+    def preserved_frontmatter(*_a, **_k):  # type: ignore
+        return None
+
+    def render_handoff(slug, today, ts, source_name, fresh_block, body, frontmatter):  # type: ignore
+        # Minimal mirror of the shared layout so degraded mode keeps writing
+        # a usable handoff (same heading, mirror line, separator, body).
+        return (
+            f"{frontmatter}"
+            f"# Handoff: {slug}\n\n"
+            f"{fresh_block}"
+            f"*Mirrored from `.remember/{source_name}` on {today} {ts}.*\n\n"
+            f"---\n\n"
+            f"{body.rstrip()}\n"
+        )
 
 try:
     from _vault_walk import resolve_vault
@@ -76,22 +113,6 @@ def read_breadcrumb(project_dir: Path) -> dict:
     return info
 
 
-def latest_session_file(sessions_dir: Path, today: str) -> Path:
-    """Today's session note — or, when it doesn't exist yet (session straddling
-    midnight), the lexically-latest existing daily note so the entry isn't
-    silently dropped. Falls back to today's path if none exist (caller gates
-    on .exists())."""
-    target = sessions_dir / f"{today}.md"
-    if target.exists():
-        return target
-    try:
-        # digit classes, not ?: a stray abcd-ef-gh.md must never outrank a date
-        candidates = sorted(sessions_dir.glob("[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md"))
-    except OSError:
-        candidates = []
-    return candidates[-1] if candidates else target
-
-
 def find_remember_source(project_dir: Path) -> Optional[Path]:
     """Locate the best `.remember/` file to mirror.
 
@@ -109,7 +130,13 @@ def find_remember_source(project_dir: Path) -> Optional[Path]:
 
 
 def sync_handoff(project_dir: Path, vault: Path, slug: str, today: str, ts: str, now: datetime) -> None:
-    """Mirror the remember source → `_handoff.md` with a freshness header. Fails closed."""
+    """Mirror the remember source → `_handoff.md` with a freshness header.
+
+    Fails closed. Rendered by the SAME `render_handoff` the sync verb uses, so
+    the two writers can't drift. A blank source is never mirrored — the
+    remember plugin leaves its buffer empty at rest after rotation, and
+    mirroring nothing would wipe the last surviving handoff.
+    """
     source = find_remember_source(project_dir)
     if source is None:
         return
@@ -117,37 +144,21 @@ def sync_handoff(project_dir: Path, vault: Path, slug: str, today: str, ts: str,
         body = source.read_text(errors="replace")
     except OSError:
         return
-    source_name = source.name
+    if not body.strip():
+        return
 
     session_file = latest_session_file(vault / "projects" / slug / "sessions", today)
     light, age_str, next_line, stale = compute_freshness(project_dir, body, source, session_file, now)
     fresh = freshness_header(light, age_str, next_line, stale)
     fresh_block = f"{fresh}\n\n" if fresh else ""
 
-    header = (
-        "---\n"
-        "type: handoff\n"
-        f'project: "[[projects/{slug}/brief|{slug}]]"\n'
-        f"updated: {today}\n"
-        f"source: {source.stem}\n"
-        "tags:\n"
-        "  - handoff\n"
-        "---\n"
-    )
-
-    content = (
-        f"{header}\n"
-        f"# Handoff — {slug}\n\n"
-        f"{fresh_block}"
-        f"*Mirrored from `.remember/{source_name}` on {today} {ts}.*\n\n"
-        f"---\n\n"
-        f"{body}\n"
-    )
-
     try:
         handoff = vault / "projects" / slug / "_handoff.md"
+        frontmatter = preserved_frontmatter(handoff, today) \
+            or HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today, source_stem=source.stem)
         handoff.parent.mkdir(parents=True, exist_ok=True)
-        handoff.write_text(content)
+        handoff.write_text(
+            render_handoff(slug, today, ts, source.name, fresh_block, body, frontmatter))
     except Exception:  # hook must never crash compaction, whatever the cause
         return
 
@@ -163,7 +174,7 @@ def append_pause_marker(project_dir: Path, session_file: Path, ts: str) -> None:
             next_line = None
     marker = f"- {ts} · paused (compaction)"
     if next_line:
-        marker += f" — next: {next_line}"
+        marker += f" · next: {next_line}"
     try:
         if session_file.exists():
             with session_file.open("a") as f:

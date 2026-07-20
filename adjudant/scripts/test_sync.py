@@ -10,6 +10,7 @@ import io
 import json
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from sync import (
@@ -156,6 +157,75 @@ class TestMirrorHandoff(unittest.TestCase):
             self.assertIn("handoff age:", content)
             self.assertIn("NEXT: finish the thing", content)
             self.assertIn("state body", content)
+
+    def test_empty_source_never_wipes_existing_handoff(self):
+        # Regression: the remember plugin leaves now.md empty at rest after
+        # rotation; the mirror overwrote a populated handoff with nothing.
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "now.md", "")
+            handoff = Path(tmp) / "_handoff.md"
+            before = ("---\ntype: handoff\nupdated: 2026-05-01\n---\n\n"
+                      "# Handoff: p\n\nprecious context\nNEXT: keep this\n")
+            handoff.write_text(before)
+            r = mirror_handoff(proj, handoff, "p", "2026-05-27")
+            self.assertEqual(r, "source-empty")
+            self.assertEqual(handoff.read_text(), before)
+
+    def test_whitespace_source_treated_as_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "now.md", "\n   \n\t\n")
+            handoff = Path(tmp) / "_handoff.md"
+            r = mirror_handoff(proj, handoff, "p", "2026-05-27")
+            self.assertEqual(r, "source-empty")
+            self.assertFalse(handoff.exists())
+
+    def test_mirror_line_carries_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "code"; proj.mkdir()
+            _w(proj / ".remember" / "now.md", "state\n")
+            handoff = Path(tmp) / "_handoff.md"
+            mirror_handoff(proj, handoff, "p", "2026-05-27",
+                           now=datetime(2026, 5, 27, 9, 30))
+            self.assertIn("on 2026-05-27 09:30.", handoff.read_text())
+
+
+class TestWriterParity(unittest.TestCase):
+    """sync.mirror_handoff and the PreCompact hook's sync_handoff must emit
+    byte-identical handoffs from identical inputs. The two writers drifted
+    (heading form, mirror-line time, source: field) and churned the file on
+    every alternation."""
+
+    def _fixture(self, root: Path) -> tuple[Path, Path]:
+        proj = root / "code"; proj.mkdir(parents=True)
+        _w(proj / ".remember" / "now.md", "live state\n\nNEXT: carry on\n")
+        _w(proj / ".remember" / "today-2026-06-01.md", "- 13:30 worked\n")
+        vault = root / "vault"
+        _w(vault / "projects" / "p" / "sessions" / "2026-06-01.md",
+           "- 12:00 · Added: [[x]]\n")
+        return proj, vault
+
+    def test_sync_and_hook_write_identical_handoffs(self):
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks" / "scripts"))
+        import precompact as hook
+        now = datetime(2026, 6, 1, 14, 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            root_a = Path(tmp) / "a"
+            root_b = Path(tmp) / "b"
+            proj_a, vault_a = self._fixture(root_a)
+            proj_b, vault_b = self._fixture(root_b)
+
+            handoff_a = vault_a / "projects" / "p" / "_handoff.md"
+            r = mirror_handoff(proj_a, handoff_a, "p", "2026-06-01", now=now)
+            self.assertEqual(r, "mirrored")
+
+            hook.sync_handoff(proj_b, vault_b, "p", "2026-06-01", "14:00", now)
+            handoff_b = vault_b / "projects" / "p" / "_handoff.md"
+            self.assertTrue(handoff_b.is_file())
+
+            self.assertEqual(handoff_a.read_text(), handoff_b.read_text())
 
 
 # ============================================================

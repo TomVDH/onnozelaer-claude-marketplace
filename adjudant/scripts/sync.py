@@ -34,7 +34,14 @@ from _vault_walk import (
     resolve_project_from_cwd,
     PROJECT_STATUS_VALUES,
 )
-from _handoff_freshness import compute_freshness, freshness_header
+from _handoff_freshness import (
+    HANDOFF_FRONTMATTER_TEMPLATE,
+    compute_freshness,
+    freshness_header,
+    latest_session_file,
+    preserved_frontmatter,
+    render_handoff,
+)
 from connect import (
     count_non_index_files,
     newest_session_date,
@@ -82,17 +89,6 @@ def refresh_brief_updated(brief_path: Path, today: str) -> str:
 # ============================================================
 
 
-HANDOFF_FRONTMATTER_TEMPLATE = (
-    "---\n"
-    "type: handoff\n"
-    "project: \"[[projects/{slug}/brief|{slug}]]\"\n"
-    "updated: {today}\n"
-    "tags:\n"
-    "  - handoff\n"
-    "---\n\n"
-)
-
-
 def find_remember_source(project_root: Path) -> Optional[Path]:
     """Return the best `.remember/` file to mirror into handoff body.
 
@@ -111,38 +107,6 @@ def find_remember_source(project_root: Path) -> Optional[Path]:
     return None
 
 
-def _preserved_frontmatter(handoff_path: Path, today: str) -> Optional[str]:
-    """Existing handoff frontmatter block with `updated:` bumped to today.
-
-    Per reference/sync.md the mirror must PRESERVE handoff frontmatter — a
-    handoff may carry fields the template doesn't know about (created,
-    session_id, custom keys). Returns the block incl. fences + trailing blank
-    line, or None when the file is missing/has no valid frontmatter.
-    """
-    if not handoff_path.is_file():
-        return None
-    try:
-        lines = handoff_path.read_text(errors="replace").split("\n")
-    except OSError:
-        return None
-    if not lines or lines[0].rstrip() != "---":
-        return None
-    close_idx = next((i for i in range(1, len(lines)) if lines[i].rstrip() == "---"), None)
-    if close_idx is None:
-        return None
-    block = lines[: close_idx + 1]
-    bumped = False
-    for i in range(1, close_idx):
-        m = re.match(r"^(updated\s*:\s*).*$", block[i])
-        if m:
-            block[i] = f"{m.group(1)}{today}"
-            bumped = True
-            break
-    if not bumped:
-        block.insert(close_idx, f"updated: {today}")
-    return "\n".join(block) + "\n\n"
-
-
 def mirror_handoff(
     project_root: Path,
     handoff_path: Path,
@@ -152,42 +116,40 @@ def mirror_handoff(
 ) -> str:
     """Copy remember/now body into handoff body, with a freshness header.
 
-    Output shape matches the PreCompact hook's `sync_handoff` (single source of
-    truth for the freshness block via `_handoff_freshness`), so a manual
-    `/adjudant sync` and an auto-compaction sync produce identical handoffs.
+    Output is rendered by `_handoff_freshness.render_handoff` — the SAME
+    renderer the PreCompact/SessionEnd hook uses, so a manual `/adjudant sync`
+    and an auto-compaction sync produce byte-identical handoffs.
 
     An existing handoff keeps its frontmatter (only `updated:` is bumped);
-    the template is used solely for brand-new files.
+    the template is used solely for brand-new files. A blank source is never
+    mirrored: the remember plugin leaves its buffer empty at rest after
+    rotation, and mirroring nothing would wipe the last surviving handoff.
 
-    Returns: 'mirrored' / 'no-source'.
+    Returns: 'mirrored' / 'no-source' / 'source-empty'.
     """
     source = find_remember_source(project_root)
     if not source:
         return "no-source"
 
-    now = now or datetime.now()
-    body = source.read_text(errors="replace").rstrip() + "\n"
+    body = source.read_text(errors="replace")
+    if not body.strip():
+        return "source-empty"
 
-    # Freshness header — same primitives the hook uses. Session note sits beside
-    # the handoff (vault project dir / sessions / {today}.md).
-    session_file = handoff_path.parent / "sessions" / f"{today}.md"
+    now = now or datetime.now()
+    ts = now.strftime("%H:%M")
+
+    # Freshness header — same primitives the hook uses. Session note sits
+    # beside the handoff, with the shared midnight fallback.
+    session_file = latest_session_file(handoff_path.parent / "sessions", today)
     light, age_str, next_line, stale = compute_freshness(project_root, body, source, session_file, now)
     fresh = freshness_header(light, age_str, next_line, stale)
     fresh_block = f"{fresh}\n\n" if fresh else ""
 
-    frontmatter = _preserved_frontmatter(handoff_path, today) \
-        or HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today)
+    frontmatter = preserved_frontmatter(handoff_path, today) \
+        or HANDOFF_FRONTMATTER_TEMPLATE.format(slug=slug, today=today, source_stem=source.stem)
 
-    new_content = (
-        f"{frontmatter}"
-        f"# Handoff: {slug}\n\n"
-        f"{fresh_block}"
-        f"*Mirrored from `.remember/{source.name}` on {today}.*\n\n"
-        f"---\n\n"
-        f"{body}"
-    )
-
-    handoff_path.write_text(new_content)
+    handoff_path.write_text(
+        render_handoff(slug, today, ts, source.name, fresh_block, body, frontmatter))
     return "mirrored"
 
 
