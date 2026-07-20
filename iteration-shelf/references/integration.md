@@ -4,9 +4,9 @@ How this skill behaves when other plugins are active, and how it degrades cleanl
 
 ---
 
-## 1. Superpowers
+## 1. Standalone skills
 
-Claude Code's Superpowers skill pack supplies several process skills that the shelf generator plugs into.
+Several standalone user-level skills plug into the shelf generator: `full-output-enforcement`, `design-taste-frontend`, `high-end-visual-design`, `redesign-existing-projects`, `minimalist-ui`, `industrial-brutalist-ui`. They are installed separately, not part of any skill pack; any or all of them may be absent.
 
 ### 1.1 `full-output-enforcement` — mandatory
 
@@ -22,7 +22,7 @@ When active, every shelf generation follows it. The practical effects:
 
   Resume from exactly the next segment boundary. Do not recap what was already emitted.
 
-If Superpowers is not installed, enforce these rules anyway — they are the shelf's deliverable contract, not Superpowers-specific.
+If `full-output-enforcement` is not installed, enforce these rules anyway: they are the shelf's deliverable contract, not skill-specific.
 
 ### 1.2 `design-taste-frontend`
 
@@ -51,110 +51,86 @@ If the user wants an industrial-brutalist _iteration_ (inside the indexed set), 
 
 ---
 
-## 2. Cabinet plugin
+## 2. Adjudant plugin
 
-When the Cabinet of IMD is active, **Bostrol** owns shelf operations. Bostrol is the documentation-and-process specialist; the shelf is infrastructure, so it falls under his executive authority.
+When adjudant is active and the project is linked to a vault, adjudant is the persistence layer. The shelf skill invents no vault schema of its own: session events use adjudant's session logging, decisions use adjudant's decision schema.
 
-### 2.1 Attribution in chat
+### 2.1 Session log
 
-Every user-facing line about shelf generation is prefixed with `[Bostrol]:`. Keep it short and factual — Bostrol is dry and organisational.
+Writing a shelf is a **session-notable event**. Adjudant keeps one session note per project per day at `projects/{slug}/sessions/{YYYY-MM-DD}.md` with an append-only `## Log` section (its SessionStart hook creates or resumes the note; its PostToolUse hook auto-logs vault-file creations; SessionEnd appends the closing marker).
 
-```
-[Bostrol]: Scanning concepts/directions/ — 132 HTML files, 11 prefix families.
-[Bostrol]: No manifest found. Drafting iteration-shelf.json from the scan.
-[Bostrol]: Emitting _monster-index.html — 12 segments · 132 items.
-[Bostrol]: Emitted. Cross-linked to _iterations.html. Done.
-```
-
-Do not narrate every file read — just the generation events.
-
-### 2.2 Session note
-
-Writing a shelf is a **session-notable event**. Append to the vault chatter log under `## What we did`:
+Shelf files land in the project tree, not in the vault, so adjudant's PostToolUse hook never sees them. Append the event to the session note's `## Log` yourself, in its line format:
 
 ```markdown
-## What we did — {HH:MM}
-
-- Generated iteration shelves for `{target_folder}`
-  - `_iterations.html` — {curated_count} items across {segments_with_curated} segments
-  - `_monster-index.html` — {total_items} items across {all_segments} segments
-- Manifest: `iteration-shelf.json` ({new | updated})
-- Cross-linked: `{curated}` ↔ `{monster}`
+- {HH:MM} · generated iteration shelves for `{target_folder}`: `_iterations.html` ({curated_count} items), `_monster-index.html` ({total_items} items); manifest `iteration-shelf.json` {new | updated}
 ```
 
-### 2.3 Decision logs
+One line per generation run. Do not log file reads or scans.
 
-Adding a **new tag slug** (beyond the nine shipped in `card-anatomy.md`) is a decision — not a cosmetic tweak. Log under `decisions/YYYY-MM-DD-shelf-tag-{slug}.md` with:
+### 2.2 Decision records
+
+Adding a **new tag slug** (beyond the nine shipped in `card-anatomy.md`) is a decision, not a cosmetic tweak. Record it with adjudant's decision schema at `projects/{slug}/decisions/{YYYY-MM-DD}-shelf-tag-{slug}.md`:
 
 ```markdown
 ---
 type: decision
+project: "[[projects/{slug}/brief|{slug}]]"
+status: active
 date: {YYYY-MM-DD}
-project: {project}
-tags: [iteration-shelf, tag-palette, decision]
+tags:
+  - decision
 ---
 
-# Added tag slug: `{slug}`
+## Decision
 
-## Why
-{reason the user gave}
+Added tag slug `{slug}` to the shelf tag palette. Colour `{hex}`.
 
-## Colour
-`{hex}` — lands between {existing slug} and {existing slug} on the palette.
+## Context
 
-## When to use
-{user's written criterion}
+{reason the user gave, plus the written criterion for when the tag applies}
 
-## CSS
+## Consequence
+
+Both shelves gain the tag CSS:
+
 \`\`\`css
 .tag.{slug} { color: {hex}; {optional modifiers}; }
 .iter__tag.{slug} { color: {hex}; {optional modifiers}; }
 \`\`\`
 ```
 
-This kicks a decision into the Chroniclers loop. Bostrol announces it:
+Filename and frontmatter follow adjudant's `vault-standards.md`; the body sections are always `## Decision` / `## Context` / `## Consequence`.
 
-```
-[Bostrol]: New tag slug `{slug}` logged as a decision.
-```
+### 2.3 Manifest provenance
 
-### 2.4 Manifest provenance
-
-The manifest (`iteration-shelf.json`) lives at the **project root**, not inside the vault. It is vault-adjacent, not vault-interior — the vault holds session notes and decisions, the project holds generated artefacts.
+The manifest (`iteration-shelf.json`) lives at the **project root**, not inside the vault. It is vault-adjacent, not vault-interior: the vault holds session notes and decisions, the project holds generated artefacts.
 
 If the user asks "where does the manifest live?", the answer is always the project root.
 
-### 2.5 Vault-less mode
+### 2.4 Vault-less mode
 
-If the Cabinet is active but no vault is connected, operate silently:
+If adjudant is not installed, or is installed but the project has no linked vault:
 
-- Still prefix chat lines with `[Bostrol]:`.
-- Skip session-note appends (no file to write to).
-- Skip decision logs (same).
-- Never prompt the user to set up a vault — that's outside the shelf's remit.
+- Skip the session-log append (no note to write to).
+- Skip decision records (same).
+- Never prompt the user to set up a vault: that is adjudant's remit, not the shelf's.
 
-### 2.6 Auto-log skeleton
+### 2.5 Cabinet flavour (optional)
 
-When both the Cabinet and a vault are active, append this to the chatter log at the end of each shelf generation:
+The Cabinet of IMD (v3.0.0+) is a character-only flavour layer: no vault writes, no chatter log, no session anchors. If it is active, Bostrol may narrate shelf generation events in chat:
 
-```markdown
-## Iteration shelf operation — {HH:MM}
-
-- Target: `{target_folder}`
-- Segments: {n_segments}
-- Items: {n_items}
-- Loaded files: `{curated_filename}`, `{monster_filename}`
-- New tags added: {list or "none"}
-- See: [[iteration-shelf.json]] for manifest
+```
+[Bostrol]: Emitting _monster-index.html · 12 segments · 132 items.
+[Bostrol]: Emitted. Cross-linked to _iterations.html. Done.
 ```
 
-The `[[iteration-shelf.json]]` Obsidian link only resolves if the manifest is symlinked into the vault. If not, leave the line as-is — the broken link is a visible reminder to the user to decide where provenance lives.
+Narration only, and only the generation events, not every file read. Cabinet writes no files; persistence stays with adjudant.
 
 ---
 
 ## 3. Standalone mode
 
-No Superpowers, no Cabinet, no vault. The skill runs fine:
+No standalone skills, no adjudant, no vault. The skill runs fine:
 
 - No `[Bostrol]:` prefixes in chat.
 - No session notes or decision logs written.
@@ -174,9 +150,9 @@ If two plugins each have an opinion on an operation the shelf is performing:
 |---|---|
 | User's direct instruction | 1 (always wins) |
 | `iteration-shelf` skill rules (this plugin) | 2 |
-| Superpowers `full-output-enforcement` | 3 (never conflicts; reinforces 2) |
-| Superpowers `design-taste-frontend` / aesthetic skills | 4 (applies to iterations, not chrome) |
-| Cabinet specialist preferences | 5 (Bostrol is the only active specialist here) |
+| `full-output-enforcement` (standalone) | 3 (never conflicts; reinforces 2) |
+| `design-taste-frontend` / aesthetic skills (standalone) | 4 (applies to iterations, not chrome) |
+| Cabinet narration flavour | 5 (chat voice only; never touches files) |
 
 In practice, conflicts are rare — the shelf owns its chrome; aesthetic skills own their iterations; the Cabinet just narrates.
 
@@ -184,16 +160,16 @@ In practice, conflicts are rare — the shelf owns its chrome; aesthetic skills 
 
 ## 5. Multi-plugin examples
 
-### All three active (Superpowers + Cabinet + vault)
+### Everything active (standalone skills + adjudant vault + Cabinet flavour)
 
 ```
 [Bostrol]: Reading iteration-shelf.json — project dutchbc-portal, 12 segments.
 [Bostrol]: Writing _monster-index.html — full output, no placeholders.
 {… generation …}
-[Bostrol]: Emitted. 132 cards wired. Logged to vault chatter and manifest updated.
+[Bostrol]: Emitted. 132 cards wired. Session note appended via adjudant; manifest updated.
 ```
 
-### Superpowers only, no Cabinet
+### Standalone skills only, no adjudant
 
 ```
 I'll generate both shelves from iteration-shelf.json. Following full-output-enforcement

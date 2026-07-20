@@ -68,7 +68,7 @@ The filename is **always** `iteration-shelf.json`. Do not use `shelf.json`, `ite
 
 | Field | Type | Required | Purpose |
 |---|---|---|---|
-| `project` | string | yes | Slug used in session notes / cabinet vault paths |
+| `project` | string | yes | Slug used in session notes / adjudant vault paths |
 | `title` | string | yes | Rendered in `<title>` and `<h1>` of both shelves |
 | `date` | string (YYYY-MM-DD) | yes | Shown in the shelf header, also used for session logging |
 | `target_folder` | string | yes | Relative path from the manifest to the iteration folder |
@@ -79,7 +79,7 @@ The filename is **always** `iteration-shelf.json`. Do not use `shelf.json`, `ite
 | `notes` | array of note objects | no | Top-of-page banners (see § 5) |
 | `segments` | array of segment objects | yes | At least one |
 
-`project` **must not** contain spaces or slashes. Use the same kebab-case slug you'd use for a git branch or folder name. Cabinet vault paths are derived directly from this.
+`project` **must not** contain spaces or slashes. Use the same kebab-case slug you'd use for a git branch or folder name. Adjudant vault paths (`projects/{slug}/…`) are derived directly from this.
 
 `date` is the shelf's canonical date, not "today". When re-generating a shelf, keep the original date unless the user asks for a re-stamp — the date is a reviewer's bookmark.
 

@@ -2,7 +2,6 @@
 
 Terminal-aesthetic review boards for in-browser design iteration. Generates two self-contained HTML files from a simple JSON manifest — a **curated shelf** for shortlisted work, and a **monster index** that safely previews every HTML artefact in a folder without frying the browser.
 
-**Version:** 0.1.0
 **Invocation:** explicit only (`/iteration-shelf` or when the user explicitly asks for one)
 
 ---
@@ -111,20 +110,22 @@ Full interaction reference: [`references/interaction-model.md`](references/inter
 
 ## Integration
 
-### With Superpowers
+### With the standalone skills
+
+These are user-level skills, installed separately (not part of any skill pack). Any of them may be absent; the shelf enforces its deliverable rules regardless.
 
 - **`full-output-enforcement`** — mandatory. Every shelf emits complete output, no placeholders, no skeletons.
 - **`design-taste-frontend`** — suppressed for the shelf chrome, free to use on the iterations themselves.
 - **`high-end-visual-design`** — explicitly suppressed for the shelf. The terminal aesthetic is deliberate.
 - **`redesign-existing-projects`** — if the target folder already has an index file, follow that skill's audit-first pattern before overwriting.
 
-### With the Cabinet plugin
+### With adjudant
 
-When the Cabinet is active, **Bostrol** owns shelf operations. Generations are announced as one-line Bostrol lines. The operation is session-noted under `## What we did`. New tag slugs are logged as decisions under `decisions/YYYY-MM-DD-shelf-tag-{slug}.md`. Without a vault connection, operates silently.
+When adjudant is active and a vault is linked, adjudant is the persistence layer. Shelf generation is appended as one line to the day's session note (`projects/{slug}/sessions/{YYYY-MM-DD}.md`). New tag slugs are recorded as decisions under `projects/{slug}/decisions/{YYYY-MM-DD}-shelf-tag-{slug}.md`, using adjudant's decision schema. Without adjudant or a vault, nothing is written. The Cabinet of IMD, if active, adds chat narration only (Bostrol lines); it writes no files.
 
 ### Standalone
 
-No Superpowers, no Cabinet, no vault. Works fine. Plain HTML out.
+No standalone skills, no adjudant, no vault. Works fine. Plain HTML out.
 
 Full matrix: [`references/integration.md`](references/integration.md)
 

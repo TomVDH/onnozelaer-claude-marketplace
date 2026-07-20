@@ -6,12 +6,12 @@ description: >
   hand-picked iterations, and a monster index (_monster-index.html) for
   reviewing every HTML artefact in a folder without frying the browser.
   EXPLICIT INVOCATION ONLY — never auto-suggested. Trigger only when the
-  user types /iteration-shelf or explicitly asks for "a shelf", "iteration
-  index", "monster index", "review board", or "reviewer console". Pairs
-  with Superpowers (full-output-enforcement, design-taste-frontend) and
-  the Cabinet plugin (Bostrol owns shelf operations when cabinet is active).
+  user types /iteration-shelf or explicitly asks for an "iteration shelf",
+  "iteration index", "monster index", "review board", or "reviewer console".
+  Plugs into the standalone full-output-enforcement and design-taste-frontend
+  skills when installed; persistence goes through the adjudant plugin.
 allowed-tools: Read, Write, Edit, Glob, Grep, Bash
-version: 0.1.0
+version: 0.1.1
 ---
 
 # Iteration Shelf
@@ -25,7 +25,7 @@ Generate one or both terminal-aesthetic review boards for a project's in-browser
 **Explicit only.** Do not auto-suggest this skill. It fires only when the user:
 
 - Types `/iteration-shelf` (direct command)
-- Asks for "a shelf", "an iteration shelf", "iteration index", "monster index", "review board", or "reviewer console"
+- Asks for "an iteration shelf", "iteration index", "monster index", "review board", or "reviewer console"
 - Explicitly names a folder of HTML iterations that need review UI
 
 If the user mentions "review my iterations" in a general way without naming the pattern, ask once whether they want a shelf — do not assume.
@@ -75,7 +75,7 @@ At invocation, read these **all** from `${CLAUDE_PLUGIN_ROOT}/references/`:
 - `card-anatomy.md` — card HTML schema and tag palette
 - `interaction-model.md` — loading, keyboard, sidebar, warn-gate, safety rules
 - `manifest-schema.md` — JSON manifest spec and field reference
-- `integration.md` — Superpowers and Cabinet integration notes
+- `integration.md` — standalone-skill and adjudant integration notes
 
 Read the templates too:
 
@@ -134,7 +134,7 @@ Before writing, check if the output file already exists:
 
 ## Deliverable Rules
 
-**The two shelves are production artefacts, not drafts.** Follow the Superpowers `full-output-enforcement` skill (if available) — no placeholder comments, no skeletons, no "rest follows the same pattern." Every segment, every card, every event binding must ship in full.
+**The two shelves are production artefacts, not drafts.** Follow the standalone `full-output-enforcement` skill (if installed) — no placeholder comments, no skeletons, no "rest follows the same pattern." Every segment, every card, every event binding must ship in full.
 
 Specific anti-patterns that are forbidden in the emitted HTML:
 
@@ -179,7 +179,9 @@ When invoked for a project that has never had a shelf:
 
 ## Integration
 
-### With Superpowers
+### With the standalone skills
+
+These are user-level skills, installed separately; any of them may be absent. If `full-output-enforcement` is missing, enforce its rules anyway per the Deliverable Rules above.
 
 - **`full-output-enforcement`** — mandatory. Emit complete shelves, never placeholder stubs. If the user has this skill installed, follow it explicitly.
 - **`design-taste-frontend`** — the tokens in `design-tokens.md` override that skill's defaults **inside the shelf chrome only**. The indexed concepts are not constrained by either.
@@ -188,17 +190,16 @@ When invoked for a project that has never had a shelf:
 
 See `${CLAUDE_PLUGIN_ROOT}/references/integration.md` for the full matrix.
 
-### With Cabinet plugin
+### With adjudant
 
-When the Cabinet is active, **Bostrol** owns shelf operations.
+When adjudant is active and the project is linked to a vault, adjudant is the persistence layer.
 
-- Announce each generation with one short Bostrol line, e.g.
-  `[Bostrol]: Emitting _monster-index.html · 12 segments · 130 items.`
-- Writing a shelf is a **session-notable event** — append to the chatter under `## What we did`.
-- Adding new tag slugs or changing the tag palette is a **decision** — log under `decisions/YYYY-MM-DD-shelf-tag-{slug}.md`.
-- If no vault is connected, operate standalone. No prompts, no nudges — the shelf is the deliverable.
+- Writing a shelf is a **session-notable event**: append one line to the day's session note (`projects/{slug}/sessions/{YYYY-MM-DD}.md`, under `## Log`).
+- Adding new tag slugs or changing the tag palette is a **decision**: record it with adjudant's decision schema under `projects/{slug}/decisions/{YYYY-MM-DD}-shelf-tag-{slug}.md`.
+- If adjudant is absent or no vault is linked, operate standalone. No prompts, no nudges: the shelf is the deliverable.
+- Cabinet flavour is optional and chat-only. If the Cabinet of IMD is active, Bostrol may narrate generation events, e.g. `[Bostrol]: Emitting _monster-index.html · 12 segments · 130 items.` Cabinet writes no files.
 
-See `${CLAUDE_PLUGIN_ROOT}/references/integration.md § Cabinet` for the full auto-log skeleton.
+See `${CLAUDE_PLUGIN_ROOT}/references/integration.md § Adjudant plugin` for the exact log line and decision skeleton.
 
 ### Standalone
 
@@ -239,7 +240,7 @@ See `manifest-schema.md` for how `layout` is declared.
 | Card HTML schema, tag palette | `card-anatomy.md` | Yes |
 | Keyboard, sidebar, segment controls | `interaction-model.md` | Yes |
 | JSON manifest spec | `manifest-schema.md` | Yes |
-| Superpowers / Cabinet hookup | `integration.md` | Yes |
+| Standalone skills / adjudant hookup | `integration.md` | Yes |
 | Curated reference HTML | `templates/curated-shelf.html` | Yes |
 | Monster reference HTML | `templates/monster-index.html` | Yes |
 | Sample manifest | `examples/iteration-shelf.json` | On demand |

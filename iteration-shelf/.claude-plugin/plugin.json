@@ -1,7 +1,7 @@
 {
   "name": "iteration-shelf",
-  "version": "0.1.0",
-  "description": "Terminal-aesthetic review boards for in-browser design iteration — curated shelves and monster indexes of HTML artefacts. Explicit invocation only. Pairs with the Superpowers and Cabinet plugins.",
+  "version": "0.1.1",
+  "description": "Terminal-aesthetic review boards for in-browser design iteration: curated shelves and monster indexes of HTML artefacts. Explicit invocation only. Plugs into standalone design skills when installed; persistence via the adjudant plugin, with optional Cabinet voice flavour.",
   "author": {
     "name": "Onnozelaer"
   },

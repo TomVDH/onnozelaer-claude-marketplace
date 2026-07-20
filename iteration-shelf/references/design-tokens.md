@@ -53,7 +53,7 @@ The reference templates inline these directly in selectors (for compactness) rat
 
 Never introduce variable-width fonts. Never introduce italic *for emphasis* — the single use-case is the card quote line.
 
-Weight scale is binary: `400` (body) and `700` (labels/headers). Do not use `500`, `600`, or any weight between.
+Weight scale: `400` (body) and `700` (headers, labels, emphasis tag variants like `star` / `locked` / `og-true`). Two intermediate weights are sanctioned, only where the shipped templates use them: `600` on the small ID chips (`.iter__id`, `.card .id`; the curated header row also ships at `600`) and `500` on the small tag chips and counters (`.iter__tag`, `.global b`, `.counter`, `.note-banner`). Do not use intermediate weights anywhere else, and do not promote them to body or heading roles.
 
 ---
 
