@@ -329,8 +329,11 @@ done
 
 Dry-run mode may also be offered as a toggle on the summary screen (a
 boolean-toggle picker item), letting the user flip it interactively before
-confirming. See the export summary screen pattern in `_export-helpers.sh` for
-reference.
+confirming. The pattern: after selection, the tool draws a summary screen
+listing what will run (item count, destination, active flags) and includes a
+boolean-toggle row (`›› ● Export live` / `›  ○ Dry run only`) among the items.
+Toggling flips `DRY_RUN` in place and redraws the screen; confirming proceeds
+with whatever state the toggle currently shows.
 
 *seen in the wild: dry-run offered both as a CLI flag and as a toggle in the
 export summary screen; the toggle updates `DRY_RUN` before the write phase*

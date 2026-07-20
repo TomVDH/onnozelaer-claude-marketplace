@@ -23,6 +23,16 @@ read-and-report tools, not interactive TUI applications.
 - Any logic involving string manipulation, date parsing, or arithmetic
 - Scripts whose output will be consumed by other tools (piped, JSON mode)
 
+## Scope: human-facing helpers
+
+The operating language covers helpers a person reads: tables, section headers,
+emoji markers, truncated cells. Agent-facing JSON emitters, meaning tools whose
+output is parsed by an agent rather than read by a human (e.g. the
+`adjudant/scripts` helpers in this marketplace), are a different genre with
+different rules and are intentionally out of scope. A `--json` flag on a
+human-facing helper is fine; a tool that only ever speaks JSON to another
+program is not this skill's territory.
+
 ## Reference
 
 Load these references before writing any Python helper script:

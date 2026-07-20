@@ -118,9 +118,10 @@ Medium only when the animation itself is the point (splash, first-run ceremony).
 New visual patterns enter the language through a four-stage cycle observed in
 the gen1 gallery:
 
-1. **Prototype** — build the candidate component in `demo-ui/sections/<thing>.sh`.
+1. **Prototype** — build the candidate component as a standalone demo script in
+   the project's `demos/` directory (see `architecture.md` → Project Structure).
    Keep it isolated; do not wire it into any live tool yet.
-2. **Preview** — add a picker entry in `pickers/picker-<thing>.sh` so the variant
+2. **Preview** — add a picker script, `demos/picker-<thing>.sh`, so the variant
    can be compared against the existing language at a glance. Run the picker.
 3. **Promote** — if exactly one variant earns its place, copy it into
    `references/components.md` as the canonical implementation. Update this file
