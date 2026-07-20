@@ -1,6 +1,6 @@
 {
   "name": "onnozelaer-claude-marketplace",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Personally created Claude Code plugins by Onnozelaer.",
   "owner": {
     "name": "Onnozelaer"
@@ -16,7 +16,7 @@
       "name": "iteration-shelf",
       "version": "0.1.1",
       "source": "./iteration-shelf",
-      "description": "Terminal-aesthetic review boards for in-browser design iteration. Generates a curated shelf and a monster index from a JSON manifest — self-contained HTML, zero build step, on-demand iframe loading, sidebar outliner, and a warn-gate that keeps the browser from stalling on 100+ iterations. Explicit invocation only. Integrates with Superpowers and the Cabinet plugin."
+      "description": "Terminal-aesthetic review boards for in-browser design iteration. Generates a curated shelf and a monster index from a JSON manifest — self-contained HTML, zero build step, on-demand iframe loading, sidebar outliner, and a warn-gate that keeps the browser from stalling on 100+ iterations. Explicit invocation only. Plugs into standalone design skills when installed; persistence via the adjudant plugin, with optional Cabinet voice flavour."
     },
     {
       "name": "cli-wrapper-helper",
@@ -28,7 +28,7 @@
       "name": "gemineye",
       "version": "0.6.0",
       "source": "./gemineye",
-      "description": "A sandboxed second opinion from a Gemini-family model via the Antigravity CLI (agy) — review-only. Eight subcommands: review, megareview, wip, sanity, name, compare, save, harvest. The reviewer is read-trusted to the project root (--add-dir) and write-sandboxed (--sandbox); it proposes edits as code blocks, Claude applies them. v0.5.0 migrates the backend off the deprecated gemini CLI (sunset 2026-06-18 for AI Pro/Ultra and free users) to agy, via a dual-CLI adapter that prefers agy and keeps a temporary gemini fallback; a follow-up release will drop gemini entirely. agy exposes no per-call model flag, so the plugin pins no model IDs. Also clears drift: removes the dead cabinet-of-imd/Bostrol coupling, retires the non-existent --file flag, and corrects the stale claim that adjudant auto-harvests at PreCompact (false since adjudant v0.7.0). Pairs with adjudant for vault context."
+      "description": "A review-only, sandboxed second opinion from a Gemini-family model via the Antigravity CLI (agy). Eight subcommands (review, megareview, wip, sanity, name, compare, save, harvest) with pinned Gemini models so the answer never silently comes from another model family; the reviewer is read-trusted to the project root, write-sandboxed, and proposes edits as code blocks that Claude applies. Pairs with adjudant for vault context and persisted reviews."
     },
     {
       "name": "adjudant",

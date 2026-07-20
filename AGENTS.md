@@ -13,7 +13,10 @@
 ├── cli-wrapper-helper/      # Operating language for agent-built helper CLIs (bash TUI + python helper)
 ├── gemineye/                # Sandboxed Gemini second opinion via the agy CLI
 ├── iteration-shelf/         # Terminal-aesthetic in-browser design review boards
-├── docs/                    # cross-plugin documentation
+├── docs/                    # historical design docs, plans, and specs; archived material under docs/archive/
+├── scripts/                 # repo-root tooling: bump_plugin_version.py, check_marketplace_versions.py + tests
+├── .github/workflows/       # validate.yml: CI rerun of the local validators on push/PR
+├── .gitignore               # ignores session-local .claude/ state and .superpowers/ working dirs
 ├── .pre-commit-config.yaml  # validators that fail the build on drift
 ├── README.md
 └── AGENTS.md / CLAUDE.md    # this file + Claude overrides
@@ -92,16 +95,15 @@ Always `git pull --ff-only` before starting work; the other machine is often ahe
 Conventional Commits style. Match existing history:
 
 ```
-feat(adjudant): add /adjudant connect rigid init
-fix(obsidian-bridge): v1.2.1 — stop waking Obsidian on every session
-refactor(cabinet-of-imd): v2.3.0 — extract vault-bridge and dream to obsidian-bridge
-release(obsidian-bridge): v1.1.0 — relations: schema extension on briefs
-chore(marketplace): bump obsidian-bridge to 1.0.0 in marketplace.json registry
-docs(obsidian-bridge): migration guide — old vault-bridge surface → new 7 verbs
+feat(adjudant): shelf verb #11 wired into command-metadata, SKILL router, reference, parity surfaces
+fix(gemineye): stop pinning model IDs the agy backend rejects
+release(iteration-shelf): v0.1.1 - integration truth pass: adjudant persistence, standalone-skill attribution
+chore(marketplace): bump adjudant to 0.14.0 in marketplace.json registry
+docs(adjudant): migration guide from the retired obsidian-bridge verbs to /adjudant
 ```
 
 - Scope is the plugin name (or `marketplace` for cross-plugin manifest changes).
-- Version bumps use `release(<plugin>): vX.Y.Z — <summary>`.
+- Version bumps use `release(<plugin>): vX.Y.Z - <summary>`.
 
 ## Naming
 
@@ -112,5 +114,5 @@ docs(obsidian-bridge): migration guide — old vault-bridge surface → new 7 ve
 ## What this repo does NOT contain
 
 - No PR / branch workflow — work is pushed directly to `main` from either machine.
-- No CI — validation is local (pre-commit). GitHub Action could be added later as belt-and-suspenders.
+- No CI beyond a thin GitHub Action (`.github/workflows/validate.yml`) that reruns the local validators on push and PR; pre-commit remains the primary gate.
 - No publish step beyond `git push origin main`. Claude Code's marketplace install pulls directly from the git remote.
