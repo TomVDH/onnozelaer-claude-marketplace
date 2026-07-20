@@ -44,7 +44,7 @@ except Exception:
   fi
 
   # Vault-y keywords → fire reminder
-  if printf '%s' "$prompt" | grep -qiE '\b(vault|decision|brief|handoff|obsidian|cabinet|note this|document this|put in vault|record this)\b'; then
+  if printf '%s' "$prompt" | grep -qiE '\b(vault|decision|brief|handoff|obsidian|note this|document this|put in vault|record this)\b'; then
     # brace group: silence stderr BEFORE the > open (unwritable TMPDIR)
     if [ -n "$marker" ]; then { : > "$marker"; } 2>/dev/null || true; fi
     printf '[adjudant] Vault not linked for this project. Run `/adjudant connect` to capture this work in the vault.\n'

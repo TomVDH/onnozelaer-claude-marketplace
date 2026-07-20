@@ -93,7 +93,7 @@ Invoke `superpowers:writing-plans` to produce a concrete content-refresh plan, a
 - Stale refs to repoint or remove
 - Plus any mechanical fixes spun off to `tidy`
 
-Plan written under `iterations/{YYYY-MM-DD}-iter-{id}-dream/` per the iteration-shelf convention.
+Plan written under `iterations/{YYYY-MM-DD}-iter-{id}-dream/` per the adjudant iteration-folder convention.
 
 ## Phase 4 — Human review
 

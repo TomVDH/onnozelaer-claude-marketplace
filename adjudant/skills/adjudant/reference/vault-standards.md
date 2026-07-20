@@ -120,7 +120,7 @@ See `templates/*.md` for the canonical frontmatter shape of every file type. Val
 | `doc` | `doc.md` | purpose sentence + `## {Section}` |
 | `handoff` | `handoff.md` | sync-managed body |
 | `source` | `source.md` | `## Key Points` / `## Notes` / `## Relevance` |
-| `iteration` | `iteration.md` (folder index) | a **folder** of build artefacts (HTML tryouts, experiments, superpowers); the optional `_iteration.md` is its index/manifest, read by `iteration-shelf` |
+| `iteration` | `iteration.md` (folder index) | a **folder** of build artefacts (HTML tryouts, experiments, superpowers); the optional `_iteration.md` is a human-facing index of the folder's contents |
 | `release` | `release.md` | `## Changes` |
 | `dream-report` | `dream-report.md` | auto-populated by `/adjudant dream` |
 | `index` | `_index-projects.md` or `_index-collection.md` | table or list |

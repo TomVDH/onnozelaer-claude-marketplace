@@ -66,7 +66,7 @@ Invoke `superpowers:writing-plans` to produce a concrete restructure plan:
 - Broken-wikilink resolutions (per link: repoint to X, archive, or delete)
 - Plus all the mechanical fixes (delegated to tidy)
 
-Plan written under `iterations/{YYYY-MM-DD}-iter-{id}-ramasse/` per the iteration-shelf convention.
+Plan written under `iterations/{YYYY-MM-DD}-iter-{id}-ramasse/` per the adjudant iteration-folder convention.
 
 ## Phase 4 — Human review
 
