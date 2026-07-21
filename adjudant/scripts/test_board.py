@@ -106,6 +106,52 @@ class TestCardsFromTasks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(cards_from_tasks(Path(tmp)), [])
 
+    def test_template_guidance_comments_do_not_poison_card(self):
+        # A task note pasted verbatim from a template that carried inline
+        # guidance comments on QUOTED value lines: the minimal YAML parser
+        # keeps quotes and comment as the raw value, so the card builder must
+        # re-clean the scalar before it becomes a card field (id above all).
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "tasks" / "ship-it.md",
+                "---\n"
+                "type: task\n"
+                'status: "doing"  # todo | doing | review | blocked | done | icebox\n'
+                'category: ""     # optional: board colour group (build, docs, infra, chore, ...)\n'
+                'code: ""         # optional: short card id cross-linking specs, handoffs, commits\n'
+                'note: ""         # optional: one-line board annotation\n'
+                "---\n\n# Ship it\n",
+            )
+            card = cards_from_tasks(root)[0]
+            self.assertEqual(card["id"], "ship-it")      # empty code cleans to the stem
+            self.assertEqual(card["column"], "doing")    # quoted status still maps
+            self.assertEqual(card["category"], "task")   # empty category falls back
+            self.assertEqual(card["notes"], "")
+
+    def test_populated_quoted_value_with_trailing_comment_is_cleaned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "tasks" / "x.md",
+                '---\ncode: "X-01"  # short card id\nstatus: doing\n---\n# X\n',
+            )
+            card = cards_from_tasks(root)[0]
+            self.assertEqual(card["id"], "X-01")
+            self.assertEqual(card["column"], "doing")
+
+    def test_hash_inside_quoted_value_survives(self):
+        # A quoted value containing # prose (no trailing comment) must pass
+        # through untouched: only the quoted-then-comment shape is re-cleaned.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(
+                root / "tasks" / "y.md",
+                '---\nnote: "see PR #42"\nstatus: todo\n---\n# Y\n',
+            )
+            card = cards_from_tasks(root)[0]
+            self.assertEqual(card["notes"], "see PR #42")
+
     def test_skips_type_tasks_roadmap_file(self):
         # a `type: tasks` roadmap/index file must NOT become a card (the
         # real-vault oz-floer shape) — only per-card task notes do.

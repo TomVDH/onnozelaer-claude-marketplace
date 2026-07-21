@@ -17,11 +17,11 @@ Vault editor/writer and project initializer for Claude Code (and Gemini CLI). Su
 | Command | `/adjudant {verb}` |
 | Verbs | `connect`, `port`, `sync`, `check`, `sitrep`, `tidy`, `ramasse`, `dream`, `draw`, `board`, `shelf` |
 | Skill | one (`adjudant`) — verbs dispatch internally via reference files |
-| Hooks | five (SessionStart, UserPromptSubmit, PostToolUse, PreCompact, SessionEnd) |
-| Templates | 19 file-type scaffolds + `board.html` (self-hosted kanban) |
-| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` · `_cost.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
-| Drift defense | `python3 scripts/validate.py` — 24 validators, runs via pre-commit |
-| Tests | 591 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
+| Hooks | nine entries across eight events (SessionStart, UserPromptSubmit, PostToolUse Write\|Edit + Bash, PreCompact, PostCompact, TaskCreated, TaskCompleted, SessionEnd) |
+| Templates | 20 file-type scaffolds + `board.html` (self-hosted kanban) |
+| Python helpers | `_vault_walk.py` · `_handoff_freshness.py` · `_session_stamp.py` · `_cost.py` (primitives), `connect.py`, `port.py`, `sync.py`, `tidy.py`, `ramasse_scan.py`, `dream.py`, `board.py`, `board_bridge.py`, `graph.py`, `check.py`, `sitrep.py`, `shelf.py`; repo target: `repo_walk.py`, `repo_scan.py`, `repo_tidy.py` |
+| Drift defense | `python3 scripts/validate.py`: 27 validators, runs via pre-commit |
+| Tests | 681 unit tests; `python3 -m unittest discover -p 'test_*.py'` |
 
 ## The three-tier cleanup model (locked 2026-05-26)
 
@@ -63,17 +63,30 @@ All helpers follow the breadcrumb: pass `--project-dir` (connect/port also accep
 
 `skills/adjudant/reference/vault-standards.md` is the authoritative spec for tag taxonomy, frontmatter, folder structure, file-naming, and wikilink form. All vault writes conform.
 
+## Ambient board
+
+The kanban board maintains itself. It is born on the first real `tasks/*.md` note
+(projects that never grow tasks never grow board files), reseeded when tasks
+change (a Write or Edit under `tasks/`, and again at session end), and surfaced
+without being asked: a SessionStart status line, a `check` board section, a
+`sitrep` board line. Harness tasks left incomplete at session end are bridged
+into `tasks/` notes by `board_bridge.py`, deduped by slug; reseeds never clobber
+dragged cards or custom columns.
+
 ## Hooks
 
-All five hooks are vault-aware:
+Nine hook entries across eight events, all vault-aware:
 
 | Event | Script | Purpose |
 |---|---|---|
-| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume); no resumed marker on `compact`/`clear` sources; nudges the model to replace the intent placeholder until it's filled |
+| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume); no resumed marker on `compact`/`clear` sources; nudges the model to replace the intent placeholder until it's filled; renders a board status line when a board exists, plus a suitcase pointer on `startup` when `suitcase-brief` is on PATH |
 | UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords (at most once per session) |
-| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`) |
+| PostToolUse (Write\|Edit) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`); matcher widened to `Write\|Edit` so a task-note change under `tasks/` nudges the board via `board_bridge.py --ensure-only` (log + stamp jobs stay Write-only) |
+| PostToolUse (Bash) | `hooks/scripts/posttooluse-commit-log.py` | Self-gated commit logging (async; the `if: Bash(git commit *)` filter is defense in depth): append `- HH:MM · commit: {subject}` to today's session log; on `release(<plugin>): vX.Y.Z` subjects also scaffold `releases/v{X.Y.Z}.md` + an index row, never overwriting an existing note |
 | PreCompact | `hooks/scripts/precompact.py` | Mechanical, no model calls (5s budget): append enriched pause tombstone with a `next:` pointer + mirror handoff with a freshness header (traffic light · age · NEXT · stale flag); a blank `.remember` source is never mirrored over a populated handoff |
-| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker only when something was logged since the last hook marker + sync handoff to vault |
+| PostCompact | `hooks/scripts/postcompact.py` | Append `- HH:MM · compacted: {gist}` (single line, first 160 chars of the compaction summary) to today's session log; an empty or missing summary writes nothing |
+| TaskCreated / TaskCompleted | `hooks/scripts/task-ledger.py` | One script wired to both events (async): append one JSONL entry per event to the TMPDIR session task ledger; zero vault writes in-session, the SessionEnd bridge replays survivors |
+| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker only when something was logged since the last hook marker + sync handoff to vault; then bridge ledger survivors into `tasks/` notes and birth/reseed the board via `board_bridge.py` |
 
 Universal drift-defense (git safety, voice checks, etc.) lives in `hookify` — not here.
 

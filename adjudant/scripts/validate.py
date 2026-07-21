@@ -27,10 +27,16 @@ Validators:
  21. repo-tidy-backup-integrity   — repo-tidy backup subdirs with files carry at least one .legacy
  22. gitignore-includes-repo-tidy-dirs — .gitignore lists the repo-tidy dirs if either exists
  23. status-vocabulary            — _vault_walk constants, vault-standards, and brief templates all agree on the six-state vocabulary
- 24. voice-lexicon                : no banned/glazing terms in templates/, SKILL.md, reference/ (voice.md excepted); no em dashes in templates/
+ 24. voice-lexicon                : no banned/glazing/shape terms in templates/, SKILL.md, reference/ (voice.md excepted); no em dashes in templates/
+ 25. board-template-markers       : templates/board.html exists, both BOARD_DATA markers present, seeded JSON between them parses
+ 26. task-status-vocabulary       : every board.py STATUS_TO_COLUMN alias is documented in the vault-standards status alias table
+ 27. hooks-wiring                 : every hooks.json command resolves to an existing executable file under hooks/scripts/
+
+27 validators total.
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -59,6 +65,7 @@ FILE_TYPES_REQUIRING_TEMPLATE = {
     "iteration": "iteration.md",
     "release": "release.md",
     "dream-report": "dream-report.md",
+    "task": "task.md",
     # project has 4 variants
     "project": [
         "project-brief-coding.md",
@@ -696,27 +703,28 @@ def validate_status_vocabulary(r: Result) -> None:
 VOICE_MD = REFERENCE / "voice.md"
 
 
-def _parse_voice_lists() -> tuple[list[str], list[str]]:
-    """(banned_lexicon, glazing) bullets parsed from reference/voice.md.
-    A trailing parenthetical on a bullet is a note, stripped before matching."""
-    banned: list[str] = []
-    glazing: list[str] = []
+def _parse_voice_lists() -> tuple[list[str], list[str], list[str]]:
+    """(banned_lexicon, glazing, shape_phrases) bullets parsed from
+    reference/voice.md. A trailing parenthetical on a bullet is a note,
+    stripped before matching."""
+    lists: dict[str, list[str]] = {"banned": [], "glazing": [], "shape": []}
     current = None
     for line in VOICE_MD.read_text().splitlines():
         if line.startswith("## "):
             h = line[3:].strip().lower()
             current = ("banned" if h.startswith("banned lexicon")
-                       else "glazing" if h.startswith("glazing") else None)
+                       else "glazing" if h.startswith("glazing")
+                       else "shape" if h.startswith("shape phrases") else None)
             continue
         m = re.match(r"^-\s+(.+)$", line.strip())
         if m and current:
             term = re.sub(r"\s*\([^)]*\)\s*$", "", m.group(1).strip())
-            (banned if current == "banned" else glazing).append(term)
-    return banned, glazing
+            lists[current].append(term)
+    return lists["banned"], lists["glazing"], lists["shape"]
 
 
 def validate_voice_lexicon(r: Result) -> None:
-    """24. voice-lexicon: no banned/glazing terms in templates/, SKILL.md,
+    """24. voice-lexicon: no banned/glazing/shape terms in templates/, SKILL.md,
     reference/ (voice.md excepted); no em dashes in templates/.
 
     Fenced blocks and inline code spans are exempt from the lexicon scan:
@@ -726,15 +734,15 @@ def validate_voice_lexicon(r: Result) -> None:
     if not VOICE_MD.is_file():
         r.add_fail(name, "reference/voice.md missing")
         return
-    banned, glazing = _parse_voice_lists()
-    if not banned or not glazing:
+    banned, glazing, shape = _parse_voice_lists()
+    if not banned or not glazing or not shape:
         r.add_fail(name, "voice.md lists are empty")
         return
     surfaces = ([CANONICAL / "SKILL.md"]
                 + sorted(TEMPLATES.glob("*.md"))
                 + [p for p in sorted(REFERENCE.glob("*.md")) if p.name != "voice.md"])
     patterns = [(t, re.compile(r"(?<![\w-])" + re.escape(t) + r"(?![\w-])", re.IGNORECASE))
-                for t in banned + glazing]
+                for t in banned + glazing + shape]
     hits: list[str] = []
     for f in surfaces:
         text = _strip_fences_and_code(f.read_text())
@@ -750,6 +758,112 @@ def validate_voice_lexicon(r: Result) -> None:
         r.add_fail(name, shown + more)
     else:
         r.add_pass(name)
+
+
+BOARD_DATA_RE = re.compile(r"/\*BOARD_DATA_START\*/(.*?)/\*BOARD_DATA_END\*/", re.DOTALL)
+
+
+def validate_board_template_markers(r: Result) -> None:
+    """25. board-template-markers: templates/board.html exists, both BOARD_DATA
+    markers are present, and the seeded JSON between them parses. A markerless
+    or corrupt template makes every scaffold/reseed fail at hook time."""
+    name = "board-template-markers"
+    tpl = TEMPLATES / "board.html"
+    if not tpl.is_file():
+        r.add_fail(name, "templates/board.html missing")
+        return
+    m = BOARD_DATA_RE.search(tpl.read_text())
+    if not m:
+        r.add_fail(name, "BOARD_DATA_START/END markers missing from board.html")
+        return
+    try:
+        json.loads(m.group(1))
+    except json.JSONDecodeError as e:
+        r.add_fail(name, f"seeded JSON between BOARD_DATA markers does not parse: {e}")
+        return
+    r.add_pass(name)
+
+
+def _parse_status_alias_table(vs_text: str) -> set[str]:
+    """Backticked aliases from the first column of the vault-standards
+    `| Alias | Board column |` table. Empty set when the table is absent."""
+    aliases: set[str] = set()
+    lines = vs_text.splitlines()
+    for i, ln in enumerate(lines):
+        if re.match(r"^\|\s*Alias\s*\|\s*Board column\s*\|", ln, re.IGNORECASE):
+            for row in lines[i + 1:]:
+                if not row.strip().startswith("|"):
+                    break
+                first_cell = row.strip().strip("|").split("|")[0]
+                aliases.update(re.findall(r"`([^`]+)`", first_cell))
+            break
+    return aliases
+
+
+def validate_task_status_vocabulary(r: Result) -> None:
+    """26. task-status-vocabulary: every status alias board.py normalizes
+    (STATUS_TO_COLUMN keys) appears in the vault-standards alias table. An
+    alias the board accepts but the doc omits is undocumented schema."""
+    name = "task-status-vocabulary"
+    vs = REFERENCE / "vault-standards.md"
+    if not vs.is_file():
+        r.add_fail(name, "reference/vault-standards.md missing")
+        return
+    try:
+        from board import STATUS_TO_COLUMN
+    except Exception as e:
+        r.add_fail(name, f"could not import board.py: {e}")
+        return
+    documented = _parse_status_alias_table(vs.read_text())
+    if not documented:
+        r.add_fail(name, "no `| Alias | Board column |` table found in vault-standards.md")
+        return
+    undocumented = sorted(set(STATUS_TO_COLUMN) - documented)
+    if undocumented:
+        r.add_fail(name, f"board.py aliases missing from the vault-standards alias table: {undocumented}")
+        return
+    r.add_pass(name)
+
+
+PLUGIN_ROOT_PATH_RE = re.compile(r"\$\{CLAUDE_PLUGIN_ROOT\}(/[^\"'\s]+)")
+
+
+def validate_hooks_wiring(r: Result) -> None:
+    """27. hooks-wiring: every command in hooks/hooks.json resolves to an
+    existing executable file under hooks/scripts/ after ${CLAUDE_PLUGIN_ROOT}
+    substitution. Dead wiring cannot stay green."""
+    name = "hooks-wiring"
+    hooks_file = ROOT / "hooks" / "hooks.json"
+    if not hooks_file.is_file():
+        r.add_fail(name, "hooks/hooks.json missing")
+        return
+    try:
+        data = json.loads(hooks_file.read_text())
+    except json.JSONDecodeError as e:
+        r.add_fail(name, f"hooks.json invalid: {e}")
+        return
+    scripts_dir = (ROOT / "hooks" / "scripts").resolve()
+    problems: list[str] = []
+    for event, entries in (data.get("hooks") or {}).items():
+        for entry in entries or []:
+            for hook in entry.get("hooks") or []:
+                command = str(hook.get("command", ""))
+                m = PLUGIN_ROOT_PATH_RE.search(command)
+                if not m:
+                    problems.append(f"{event}: no ${{CLAUDE_PLUGIN_ROOT}} path in {command!r}")
+                    continue
+                script = (ROOT / m.group(1).lstrip("/")).resolve()
+                rel = f"{event}: {m.group(1)}"
+                if not script.is_file():
+                    problems.append(f"{rel} does not exist")
+                elif scripts_dir not in script.parents:
+                    problems.append(f"{rel} is not under hooks/scripts/")
+                elif not os.access(script, os.X_OK):
+                    problems.append(f"{rel} is not executable")
+    if problems:
+        r.add_fail(name, "; ".join(problems))
+        return
+    r.add_pass(name)
 
 
 def main() -> int:
@@ -779,6 +893,9 @@ def main() -> int:
     validate_gitignore_includes_repo_tidy_dirs(r)
     validate_status_vocabulary(r)
     validate_voice_lexicon(r)
+    validate_board_template_markers(r)
+    validate_task_status_vocabulary(r)
+    validate_hooks_wiring(r)
     return r.report()
 
 

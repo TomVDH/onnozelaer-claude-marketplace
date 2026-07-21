@@ -580,10 +580,19 @@ class TestStatusVocabulary(unittest.TestCase):
 class TestVoiceLexicon(unittest.TestCase):
 
     def test_parse_voice_lists(self):
-        banned, glazing = validate._parse_voice_lists()
+        banned, glazing, shape = validate._parse_voice_lists()
         self.assertIn("forward-thinking", banned)
         self.assertIn("leverage", banned)          # qualifier stripped
         self.assertIn("You're absolutely right", glazing)
+
+    def test_parse_voice_lists_includes_shape_phrases(self):
+        _banned, _glazing, shape = validate._parse_voice_lists()
+        self.assertIn("Hope this helps", shape)
+        self.assertIn("Let me know if", shape)
+        self.assertIn("Uh oh", shape)
+        self.assertIn("Happy to clarify", shape)
+        self.assertIn("Feel free to ask", shape)
+        self.assertIn("Great question", shape)
 
     def test_validator_passes_on_repo(self):
         r = validate.Result()
@@ -598,7 +607,8 @@ class TestVoiceLexicon(unittest.TestCase):
             canonical = plugin / "skills" / "adjudant"
             (canonical / "reference" / "voice.md").write_text(
                 "# Voice\n\n## Banned lexicon\n\n- seamless\n\n"
-                "## Glazing phrases\n\n- Great question\n"
+                "## Glazing phrases\n\n- Great question\n\n"
+                "## Shape phrases\n\n- Hope this helps\n"
             )
             orig = {k: getattr(validate, k)
                     for k in ("ROOT", "CANONICAL", "TEMPLATES", "REFERENCE", "VOICE_MD")}
@@ -618,9 +628,159 @@ class TestVoiceLexicon(unittest.TestCase):
                 r = Result()
                 validate.validate_voice_lexicon(r)
                 self.assertTrue(any("voice-lexicon" in f for f in r.failures))
+                # Shape phrases are matched the same way as the other lists.
+                doc.write_text("# check\n\nHope this helps with the render.\n")
+                r = Result()
+                validate.validate_voice_lexicon(r)
+                self.assertTrue(any("Hope this helps" in f for f in r.failures))
             finally:
                 for k, v in orig.items():
                     setattr(validate, k, v)
+
+
+class TestTaskTemplateRegistered(unittest.TestCase):
+
+    def test_task_type_registered(self):
+        self.assertEqual(validate.FILE_TYPES_REQUIRING_TEMPLATE.get("task"), "task.md")
+
+
+class TestBoardTemplateMarkersOnRepo(unittest.TestCase):
+
+    def test_validator_passes_on_repo(self):
+        r = validate.Result()
+        validate.validate_board_template_markers(r)
+        self.assertEqual(r.failures, [], r.failures)
+        self.assertIn("board-template-markers", r.passes)
+
+
+class TestBoardTemplateMarkers(_PatchedTree):
+
+    _GOOD = ('<html><script>const DECK = /*BOARD_DATA_START*/{"cards": []}'
+             '/*BOARD_DATA_END*/;</script></html>')
+
+    def test_fails_when_template_missing(self):
+        r = Result()
+        validate.validate_board_template_markers(r)
+        self.assertTrue(any("board-template-markers" in f for f in r.failures))
+
+    def test_passes_with_markers_and_valid_json(self):
+        (validate.TEMPLATES / "board.html").write_text(self._GOOD)
+        r = Result()
+        validate.validate_board_template_markers(r)
+        self.assertEqual(r.failures, [], r.failures)
+
+    def test_fails_when_markers_absent(self):
+        (validate.TEMPLATES / "board.html").write_text("<html>no markers</html>")
+        r = Result()
+        validate.validate_board_template_markers(r)
+        self.assertTrue(any("marker" in f.lower() for f in r.failures))
+
+    def test_fails_when_seed_json_broken(self):
+        (validate.TEMPLATES / "board.html").write_text(
+            "<script>/*BOARD_DATA_START*/{not json}/*BOARD_DATA_END*/</script>")
+        r = Result()
+        validate.validate_board_template_markers(r)
+        self.assertTrue(any("board-template-markers" in f for f in r.failures))
+
+
+class TestTaskStatusVocabularyOnRepo(unittest.TestCase):
+
+    def test_validator_passes_on_repo(self):
+        r = validate.Result()
+        validate.validate_task_status_vocabulary(r)
+        self.assertEqual(r.failures, [], r.failures)
+        self.assertIn("task-status-vocabulary", r.passes)
+
+
+class TestTaskStatusVocabulary(_PatchedTree):
+
+    @staticmethod
+    def _alias_table(exclude=()):
+        from board import STATUS_TO_COLUMN
+        by_col: dict = {}
+        for alias, col in STATUS_TO_COLUMN.items():
+            if alias in exclude:
+                continue
+            by_col.setdefault(col, []).append(alias)
+        rows = "\n".join(
+            "| " + ", ".join(f"`{a}`" for a in aliases) + f" | `{col}` |"
+            for col, aliases in by_col.items())
+        return "| Alias | Board column |\n|---|---|\n" + rows + "\n"
+
+    def test_passes_when_table_covers_all_aliases(self):
+        (validate.REFERENCE / "vault-standards.md").write_text(
+            "# Vault Standards\n\n" + self._alias_table())
+        r = Result()
+        validate.validate_task_status_vocabulary(r)
+        self.assertEqual(r.failures, [], r.failures)
+
+    def test_fails_when_alias_undocumented(self):
+        (validate.REFERENCE / "vault-standards.md").write_text(
+            "# Vault Standards\n\n" + self._alias_table(exclude=("wip",)))
+        r = Result()
+        validate.validate_task_status_vocabulary(r)
+        self.assertTrue(any("wip" in f for f in r.failures))
+
+    def test_fails_when_table_absent(self):
+        (validate.REFERENCE / "vault-standards.md").write_text("# Vault Standards\n")
+        r = Result()
+        validate.validate_task_status_vocabulary(r)
+        self.assertTrue(any("task-status-vocabulary" in f for f in r.failures))
+
+
+class TestHooksWiringOnRepo(unittest.TestCase):
+
+    def test_validator_passes_on_repo(self):
+        r = validate.Result()
+        validate.validate_hooks_wiring(r)
+        self.assertEqual(r.failures, [], r.failures)
+        self.assertIn("hooks-wiring", r.passes)
+
+
+class TestHooksWiring(_PatchedTree):
+
+    def _wire(self, script_name="a.py", *, command=None, executable=True, create=True):
+        hooks_dir = self.plugin / "hooks"
+        scripts = hooks_dir / "scripts"
+        scripts.mkdir(parents=True, exist_ok=True)
+        if create:
+            script = scripts / script_name
+            script.write_text("#!/usr/bin/env python3\n")
+            if executable:
+                script.chmod(0o755)
+        cmd = command or f'python3 "${{CLAUDE_PLUGIN_ROOT}}/hooks/scripts/{script_name}"'
+        (hooks_dir / "hooks.json").write_text(json.dumps(
+            {"hooks": {"PostToolUse": [{"matcher": "Write", "hooks": [
+                {"type": "command", "command": cmd, "timeout": 5}]}]}}))
+
+    def test_passes_when_command_resolves(self):
+        self._wire()
+        r = Result()
+        validate.validate_hooks_wiring(r)
+        self.assertEqual(r.failures, [], r.failures)
+
+    def test_fails_when_script_missing(self):
+        self._wire(create=False)
+        r = Result()
+        validate.validate_hooks_wiring(r)
+        self.assertTrue(any("hooks-wiring" in f for f in r.failures))
+
+    def test_fails_when_script_not_executable(self):
+        self._wire(executable=False)
+        r = Result()
+        validate.validate_hooks_wiring(r)
+        self.assertTrue(any("executable" in f for f in r.failures))
+
+    def test_fails_when_path_outside_hooks_scripts(self):
+        self._wire(command='python3 "${CLAUDE_PLUGIN_ROOT}/scripts/board.py"')
+        r = Result()
+        validate.validate_hooks_wiring(r)
+        self.assertTrue(any("hooks-wiring" in f for f in r.failures))
+
+    def test_fails_when_hooks_json_missing(self):
+        r = Result()
+        validate.validate_hooks_wiring(r)
+        self.assertTrue(any("hooks-wiring" in f for f in r.failures))
 
 
 if __name__ == "__main__":

@@ -54,6 +54,18 @@ Generating a *scaffold* from mechanical vault data is scaffolding, not content
 authoring — the "no content generation" rule below is about prose/design inside
 canvases and bases, which stays the user's job.
 
+## Diagram embed points
+
+Two places a generated fence earns its keep (check topology against the
+generation rules before pasting):
+
+1. **Session note, board snapshot**: `graph.py --mode board` appended to today's
+   session note is a point-in-time record of the kanban state (what was open the
+   day a decision landed). Not auto-regenerated; each paste is a dated snapshot.
+2. **Briefs and docs, tiers fence**: `graph.py --mode tiers` renders the
+   tidy/ramasse/dream cleanup model for a brief or doc that explains the
+   maintenance story.
+
 ## Naming
 
 Per `reference/vault-standards.md`: `.canvas` and `.base` files use **strict kebab-case**

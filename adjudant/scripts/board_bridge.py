@@ -97,7 +97,8 @@ def read_ledger(path: Path) -> dict[str, dict[str, Any]]:
 
 
 def _strip_frontmatter_comments(text: str) -> str:
-    """Drop trailing `# guidance` comments inside the frontmatter block.
+    """Drop `# guidance` comments inside the frontmatter block, full-line
+    and trailing forms both.
 
     The template carries them for the human/model author; a mechanical
     writer must emit clean values (the minimal YAML parser keeps trailing
@@ -107,9 +108,14 @@ def _strip_frontmatter_comments(text: str) -> str:
     closes = [i for i, ln in enumerate(lines[1:], 1) if ln.rstrip() == "---"]
     if not text.startswith("---") or not closes:
         return text
-    for i in range(1, closes[0]):
-        lines[i] = re.sub(r"[ \t]+#.*$", "", lines[i])
-    return "\n".join(lines)
+    out: list[str] = []
+    for i, ln in enumerate(lines):
+        if 0 < i < closes[0]:
+            if ln.lstrip().startswith("#"):
+                continue
+            ln = re.sub(r"[ \t]+#.*$", "", ln)
+        out.append(ln)
+    return "\n".join(out)
 
 
 def render_task_note(slug: str, description: str) -> str:

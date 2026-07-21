@@ -79,6 +79,11 @@ Created: {created} · Updated: {updated}
 
 Adapt phrasing to be conversational; the shape above is the data layout, not a rigid template.
 
+Shape (voice.md §Shape): open the rendered block with the most decision-relevant fact
+(status plus freshness beats the title), and close with exactly one next step (the
+pending board reseed, `/adjudant dream`, or `/adjudant shelf`, whichever the data
+points at). Conditional nudges render above that final line, never after it.
+
 Skip the Board line entirely when `board.present` is false. When `board.stale` is true,
 the deck lags the task notes: mention that a reseed is pending (`/adjudant board` or the
 next ambient refresh), no alarm.

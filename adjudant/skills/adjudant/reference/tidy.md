@@ -66,6 +66,10 @@ python3 "$(dirname "$0")/../../../scripts/tidy.py" detect --project-dir "$PROJEC
 # → {"state": "fresh|preview|applied", "cost": {...}}
 ```
 
+Render shape (voice.md §Shape): after `preview`, lead with the change count and end
+with the one next step (review `summary.md`, then `apply`); after `apply`, lead with
+what was written and name a follow-up only if something was skipped.
+
 ## Apply: what happens
 
 - Backup live files to `.adjudant-tidy-backup/{ISO-8601-Z-timestamp}/<rel_path>.legacy`

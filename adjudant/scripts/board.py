@@ -77,6 +77,26 @@ STATUS_TO_COLUMN = {
 }
 
 
+# A quoted scalar followed by a trailing comment, e.g. `"" # optional: ...`.
+_QUOTED_COMMENT_RE = re.compile(r"^(?:\"([^\"]*)\"|'([^']*)')\s*#")
+
+
+def _clean_scalar(val: Any) -> str:
+    """Re-clean a minimal-YAML scalar before it becomes a card field.
+
+    The frontmatter parser keeps a trailing comment on QUOTED value lines
+    (`code: ""  # guidance` survives as the raw string, quotes and all), so a
+    task note pasted verbatim from a template with inline guidance comments
+    would poison card ids, categories, and notes. Recover the quoted part when
+    that shape appears; every other value passes through untouched (a `#`
+    inside a quoted value without a trailing comment is preserved)."""
+    s = str(val if val is not None else "").strip()
+    m = _QUOTED_COMMENT_RE.match(s)
+    if m:
+        return (m.group(1) if m.group(1) is not None else m.group(2)).strip()
+    return s
+
+
 def _first_heading(body: str) -> Optional[str]:
     for line in body.split("\n"):
         s = line.strip()
@@ -124,14 +144,14 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
         fields = fm.fields
         if str(fields.get("type", "") or "").strip().lower() == "tasks":
             continue  # roadmap/index file, not a per-card task note
-        status = str(fields.get("status", "") or "").strip().lower()
-        category = fields.get("category")
+        status = _clean_scalar(fields.get("status")).lower()
+        category = _clean_scalar(fields.get("category"))
         if not category:
             tags = _as_list(fields.get("tags"))
             category = next((t for t in tags if t not in ("task", "tasks")), None)
         # Duplicate ids corrupt the merge (last-wins) and the board UI (drag
         # moves the wrong ticket) — disambiguate deterministically and warn.
-        cid = str(fields.get("code") or fields.get("id") or f.stem)
+        cid = _clean_scalar(fields.get("code")) or _clean_scalar(fields.get("id")) or f.stem
         if cid in seen:
             orig = cid
             cid = f.stem
@@ -145,11 +165,11 @@ def cards_from_tasks(project_dir: Path) -> list[dict[str, Any]]:
         seen[cid] = f.name
         cards.append({
             "id": cid,
-            "title": fields.get("title") or _first_heading(body) or f.stem,
+            "title": _clean_scalar(fields.get("title")) or _first_heading(body) or f.stem,
             "column": STATUS_TO_COLUMN.get(status, "backlog"),
             "category": category or "task",
             "related": _as_list(fields.get("related")),
-            "notes": str(fields.get("note") or ""),
+            "notes": _clean_scalar(fields.get("note")),
             "source": "task",  # provenance: merge_deck iceboxes only task-seeded cards
         })
     return cards

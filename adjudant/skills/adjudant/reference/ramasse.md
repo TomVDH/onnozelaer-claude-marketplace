@@ -45,7 +45,9 @@ python3 "$(dirname "$0")/../../../scripts/ramasse_scan.py" \
 
 JSON output covers: folder drift, index gaps, frontmatter drift, tag drift, type drift, naming violations, wikilink form violations, broken wikilinks, doc/decision flags. Same shape the v0.3.0 `dream.py` used.
 
-Claude reads the JSON, renders a structural-state narrative for the user as input to brainstorming.
+Claude reads the JSON, renders a structural-state narrative for the user as input to
+brainstorming. Shape (voice.md §Shape): the narrative leads with the largest
+actionable drift item and ends with the single next step (proceed to phase 2, or stop).
 
 ## Phase 2 — Brainstorm
 

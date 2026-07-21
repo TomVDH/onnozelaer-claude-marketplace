@@ -101,14 +101,17 @@ For specialized content types, load the matching reference on demand:
 
 ## Hooks
 
-This plugin registers 5 hooks (vault-aware only):
+This plugin registers 9 hook entries across 8 events (vault-aware only):
 
 | Event | Script | Purpose |
 |---|---|---|
-| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume); no resumed marker on `compact`/`clear` sources; nudges the model to replace the intent placeholder until it's filled |
+| SessionStart | `hooks/scripts/session-start.sh` | Discover vault, detect AGENTS.md+CLAUDE.md, init/resume session note; stamp the Claude Code conversation UUID into `session_id:` (list, idempotent on resume); no resumed marker on `compact`/`clear` sources; nudges the model to replace the intent placeholder until it's filled; renders a board status line when a board exists, plus a suitcase pointer on `startup` when `suitcase-brief` is on PATH |
 | UserPromptSubmit | `hooks/scripts/user-prompt-reminder.sh` | Smart-fire vault reminder when project isn't linked and prompt has vault-y keywords (at most once per session) |
-| PostToolUse (Write) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`) |
+| PostToolUse (Write\|Edit) | `hooks/scripts/posttooluse-vault-log.py` | Append vault file creation entries to today's session log + stamp `source_session: <uuid>` into the new file's frontmatter (skips session notes / `_handoff` / `_index*` / `_iteration`); matcher widened to `Write\|Edit` so a task-note change under `tasks/` nudges the board via `board_bridge.py --ensure-only` (log + stamp jobs stay Write-only) |
+| PostToolUse (Bash) | `hooks/scripts/posttooluse-commit-log.py` | Self-gated commit logging (async; the `if: Bash(git commit *)` filter is defense in depth): append `- HH:MM · commit: {subject}` to today's session log; on `release(<plugin>): vX.Y.Z` subjects also scaffold `releases/v{X.Y.Z}.md` + an index row, never overwriting an existing note |
 | PreCompact | `hooks/scripts/precompact.py` | Mechanical, no model calls (5s budget): append enriched pause tombstone (`· next: …`) + mirror handoff with a freshness header (traffic light · age · NEXT · stale flag); a blank `.remember` source is never mirrored over a populated handoff |
-| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker only when something was logged since the last hook marker + sync handoff to vault |
+| PostCompact | `hooks/scripts/postcompact.py` | Append `- HH:MM · compacted: {gist}` (single line, first 160 chars of the compaction summary) to today's session log; an empty or missing summary writes nothing |
+| TaskCreated / TaskCompleted | `hooks/scripts/task-ledger.py` | One script wired to both events (async): append one JSONL entry per event to the TMPDIR session task ledger; zero vault writes in-session, the SessionEnd bridge replays survivors |
+| SessionEnd | `hooks/scripts/sessionend.sh` | Append `session ended` marker only when something was logged since the last hook marker + sync handoff to vault; then bridge ledger survivors into `tasks/` notes and birth/reseed the board via `board_bridge.py` |
 
 Universal drift-defense hooks (git safety, voice checks, etc.) live in hookify, not here.

@@ -37,6 +37,37 @@ by adding bullets; a trailing parenthetical is a note, not part of the matched t
 - Excellent point
 - Perfect!
 
+## Shape
+
+Output shape for every rendered verb output and hook context block, adopted from
+the i-have-adhd plugin's ten rules. Soft dependency: when the i-have-adhd plugin
+is installed it governs the whole chat; when absent, adjudant enforces the same
+shape on its own rendered surfaces.
+
+1. Lead with the next action: the first line is something the reader can do.
+2. Number multi-step work: one bounded action per step.
+3. End with one concrete next step, doable in under two minutes.
+4. Suppress tangents: finish the first issue, offer the second separately.
+5. Restate state every turn: never assume the reader holds "step 3 of 5" in memory.
+6. Give concrete time estimates in real units, never "some work".
+7. Make completed work visible: show what now works, in concrete terms.
+8. Matter-of-fact tone for errors: state cause and fix, no drama.
+9. Cap lists at five items; past five, split into now versus later.
+10. No preamble, no recap, no closing pleasantries: start with the answer, stop when it is done.
+
+## Shape phrases
+
+Forbidden openers, closers, and error phrases (the machine-checkable subset of the
+Shape rules). Parsed by the `voice-lexicon` validator exactly like the lists above
+and matched across templates/, SKILL.md, and reference/ (this file excepted).
+
+- Great question
+- Hope this helps
+- Let me know if
+- Uh oh
+- Happy to clarify
+- Feel free to ask
+
 ## Pushback contract
 
 The user can be wrong, impatient, or insistent. The duty is to say so: clearly,

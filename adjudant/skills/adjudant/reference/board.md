@@ -70,8 +70,9 @@ python3 .../scripts/board.py scaffold --project-dir "$PROJECT_ROOT" \
 python3 .../scripts/board.py serve --dir "$DEST" --port 8787
 ```
 
-Then present the board: start `serve` in the background, open the URL, and tell
-the user they can drag cards + hit **connect file** to enable disk auto-save.
+Then present the board, URL first (the line the user acts on): start `serve` in
+the background, open the URL, and close with one next step: drag cards, or hit
+**connect file** to enable disk auto-save.
 
 ## Data model (`board-data.json`)
 
@@ -124,6 +125,38 @@ Re-running `board` does not wipe in-progress card state:
 
 `board.html` is always re-emitted from the canonical template — never hand-fork
 instantiations; change `templates/board.html` and re-run.
+
+## Ambient board: birth and passive refresh
+
+The board also maintains itself. `board.py --ensure --project-dir X` is the
+ambient form hooks call: birth or reseed, never clobbering drag state, verdict
+on the last stdout line:
+
+| Verdict | Meaning |
+|---|---|
+| `no-tasks` | no real task notes (only `_index.md` / `type: tasks` roadmaps); nothing written |
+| `created` | first real task note found, no deck yet: board born via the scaffold path |
+| `reseeded` | deck existed and the clobber-safe `--from-tasks` merge changed it |
+| `no-change` | merge would change nothing; deck untouched, mtime included (no sync churn) |
+
+Projects that never grow tasks never grow board files. Passive surfaces that
+keep the board current without being asked:
+
+- **SessionStart** renders one board status line: per-column counts plus a
+  stale flag when any task note is newer than the deck.
+- **PostToolUse (Write|Edit)** under `tasks/` nudges `board_bridge.py
+  --ensure-only`, so editing a task's `status:` refreshes the board.
+- **SessionEnd** replays the session task ledger through `board_bridge.py
+  --bridge` (survivors become `tasks/` notes, deduped by slug) or runs
+  `--ensure-only` when no ledger exists; either path ends in `ensure_board`.
+
+Read-only views: `check` renders a board section, `sitrep` one board line.
+
+`scripts/board_bridge.py` is the ledger-to-vault bridge: TaskCreated and
+TaskCompleted events append to a TMPDIR ledger during the session (zero vault
+writes in-session); at close, ids never completed become schema-conformant
+task notes from `templates/task.md`, and the first bridged note births the
+board.
 
 ## Merge provenance (refresh-without-clobber)
 
