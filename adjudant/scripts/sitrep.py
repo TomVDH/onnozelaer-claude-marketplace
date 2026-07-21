@@ -35,11 +35,31 @@ from _vault_walk import (
     zone_matches_status, zone_of, VaultUnresolvableError,
 )
 from check import (
+    _board_status,
     _folder_counts,
     _latest_dream_signal,
     _most_recent_dated,
     _read_brief,
 )
+
+
+def _board_brief(project_dir: Path) -> dict[str, Any]:
+    """check's board snapshot plus the numbers the briefing line needs.
+
+    `open` is every card outside `done` and `icebox` (custom lanes count as
+    open work); `doing` is the doing column. `line` is the preformatted
+    briefing line, present only when the board is: rendered right before the
+    final line, so the single next action stays last.
+    """
+    board = dict(_board_status(project_dir))
+    if not board.get("present"):
+        return board
+    cols = board.get("columns") or {}
+    board["open"] = sum(n for cid, n in cols.items() if cid not in ("done", "icebox"))
+    board["doing"] = cols.get("doing", 0)
+    board["line"] = (f"Board: {board['open']} open ({board['doing']} in motion)"
+                     + (", stale" if board.get("stale") else ""))
+    return board
 
 
 def _next_step(project_dir: Path) -> Optional[str]:
@@ -100,6 +120,7 @@ def run_sitrep(
         "freshness": freshness,
         "were_doing": freshness["last_activity"],
         "whats_done": whats_done,
+        "board": _board_brief(project_dir),
         "next_step": _next_step(project_dir),
         "open_signals": _latest_dream_signal(project_dir),
         "status": status,

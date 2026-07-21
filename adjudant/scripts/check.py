@@ -135,6 +135,56 @@ def _latest_dream_signal(project_dir: Path) -> dict[str, Any]:
     return info
 
 
+def _board_status(project_dir: Path) -> dict[str, Any]:
+    """Read-only board snapshot from `board/board-data.json`.
+
+    A pure JSON parse: no board.py import, nothing written. Cards are counted
+    per deck column id, exactly as the deck names its lanes (custom lanes
+    included, empty lanes shown as 0); never against a hardcoded status list.
+    `stale` is an mtime comparison: any `tasks/*.md` newer than the deck file
+    means the board lags the task notes. Missing or unreadable deck: just
+    `{"present": False}`, never a crash.
+    """
+    data_path = project_dir / "board" / "board-data.json"
+    if not data_path.is_file():
+        return {"present": False}
+    try:
+        deck = json.loads(data_path.read_text(errors="replace"))
+        if not isinstance(deck, dict):
+            raise ValueError("deck root must be a JSON object")
+    except (OSError, json.JSONDecodeError, ValueError):
+        return {"present": False}
+    columns: dict[str, int] = {}
+    for col in deck.get("columns") or []:
+        if isinstance(col, dict) and col.get("id") is not None:
+            columns[str(col["id"])] = 0
+    for card in deck.get("cards") or []:
+        if not isinstance(card, dict):
+            continue
+        col_id = card.get("column")
+        if not col_id:
+            continue
+        col_id = str(col_id)
+        columns[col_id] = columns.get(col_id, 0) + 1
+    stale = False
+    try:
+        deck_mtime = data_path.stat().st_mtime
+        tasks = project_dir / "tasks"
+        if tasks.is_dir():
+            for f in tasks.iterdir():
+                if f.is_file() and f.suffix == ".md" and f.stat().st_mtime > deck_mtime:
+                    stale = True
+                    break
+    except OSError:
+        stale = False
+    return {
+        "present": True,
+        "columns": columns,
+        "updated": deck.get("updated"),
+        "stale": stale,
+    }
+
+
 def run_check(project_dir: Path, code_root: Optional[Path] = None,
               today: Optional[date] = None) -> dict[str, Any]:
     brief = _read_brief(project_dir)
@@ -159,6 +209,7 @@ def run_check(project_dir: Path, code_root: Optional[Path] = None,
         "recent": recent,
         "handoff": handoff,
         "drift_signal": drift_signal,
+        "board": _board_status(project_dir),
         "status": status,
     }
 

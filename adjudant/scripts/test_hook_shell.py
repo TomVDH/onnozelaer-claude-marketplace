@@ -392,6 +392,87 @@ class TestSessionEndHook(unittest.TestCase):
             self.assertEqual(r.returncode, 0)
             self.assertEqual(session_file.read_text().count("session ended"), 1)
 
+    # --- ambient board: session-end task bridge + reseed ---
+
+    def _linked_project(self, tmp: Path) -> tuple[Path, Path, Path]:
+        """Breadcrumbed project + vault project dir. Returns
+        (project, home, vault_project)."""
+        home = tmp / "home"
+        vault_project = home / "vault" / "projects" / "demo"
+        vault_project.mkdir(parents=True)
+        project = tmp / "code"
+        (project / ".claude").mkdir(parents=True)
+        (project / ".claude" / "adjudant").write_text(
+            f"vault_path: {home / 'vault'}\nslug: demo\n")
+        return project, home, vault_project
+
+    def test_sessionend_ledger_bridges_survivors(self):
+        # A ledger for this session exists in TMPDIR: survivors become task
+        # notes and the board is born, all from one SessionEnd.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home, vault_project = self._linked_project(Path(tmp))
+            ledger = home / "adjudant-task-ledger-sess-bridge.jsonl"
+            ledger.write_text(
+                json.dumps({"id": "T-1", "subject": "Fix the widget",
+                            "status": "created", "ts": "2026-07-21T10:00:00",
+                            "description": "Make it stop rattling"}) + "\n"
+                + json.dumps({"id": "T-2", "subject": "Old chore",
+                              "status": "completed", "ts": "2026-07-21T10:05:00",
+                              "description": ""}) + "\n")
+            r = _run("sessionend.sh", project, home, plugin_root=True,
+                     stdin=json.dumps({"session_id": "sess-bridge",
+                                       "hook_event_name": "SessionEnd"}))
+            self.assertEqual(r.returncode, 0)
+            note = vault_project / "tasks" / "fix-the-widget.md"
+            self.assertTrue(note.is_file())
+            text = note.read_text()
+            self.assertIn("status: todo", text)
+            self.assertIn("Make it stop rattling", text)
+            self.assertFalse((vault_project / "tasks" / "old-chore.md").exists())
+            deck = json.loads(
+                (vault_project / "board" / "board-data.json").read_text())
+            self.assertIn("fix-the-widget", [c["id"] for c in deck["cards"]])
+
+    def test_sessionend_no_ledger_reseeds_existing_board(self):
+        # No ledger file for the session: an existing board still gets the
+        # ensure-only reseed, picking up task notes the deck predates.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home, vault_project = self._linked_project(Path(tmp))
+            tasks = vault_project / "tasks"
+            tasks.mkdir()
+            (tasks / "one-task.md").write_text(
+                "---\ntype: task\nstatus: todo\n---\n\n## Task\n")
+            board = vault_project / "board"
+            board.mkdir()
+            (board / "board-data.json").write_text(json.dumps({
+                "version": 1, "boardId": "demo", "title": "Demo",
+                "subtitle": "Work-order board", "updated": "2020-01-01",
+                "columns": [{"id": c, "name": c.title()} for c in
+                            ("backlog", "next", "doing", "review", "done", "icebox")],
+                "categories": ["build"], "cards": [],
+            }))
+            r = _run("sessionend.sh", project, home, plugin_root=True,
+                     stdin=json.dumps({"session_id": "sess-noledger",
+                                       "hook_event_name": "SessionEnd"}))
+            self.assertEqual(r.returncode, 0)
+            deck = json.loads((board / "board-data.json").read_text())
+            self.assertIn("one-task", [c["id"] for c in deck["cards"]])
+
+    def test_sessionend_no_ledger_no_board_writes_nothing(self):
+        # Neither a ledger nor a board: SessionEnd alone must not birth one
+        # (birth needs a bridged survivor or an explicit ensure elsewhere).
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home, vault_project = self._linked_project(Path(tmp))
+            tasks = vault_project / "tasks"
+            tasks.mkdir()
+            (tasks / "one-task.md").write_text(
+                "---\ntype: task\nstatus: todo\n---\n\n## Task\n")
+            r = _run("sessionend.sh", project, home, plugin_root=True,
+                     stdin=json.dumps({"session_id": "sess-neither",
+                                       "hook_event_name": "SessionEnd"}))
+            self.assertEqual(r.returncode, 0)
+            self.assertFalse((vault_project / "board").exists())
+
     def test_midnight_straddle_appends_to_latest_note(self):
         # No note exists for *today* (session started before midnight): the
         # end marker must land in the latest existing daily note, not vanish.

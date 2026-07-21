@@ -42,6 +42,10 @@ JSON output shape (top-level keys):
 - `recent` — last_session, last_decision, last_dream (YYYY-MM-DD)
 - `handoff` — present, updated, stale_hours
 - `drift_signal` — latest dream date + drift_items count if parseable
+- `board`: `{present, columns, updated, stale}`. Cards counted per deck column id
+  (custom lanes included, empty lanes shown as 0), never a hardcoded status list;
+  `stale` is true when any `tasks/*.md` mtime is newer than the deck file. No board
+  or unreadable deck: just `{present: false}`
 - `status` — declared vs. machine-suggested lifecycle status: `declared`, `declared_valid`,
   `last_session`, `days_quiet`, `suggested`, `reason`, `nudge`, `zone`, `zone_matches`
 
@@ -65,6 +69,7 @@ Created: {created} · Updated: {updated}
 - Last dream:    {last_dream}
 - Handoff:       {updated} ({stale_hours}h stale)
 - Counts:        {decisions} decisions, {sessions} sessions, {dreams} dreams, {notes} notes
+- Board:         {board.columns as "{id}: {n}" pairs, deck order}{" · stale" if board.stale}
 
 ## Drift signal
 
@@ -73,6 +78,10 @@ Created: {created} · Updated: {updated}
 ```
 
 Adapt phrasing to be conversational; the shape above is the data layout, not a rigid template.
+
+Skip the Board line entirely when `board.present` is false. When `board.stale` is true,
+the deck lags the task notes: mention that a reseed is pending (`/adjudant board` or the
+next ambient refresh), no alarm.
 
 ### Status nudges (conditional)
 

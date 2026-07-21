@@ -3,6 +3,7 @@
 import contextlib
 import io
 import json as _json
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -119,6 +120,69 @@ class TestRunSitrep(unittest.TestCase):
             self.assertIsNone(rep["were_doing"])
             self.assertEqual(rep["freshness"]["light"], "⚪")  # white — age unknown
             self.assertEqual(rep["whats_done"]["counts"], {})
+
+
+class TestSitrepBoard(unittest.TestCase):
+
+    def _deck(self, root: Path, cards) -> Path:
+        deck = {
+            "version": 1,
+            "boardId": root.name,
+            "title": "T",
+            "subtitle": "Work-order board",
+            "updated": "2026-07-20",
+            "columns": [
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "next", "name": "Next"},
+                {"id": "doing", "name": "Doing"},
+                {"id": "review", "name": "Review"},
+                {"id": "done", "name": "Done"},
+                {"id": "icebox", "name": "Icebox"},
+            ],
+            "categories": ["build"],
+            "cards": cards,
+        }
+        path = root / "board" / "board-data.json"
+        _write(path, _json.dumps(deck))
+        return path
+
+    def test_board_line_rendered(self):
+        # open = every column except done and icebox; doing = the doing column.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "brief.md", "---\ntype: project\nslug: demo\n---\n\n# Demo\n")
+            self._deck(root, [
+                {"id": "a", "title": "A", "column": "backlog"},
+                {"id": "b", "title": "B", "column": "doing"},
+                {"id": "c", "title": "C", "column": "done"},
+                {"id": "d", "title": "D", "column": "icebox"},
+            ])
+            rep = run_sitrep(root, now=datetime(2026, 7, 21, 12, 0))
+            self.assertTrue(rep["board"]["present"])
+            self.assertEqual(rep["board"]["open"], 2)
+            self.assertEqual(rep["board"]["doing"], 1)
+            self.assertEqual(rep["board"]["line"], "Board: 2 open (1 in motion)")
+
+    def test_board_line_stale_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "brief.md", "---\ntype: project\nslug: demo\n---\n\n# Demo\n")
+            deck_path = self._deck(root, [{"id": "a", "title": "A", "column": "doing"}])
+            task = root / "tasks" / "a.md"
+            _write(task, "---\ntype: task\nstatus: doing\n---\n\n# A\n")
+            base = deck_path.stat().st_mtime
+            os.utime(deck_path, (base, base))
+            os.utime(task, (base + 60, base + 60))
+            rep = run_sitrep(root, now=datetime(2026, 7, 21, 12, 0))
+            self.assertEqual(rep["board"]["line"], "Board: 1 open (1 in motion), stale")
+
+    def test_board_absent_no_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "brief.md", "---\ntype: project\nslug: demo\n---\n\n# Demo\n")
+            rep = run_sitrep(root, now=datetime(2026, 7, 21, 12, 0))
+            self.assertFalse(rep["board"]["present"])
+            self.assertNotIn("line", rep["board"])
 
 
 class TestSitrepCost(unittest.TestCase):

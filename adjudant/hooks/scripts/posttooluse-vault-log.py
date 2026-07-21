@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """PostToolUse hook for adjudant.
 
-Two mechanical jobs on every new Write under {vault}/projects/{slug}/:
+Three mechanical jobs on tool writes under {vault}/projects/{slug}/:
 
+  0. On a task-note change (Write OR Edit under tasks/), nudge the board:
+     `board_bridge.py --ensure-only` in a capped subprocess, fire-and-forget.
   1. Append a `- HH:MM · Decision|Added: [[link]]` entry to today's session log.
   2. Stamp `source_session: <uuid>` into the new file's frontmatter so the
      conversation that authored it is one hop away — not a grep through
      transcripts. Session notes / _handoff / _index files are excluded.
 
-Fires only on Write (not Edit/MultiEdit, which typically modify existing files).
-Both stamping passes are best-effort and fail-closed.
+Jobs 1 and 2 fire only on Write (not Edit/MultiEdit, which typically modify
+existing files). All jobs are best-effort and fail-closed.
 """
 
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -114,7 +117,26 @@ def main() -> int:
     except (ValueError, OSError):
         return 0
 
-    # Only act on NEW files (Write tool, not Edit/MultiEdit)
+    parts = rel.parts
+    if not parts:
+        return 0
+
+    # --- Job 0: task-note change (Write OR Edit under tasks/) nudges the
+    # board. Capped subprocess (3s), output discarded, every failure mode
+    # (missing bridge, timeout, dead python3) swallowed: a board refresh must
+    # never block the hook or the log jobs below. ---
+    if tool_name in ("Write", "Edit") and parts[0] == "tasks":
+        bridge = Path(__file__).resolve().parents[2] / "scripts" / "board_bridge.py"
+        try:
+            subprocess.run(
+                ["python3", str(bridge), "--ensure-only",
+                 "--project-dir", str(project_dir)],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=3, check=False)
+        except Exception:
+            pass
+
+    # Jobs 1 and 2 act only on NEW files (Write tool, not Edit/MultiEdit)
     if tool_name != "Write":
         return 0
 
@@ -133,10 +155,6 @@ def main() -> int:
             candidates = []
         if candidates:
             session_file = candidates[-1]
-
-    parts = rel.parts
-    if not parts:
-        return 0
 
     # --- Job 1: append a session-log entry (if a session note exists) ---
     if session_file.exists():

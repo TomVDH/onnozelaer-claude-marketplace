@@ -11,6 +11,22 @@ main() {
   local project_dir="${CLAUDE_PROJECT_DIR:-}"
   [ -z "$project_dir" ] && return 0
 
+  # Best-effort: read the Claude Code session UUID from stdin JSON (same
+  # advisory pattern as session-start.sh). It keys the task ledger the
+  # task-ledger hook may have written for this session.
+  local session_id=""
+  if [ ! -t 0 ] && command -v python3 >/dev/null 2>&1; then
+    local payload
+    payload=$(cat 2>/dev/null || true)
+    if [ -n "$payload" ]; then
+      session_id=$(printf '%s' "$payload" | python3 -c 'import json,sys
+try:
+    print(json.load(sys.stdin).get("session_id",""))
+except Exception:
+    pass' 2>/dev/null || true)
+    fi
+  fi
+
   local breadcrumb="$project_dir/.claude/adjudant"
   [ ! -f "$breadcrumb" ] && return 0
 
@@ -77,6 +93,24 @@ print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true
   if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/hooks/scripts/precompact.py" ] \
      && command -v python3 >/dev/null 2>&1; then
     python3 "$CLAUDE_PLUGIN_ROOT/hooks/scripts/precompact.py" --sync-only 2>/dev/null || true
+  fi
+
+  # Task bridge + board reseed (best effort, never block). A session ledger
+  # (written by the task-ledger hook) turns its survivors into task notes
+  # and births/reseeds the board; without one, an existing board still gets
+  # the ensure-only reseed. No ledger and no board: nothing to do, no board
+  # is born from a bare session end.
+  if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/scripts/board_bridge.py" ] \
+     && command -v python3 >/dev/null 2>&1; then
+    local vault_project="$vault_path/projects/$slug"
+    local ledger="${TMPDIR:-/tmp}/adjudant-task-ledger-${session_id}.jsonl"
+    if [ -n "$session_id" ] && [ -f "$ledger" ]; then
+      python3 "$CLAUDE_PLUGIN_ROOT/scripts/board_bridge.py" --bridge "$ledger" \
+        --project-dir "$vault_project" >/dev/null 2>&1 || true
+    elif [ -f "$vault_project/board/board-data.json" ]; then
+      python3 "$CLAUDE_PLUGIN_ROOT/scripts/board_bridge.py" --ensure-only \
+        --project-dir "$vault_project" >/dev/null 2>&1 || true
+    fi
   fi
 }
 

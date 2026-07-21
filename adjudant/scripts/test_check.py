@@ -3,12 +3,13 @@
 import contextlib
 import io
 import json as _json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from check import cli_main as check_cli, run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal
+from check import cli_main as check_cli, run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal, _board_status
 
 
 def _write(path: Path, content: str) -> None:
@@ -149,6 +150,91 @@ class TestRunCheck(unittest.TestCase):
             self.assertEqual(report["status"]["suggested"], "stale")
             self.assertIn("zone", report["status"])
             self.assertIn("zone_matches", report["status"])
+
+
+class TestBoardStatus(unittest.TestCase):
+
+    def _deck(self, root: Path, cards, columns=None, updated="2026-07-20") -> Path:
+        deck = {
+            "version": 1,
+            "boardId": root.name,
+            "title": "T",
+            "subtitle": "Work-order board",
+            "updated": updated,
+            "columns": columns or [
+                {"id": "backlog", "name": "Backlog"},
+                {"id": "doing", "name": "Doing"},
+                {"id": "done", "name": "Done"},
+            ],
+            "categories": ["build"],
+            "cards": cards,
+        }
+        path = root / "board" / "board-data.json"
+        _write(path, _json.dumps(deck))
+        return path
+
+    def test_board_absent_present_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertFalse(_board_status(root)["present"])
+            report = run_check(root)  # no crash; the block is in the report
+            self.assertFalse(report["board"]["present"])
+
+    def test_board_present_counts_deck_columns(self):
+        # Columns are counted per deck column id (custom lanes included),
+        # never per a hardcoded status list; empty lanes still show as 0.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._deck(
+                root,
+                [
+                    {"id": "a", "title": "A", "column": "backlog"},
+                    {"id": "b", "title": "B", "column": "doing"},
+                    {"id": "c", "title": "C", "column": "doing"},
+                    {"id": "d", "title": "D", "column": "shipping"},
+                ],
+                columns=[
+                    {"id": "backlog", "name": "Backlog"},
+                    {"id": "doing", "name": "Doing"},
+                    {"id": "done", "name": "Done"},
+                    {"id": "shipping", "name": "Shipping"},
+                ],
+            )
+            board = _board_status(root)
+            self.assertTrue(board["present"])
+            self.assertEqual(
+                board["columns"],
+                {"backlog": 1, "doing": 2, "done": 0, "shipping": 1})
+            self.assertEqual(board["updated"], "2026-07-20")
+            self.assertFalse(board["stale"])
+
+    def test_board_stale_when_task_newer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            deck_path = self._deck(root, [{"id": "a", "title": "A", "column": "backlog"}])
+            task = root / "tasks" / "fix-the-thing.md"
+            _write(task, "---\ntype: task\nstatus: todo\n---\n\n# Fix the thing\n")
+            base = deck_path.stat().st_mtime
+            os.utime(deck_path, (base, base))
+            os.utime(task, (base + 60, base + 60))
+            self.assertTrue(_board_status(root)["stale"])
+
+    def test_board_fresh_when_deck_newer(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            deck_path = self._deck(root, [{"id": "a", "title": "A", "column": "backlog"}])
+            task = root / "tasks" / "fix-the-thing.md"
+            _write(task, "---\ntype: task\nstatus: todo\n---\n\n# Fix the thing\n")
+            base = deck_path.stat().st_mtime
+            os.utime(deck_path, (base, base))
+            os.utime(task, (base - 60, base - 60))
+            self.assertFalse(_board_status(root)["stale"])
+
+    def test_board_unreadable_deck_present_false(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write(root / "board" / "board-data.json", "{not json")
+            self.assertFalse(_board_status(root)["present"])
 
 
 class TestCheckCost(unittest.TestCase):
