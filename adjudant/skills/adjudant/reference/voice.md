@@ -13,6 +13,9 @@ by adding bullets; a trailing parenthetical is a note, not part of the matched t
 
 - forward-thinking
 - load-bearing
+- hand-wave (figurative)
+- hand-wavy
+- hand-waving (figurative)
 - leverage (as a verb; add inflections as separate bullets if they slip through)
 - deep dive
 - double-click (figurative)
