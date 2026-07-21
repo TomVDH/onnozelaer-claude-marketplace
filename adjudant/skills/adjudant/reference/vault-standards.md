@@ -69,7 +69,7 @@ the conclusion.
 
 ### A. File-type tags (mandatory, one per file)
 
-`#decision`, `#session`, `#note`, `#doc`, `#project`, `#handoff`, `#index`, `#iteration`, `#release`, `#source`, `#dream-report`
+`#decision`, `#session`, `#note`, `#doc`, `#project`, `#handoff`, `#index`, `#iteration`, `#release`, `#source`, `#dream-report`, `#task`
 
 `Home.md` is the lone exception — uses `type: vault-home` frontmatter, no tag.
 
@@ -109,7 +109,7 @@ NOT a tag. Lives in the `project_type:` frontmatter field on the brief. Values: 
 
 See `templates/*.md` for the canonical frontmatter shape of every file type. Validators check actual files against templates.
 
-### File-type list (11 + `vault-home`)
+### File-type list (12 + `vault-home`)
 
 | Type | Template | Body shape |
 |---|---|---|
@@ -123,6 +123,7 @@ See `templates/*.md` for the canonical frontmatter shape of every file type. Val
 | `iteration` | `iteration.md` (folder index) | a **folder** of build artefacts (HTML tryouts, experiments, superpowers); the optional `_iteration.md` is a human-facing index of the folder's contents |
 | `release` | `release.md` | `## Changes` |
 | `dream-report` | `dream-report.md` | auto-populated by `/adjudant dream` |
+| `task` | `task.md` | `## Task` / `## Notes` |
 | `index` | `_index-projects.md` or `_index-collection.md` | table or list |
 | `vault-home` | `home.md` | sections per template |
 
@@ -151,6 +152,7 @@ Quick test: "When was this decided?" — clear answer = decision; "it's just how
 | Decision | `{YYYY-MM-DD}-{kebab-title}.md` | strict |
 | Session | `{YYYY-MM-DD}.md` (one per project per day; append on resume) | strict |
 | Note | `{kebab-title}.md` (no date unless time-relevant) | strict |
+| Task | `{kebab-title}.md` (lives in `tasks/`) | strict |
 | Source | `{kebab-title}.md` | strict |
 | Release | `v{X.Y.Z}.md` | strict |
 | Iteration (folder) | `iterations/{YYYY-MM-DD}-iter-{id}-{kebab-slug}/` — holds the artefacts (HTML, etc.); optional `_iteration.md` index inside | strict |
@@ -162,6 +164,33 @@ Quick test: "When was this decided?" — clear answer = decision; "it's just how
 | `.base` artefact | `{kebab-name}.base` | strict |
 
 "References" is not a distinct file type — files in `references/` subfolders use `type: doc`, `type: note`, or `type: source` based on their content shape.
+
+### Task frontmatter
+
+Canonical shape (see `templates/task.md`):
+
+```yaml
+type: task
+project: "[[projects/{slug}/brief|{slug}]]"
+status: todo        # todo | doing | review | blocked | done | icebox
+category: ""        # optional: board colour group
+code: ""            # optional: short card id cross-linking specs, handoffs, commits
+related: []
+note: ""
+tags:
+  - task
+```
+
+`status:` on a task note takes exactly one of: `todo` | `doing` | `review` | `blocked` | `done` | `icebox`. Aliases are accepted on input and normalized by the board; the full alias table (mirrors `board.py` `STATUS_TO_COLUMN`):
+
+| Alias | Board column |
+|---|---|
+| `backlog`, `todo`, `planned`, `proposed` | `backlog` |
+| `next`, `ready`, `queued` | `next` |
+| `doing`, `in-progress`, `in_progress`, `active`, `wip` | `doing` |
+| `review`, `blocked`, `in-review` | `review` |
+| `done`, `complete`, `completed`, `implemented`, `shipped`, `accepted` | `done` |
+| `icebox`, `deferred`, `parked`, `shelved`, `someday` | `icebox` |
 
 ---
 
@@ -193,6 +222,7 @@ Anything actually present under the project but not in (defaults ∪ `extra_fold
 
 - `dreams/` — created when the dream flow writes its phase-3 report. Not in defaults.
 - `canvases/`, `bases/` — created on first `/adjudant draw canvas/base` invocation if not in defaults.
+- `board/`: created by `/adjudant board`, or born automatically on the first task note (holds the deck JSON plus the rendered board.html). Not in defaults.
 
 ### The `_index.md` rule
 

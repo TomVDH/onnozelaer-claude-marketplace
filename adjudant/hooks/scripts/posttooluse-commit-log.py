@@ -1,0 +1,320 @@
+#!/usr/bin/env python3
+"""PostToolUse hook for adjudant: commit-gated session logging.
+
+SELF-GATED on Bash tool calls: exits 0 unless the command is a `git commit`
+(leading `cd ... && ` stripped) whose payload reports success. Any `if`
+filter added in hooks.json is defense in depth, never a dependency. Then:
+
+  1. Append `- HH:MM · commit: {subject}` to today's session log.
+  2. On `release(<plugin>): vX.Y.Z` subjects, scaffold
+     `projects/{slug}/releases/v{version}.md` from templates/release.md
+     (frontmatter + title + commit body), never overwriting an existing note.
+  3. Upsert one `- [[v{version}|v{version} ({plugin})]]` row into
+     `releases/_index.md`, created in tidy's canonical shape when absent.
+
+Fail open on the hook itself, fail closed on a bad vault; the index row is
+written only after the release note verifiably exists.
+"""
+
+import json
+import os
+import re
+import shlex
+import sys
+from datetime import datetime
+from pathlib import Path
+
+# Shared primitives live in <plugin>/scripts/. Same bootstrap as the other
+# python hooks: a broken or mid-sync module only degrades its own capability.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+except Exception:  # pragma: no cover - defensive
+    pass
+
+try:
+    from _vault_walk import resolve_vault
+    _RESOLVER = True
+except Exception:  # pragma: no cover - degrade: breadcrumb vault_path only
+    _RESOLVER = False
+
+    def resolve_vault(_project_root, _env_vault=None):  # type: ignore
+        return None
+
+
+TEMPLATE = Path(__file__).resolve().parents[2] / "skills" / "adjudant" / "templates" / "release.md"
+
+# Leading `cd ... && ` segments (repeatable); [^&] keeps each strip inside
+# its own segment even for quoted paths with spaces.
+_CD_PREFIX_RE = re.compile(r"^\s*(?:cd\s+[^&]*&&\s*)+")
+_COMMIT_RE = re.compile(r"^git\s+commit\b")
+_RELEASE_RE = re.compile(r"^release\(([a-z0-9-]+)\): v(\d+\.\d+\.\d+)")
+# Claude Code's own commit style: -m "$(cat <<'EOF' ... EOF\n)"
+_HEREDOC_MSG_RE = re.compile(
+    r'-m\s+"?\$\(\s*cat\s+<<-?\s*[\'"]?([A-Za-z_][A-Za-z0-9_]*)[\'"]?\s*\n'
+    r'(.*?)\n\s*\1\s*\n\s*\)',
+    re.S,
+)
+_QUOTED_MSG_RE = re.compile(r"-m\s+(?:\"([^\"]*)\"|'([^']*)')")
+_EXIT_KEYS = ("exit_code", "exitCode", "returncode", "return_code", "code")
+
+
+def read_breadcrumb(project_dir: Path) -> dict:
+    """Read `.claude/adjudant` breadcrumb (`key: value` per line, YAML-ish).
+
+    Format written by connect.py, `:` separator. Old `=` format
+    (pre-v0.4.0) also tolerated for transition.
+    """
+    breadcrumb = project_dir / ".claude" / "adjudant"
+    if not breadcrumb.exists():
+        return {}
+    info = {}
+    for line in breadcrumb.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        sep = ":" if ":" in line else ("=" if "=" in line else None)
+        if not sep:
+            continue
+        k, v = line.split(sep, 1)
+        info[k.strip()] = v.strip()
+    return info
+
+
+def response_indicates_success(resp) -> bool:
+    """True when the payload carries no failure signal.
+
+    Payload shapes vary across harness versions, so the gate is: any explicit
+    failure marker (interrupted, is_error, success false, non-zero exit)
+    means no; a missing tool_response means unverifiable, also no (rule 2:
+    never claim an effect that was not verified).
+    """
+    if resp is None:
+        return False
+    if not isinstance(resp, dict):
+        return True  # string shapes carry no failure signal
+    if resp.get("interrupted"):
+        return False
+    if resp.get("is_error") or resp.get("isError"):
+        return False
+    if resp.get("success") is False:
+        return False
+    for key in _EXIT_KEYS:
+        v = resp.get(key)
+        if v is not None:
+            try:
+                return int(v) == 0
+            except (TypeError, ValueError):
+                return False
+    return True
+
+
+def _messages_from_tokens(tokens: list) -> list:
+    """Collect message arguments: -m, bundled forms like -am, --message[=X]."""
+    msgs = []
+    i = 0
+    while i < len(tokens):
+        t = tokens[i]
+        if t == "--message" or re.fullmatch(r"-[a-zA-Z]*m", t):
+            if i + 1 < len(tokens):
+                msgs.append(tokens[i + 1])
+                i += 2
+                continue
+        elif t.startswith("--message="):
+            msgs.append(t[len("--message="):])
+        i += 1
+    return msgs
+
+
+def parse_commit_message(command: str) -> str:
+    """Extract the commit message from the command's first -m argument(s).
+
+    Heredoc form first (the common Claude Code style), then shlex tokens,
+    then a plain quoted-string fallback for commands shlex rejects.
+    """
+    m = _HEREDOC_MSG_RE.search(command)
+    if m:
+        return m.group(2)
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        tokens = []
+    if tokens:
+        msgs = _messages_from_tokens(tokens)
+        if msgs:
+            # git joins multiple -m arguments as separate paragraphs
+            return "\n\n".join(msgs)
+    m = _QUOTED_MSG_RE.search(command)
+    if m:
+        return m.group(1) or m.group(2) or ""
+    return ""
+
+
+def split_subject_body(message: str) -> tuple:
+    """First line is the subject; the rest, minus leading blanks, the body."""
+    lines = message.strip("\n").split("\n")
+    subject = lines[0].strip()
+    rest = lines[1:]
+    while rest and not rest[0].strip():
+        rest.pop(0)
+    return subject, "\n".join(rest).rstrip()
+
+
+def _release_frontmatter(slug: str, version: str, today: str) -> str:
+    """Frontmatter from templates/release.md, placeholders filled. Falls back
+    to an inlined equivalent when the template is unreadable or has grown a
+    placeholder this hook does not know."""
+    try:
+        m = re.match(r"^---\n(.*?\n)---\n", TEMPLATE.read_text(), re.S)
+        if m:
+            fm = (m.group(1)
+                  .replace("{slug}", slug)
+                  .replace("{X.Y.Z}", version)
+                  .replace("{YYYY-MM-DD}", today))
+            if "{" not in fm:
+                return f"---\n{fm}---\n"
+    except OSError:
+        pass
+    return (
+        "---\n"
+        "type: release\n"
+        f'project: "[[projects/{slug}/brief|{slug}]]"\n'
+        f"version: {version}\n"
+        f"date: {today}\n"
+        "tags:\n"
+        "  - release\n"
+        "---\n"
+    )
+
+
+def _release_note(slug: str, plugin: str, version: str, body: str, today: str) -> str:
+    text = _release_frontmatter(slug, version, today)
+    text += f"\n# v{version} ({plugin})\n"
+    if body:
+        text += f"\n{body}\n"
+    return text
+
+
+def _upsert_index(releases: Path, slug: str, plugin: str, version: str, today: str) -> None:
+    """One `- [[vX.Y.Z|vX.Y.Z (plugin)]]` row, deduped; new index files take
+    tidy's canonical shape so the next tidy pass has nothing to churn."""
+    index = releases / "_index.md"
+    row = f"- [[v{version}|v{version} ({plugin})]]"
+    try:
+        if index.exists():
+            text = index.read_text()
+            if f"[[v{version}|" in text or f"[[v{version}]]" in text:
+                return
+            if not text.endswith("\n"):
+                text += "\n"
+            index.write_text(text + row + "\n")
+        else:
+            index.write_text(
+                "---\n"
+                "type: index\n"
+                f'project: "[[../brief|{slug}]]"\n'
+                f"updated: {today}\n"
+                "tags:\n"
+                "  - index\n"
+                "---\n\n"
+                "# Releases\n\n"
+                "## Entries\n\n"
+                + row + "\n"
+            )
+    except OSError:
+        pass  # index upsert is best-effort; the note itself already exists
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return 0
+
+    # --- Self-gate, cheapest checks first: this fires on EVERY Bash call ---
+    if payload.get("tool_name") != "Bash":
+        return 0
+    tool_input = payload.get("tool_input") or {}
+    command = tool_input.get("command") or ""
+    cmd = _CD_PREFIX_RE.sub("", command).lstrip()
+    if not _COMMIT_RE.match(cmd):
+        return 0
+    if not response_indicates_success(payload.get("tool_response")):
+        return 0
+    subject, body = split_subject_body(parse_commit_message(cmd))
+    if not subject:
+        return 0  # editor-driven or amend-no-edit commit: no subject to log
+
+    # --- Vault resolution, same 5-step chain as the verbs and other hooks ---
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not project_dir:
+        return 0
+    info = read_breadcrumb(Path(project_dir))
+    slug = info.get("slug", "")
+    if not slug:
+        return 0
+    vault = resolve_vault(Path(project_dir))
+    if vault is None and not _RESOLVER:
+        # Degraded mode keeps the shell hooks' precedence: OB_VAULT first,
+        # then a locally-valid vault_path (same-vault invariant).
+        ob = os.environ.get("OB_VAULT", "")
+        p = Path(ob).expanduser() if ob else None
+        if p is None or not p.is_dir():
+            vault_path = info.get("vault_path", "")
+            p = Path(vault_path).expanduser() if vault_path else None
+        vault = p if (p is not None and p.is_dir()) else None
+    if vault is None or not vault.is_dir():
+        return 0  # stale breadcrumb: fail closed, never log to a phantom path
+    project_root = vault / "projects" / slug
+    if not project_root.is_dir():
+        return 0  # stale slug: never materialize a phantom project chain
+
+    now = datetime.now()  # single clock read: date and time can't straddle midnight
+    today = now.strftime("%Y-%m-%d")
+    ts = now.strftime("%H:%M")
+
+    # --- Job 1: append the commit line (today's note, or the latest one
+    # when the session straddles midnight, same discipline as vault-log) ---
+    session_file = project_root / "sessions" / f"{today}.md"
+    if not session_file.exists():
+        try:
+            # digit classes, not ?: a stray abcd-ef-gh.md must never win
+            candidates = sorted((project_root / "sessions").glob(
+                "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md"))
+        except OSError:
+            candidates = []
+        if candidates:
+            session_file = candidates[-1]
+    if session_file.exists():
+        try:
+            with session_file.open("a") as f:
+                f.write(f"- {ts} · commit: {subject}\n")
+        except OSError:
+            pass  # log-write failure must not block the release scaffold
+
+    # --- Jobs 2+3: release stub + index row, release subjects only ---
+    rel = _RELEASE_RE.match(subject)
+    if not rel:
+        return 0
+    plugin, version = rel.group(1), rel.group(2)
+    releases = project_root / "releases"
+    try:
+        releases.mkdir(exist_ok=True)
+    except OSError:
+        return 0
+    note = releases / f"v{version}.md"
+    if not note.exists():
+        try:
+            note.write_text(_release_note(slug, plugin, version, body, today))
+        except OSError:
+            return 0  # never index a note that failed to write
+    _upsert_index(releases, slug, plugin, version, today)
+    return 0
+
+
+if __name__ == "__main__":
+    # A PostToolUse hook must never surface as a tool failure: whatever goes
+    # wrong (future logic error, exotic I/O failure), exit 0.
+    try:
+        sys.exit(main())
+    except Exception:  # pragma: no cover - last-resort guard
+        sys.exit(0)

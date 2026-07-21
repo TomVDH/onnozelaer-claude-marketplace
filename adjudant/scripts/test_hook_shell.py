@@ -13,6 +13,7 @@ import os
 import stat
 import subprocess
 import tempfile
+import time
 import unittest
 from datetime import date
 from pathlib import Path
@@ -222,6 +223,101 @@ class TestSessionStartHook(unittest.TestCase):
                     "Fix the handoff mirror guard."))
             r2 = _run("session-start.sh", project, home)
             self.assertNotIn("Intent line is still the placeholder", r2.stdout)
+
+    # --- ambient board: counts line + suitcase pointer ---
+
+    def _deck(self, home: Path, cards: list) -> Path:
+        board = home / "vault" / "projects" / "demo" / "board"
+        board.mkdir(parents=True, exist_ok=True)
+        deck = board / "board-data.json"
+        deck.write_text(json.dumps({
+            "version": 1, "boardId": "demo", "title": "demo",
+            "updated": "2026-07-20",
+            "columns": [{"id": c, "name": c.title()} for c in
+                        ("backlog", "next", "doing", "review", "done", "icebox")],
+            "cards": cards,
+        }))
+        return deck
+
+    def test_sessionstart_board_line(self):
+        # A deck on disk yields one counts line in canonical status order
+        # (todo/doing/review/blocked/done/icebox); backlog and next both
+        # feed the todo slot since neither is started work.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            self._deck(home, [
+                {"id": "a", "column": "backlog"},
+                {"id": "b", "column": "next"},
+                {"id": "c", "column": "doing"},
+                {"id": "d", "column": "review"},
+                {"id": "e", "column": "done"},
+                {"id": "f", "column": "done"},
+                {"id": "g", "column": "icebox"},
+            ])
+            r = _run("session-start.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("- Board: 2/1/1/0/2/1", r.stdout)
+            self.assertNotIn("stale", r.stdout)
+
+    def test_sessionstart_no_board_no_line(self):
+        # No deck file: the block renders as before, no board line at all.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            r = _run("session-start.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("Vault:", r.stdout)
+            self.assertNotIn("- Board:", r.stdout)
+
+    def test_sessionstart_board_stale_flag(self):
+        # Any task note with an mtime newer than the deck file flags the
+        # line stale (the deck predates the tasks it should reflect).
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            deck = self._deck(home, [{"id": "a", "column": "backlog"}])
+            past = time.time() - 100
+            os.utime(deck, (past, past))
+            tasks = home / "vault" / "projects" / "demo" / "tasks"
+            tasks.mkdir(parents=True)
+            (tasks / "fix-thing.md").write_text(
+                "---\ntype: task\nstatus: todo\n---\n\n## Task\n")
+            r = _run("session-start.sh", project, home)
+            self.assertEqual(r.returncode, 0)
+            self.assertIn("- Board: 1/0/0/0/0/0 · stale", r.stdout)
+
+    def test_sessionstart_suitcase_pointer_startup_only(self):
+        # The pointer needs BOTH signals: payload source=startup AND a
+        # suitcase-brief executable on PATH. PATH-injected fake for the
+        # positive cases; the negative case scrubs PATH to /usr/bin:/bin
+        # because a real suitcase-brief install must not leak in.
+        with tempfile.TemporaryDirectory() as tmp:
+            project, home = self._project(Path(tmp), "vault_path: {vault}\nslug: demo\n")
+            fake_bin = Path(tmp) / "bin"
+            fake_bin.mkdir()
+            fake = fake_bin / "suitcase-brief"
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            fake.chmod(0o755)
+            with_fake = f"{fake_bin}:/usr/bin:/bin"
+            without_fake = "/usr/bin:/bin"
+
+            r1 = _run("session-start.sh", project, home,
+                      stdin=json.dumps({"session_id": "s1", "source": "startup"}),
+                      extra_env={"PATH": with_fake})
+            self.assertEqual(r1.returncode, 0)
+            pointer = [l for l in r1.stdout.splitlines() if "Suitcase detected" in l]
+            self.assertEqual(len(pointer), 1)  # exactly one line, never a block
+            self.assertIn("suitcase-brief", pointer[0])
+
+            r2 = _run("session-start.sh", project, home,
+                      stdin=json.dumps({"session_id": "s1", "source": "resume"}),
+                      extra_env={"PATH": with_fake})
+            self.assertEqual(r2.returncode, 0)
+            self.assertNotIn("Suitcase detected", r2.stdout)
+
+            r3 = _run("session-start.sh", project, home,
+                      stdin=json.dumps({"session_id": "s1", "source": "startup"}),
+                      extra_env={"PATH": without_fake})
+            self.assertEqual(r3.returncode, 0)
+            self.assertNotIn("Suitcase detected", r3.stdout)
 
 
 class TestSessionEndHook(unittest.TestCase):

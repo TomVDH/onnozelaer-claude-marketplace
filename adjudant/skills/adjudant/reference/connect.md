@@ -19,7 +19,9 @@ connect is three phases; the card in the middle is the only thing the user must 
    `--initial-status`, plus the usual flags). Render `summary.receipt` back as the same
    card with per-artifact marks: created / already-present / updated. A re-run on a
    healthy project shows all already-present and writes nothing new (the
-   `projects/_index.md` stats row is refreshed in place).
+   `projects/_index.md` stats row is refreshed in place). For `coding` and `plugin`
+   projects the receipt closes with one board pointer: tasks/ seeds the kanban:
+   /adjudant board, born automatically on the first task note.
 
 Config knobs land in the breadcrumb at init with defaults visible on the card:
 `cost_warn_tokens: 30000`, `stale_after_days: 30`. Existing overrides survive re-connect.

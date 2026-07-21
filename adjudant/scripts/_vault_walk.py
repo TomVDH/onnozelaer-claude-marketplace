@@ -626,7 +626,7 @@ def smart_project_dir(project_dir_arg: str) -> tuple[Path, Optional[Path]]:
 
 BUCKET_A_TYPES: frozenset[str] = frozenset({
     "decision", "session", "note", "doc", "project", "handoff",
-    "index", "iteration", "release", "source", "dream-report",
+    "index", "iteration", "release", "source", "dream-report", "task",
 })
 BUCKET_A_TYPES_PLUS_HOME: frozenset[str] = BUCKET_A_TYPES | {"vault-home"}
 
@@ -684,7 +684,7 @@ PROJECT_TYPE_DEFAULT_FOLDERS: dict[str, dict[str, list[str]]] = {
     },
 }
 
-AUTO_CREATED_FOLDERS: frozenset[str] = frozenset({"dreams", "canvases", "bases"})
+AUTO_CREATED_FOLDERS: frozenset[str] = frozenset({"dreams", "canvases", "bases", "board"})
 INDEX_EXEMPT_FOLDERS: frozenset[str] = frozenset({
     "sessions", "images", "assets", "previews", "iterations", "_archive", "templates",
 })

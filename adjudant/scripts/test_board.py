@@ -45,6 +45,13 @@ def _make_project(root: Path, slug: str, *, brief: bool = True) -> Path:
     return p
 
 
+def _ensure(*args, **kwargs) -> str:
+    """ensure_board with stdout/stderr captured (scaffold_one prints)."""
+    from board import ensure_board
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return ensure_board(*args, **kwargs)
+
+
 class TestHelpers(unittest.TestCase):
 
     def test_as_list_forms(self):
@@ -508,6 +515,69 @@ class TestStatus(unittest.TestCase):
             line, ok = _status_line("ghost", Path(tmp) / "board")
             self.assertFalse(ok)
             self.assertIn("no board", line)
+
+
+class TestEnsureBoard(unittest.TestCase):
+    """Board birth + reseed for ambient callers: the ensure_board contract."""
+
+    def test_ensure_board_no_tasks_writes_nothing(self):
+        # Only _index.md and a `type: tasks` roadmap: no real task notes, so
+        # the project never grows board files.
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "_index.md", "# idx")
+            _write(proj / "tasks" / "tasks.md", "---\ntype: tasks\n---\n# Roadmap\n- [ ] a\n")
+            self.assertEqual(_ensure(proj), "no-tasks")
+            self.assertFalse((proj / "board").exists())
+
+    def test_ensure_board_creates_on_first_task(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: todo\n---\n# One\n")
+            self.assertEqual(_ensure(proj), "created")
+            deck = json.loads((proj / "board" / "board-data.json").read_text())
+            self.assertEqual([c["id"] for c in deck["cards"]], ["T-1"])
+            self.assertTrue((proj / "board" / "board.html").is_file())
+
+    def test_ensure_board_reseed_preserves_dragged_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: todo\n---\n# One\n")
+            self.assertEqual(_ensure(proj), "created")
+            data_path = proj / "board" / "board-data.json"
+            deck = json.loads(data_path.read_text())
+            deck["cards"][0]["column"] = "doing"    # user drags T-1
+            data_path.write_text(json.dumps(deck))
+            _write(proj / "tasks" / "t2.md", "---\ncode: T-2\nstatus: review\n---\n# Two\n")
+            self.assertEqual(_ensure(proj), "reseeded")
+            by_id = {c["id"]: c for c in json.loads(data_path.read_text())["cards"]}
+            self.assertEqual(by_id["T-1"]["column"], "doing")   # drag survives
+            self.assertEqual(by_id["T-2"]["column"], "review")  # new card lands
+
+    def test_ensure_board_idempotent_no_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: todo\n---\n# One\n")
+            self.assertEqual(_ensure(proj), "created")
+            data_path = proj / "board" / "board-data.json"
+            before = data_path.read_text()
+            self.assertEqual(_ensure(proj), "no-change")
+            # untouched, byte for byte: ambient callers must not churn the deck
+            self.assertEqual(data_path.read_text(), before)
+
+    def test_ensure_cli_flag(self):
+        # hooks call `python3 board.py --ensure --project-dir X`; the verdict
+        # is the last stdout line.
+        from board import cli_main
+        with tempfile.TemporaryDirectory() as tmp:
+            proj = Path(tmp) / "proj"
+            _write(proj / "tasks" / "t1.md", "---\ncode: T-1\nstatus: todo\n---\n# One\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                rc = cli_main(["--ensure", "--project-dir", str(proj)])
+            self.assertEqual(rc, 0)
+            self.assertEqual(out.getvalue().strip().splitlines()[-1], "created")
+            self.assertTrue((proj / "board" / "board-data.json").is_file())
 
 
 class TestZoneAwareProjectFlag(unittest.TestCase):

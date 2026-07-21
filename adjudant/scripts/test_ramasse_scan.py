@@ -89,6 +89,14 @@ class TestDetectFolderDrift(unittest.TestCase):
             drift = detect_folder_drift(root, "coding", [])
             self.assertEqual(drift, [])
 
+    def test_board_folder_not_drift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _make_minimal_project(root)
+            (root / "board").mkdir()
+            drift = detect_folder_drift(root, "coding", [])
+            self.assertEqual(drift, [])
+
     def test_dotted_folders_skipped(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

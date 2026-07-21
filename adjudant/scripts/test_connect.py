@@ -529,6 +529,24 @@ class TestApplyContract(unittest.TestCase):
             self.assertIn("status: seed", brief)
             self.assertIn("Track the garden irrigation build.", brief)
 
+    def test_receipt_names_board(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); vault = root / "vault"
+            (vault / "projects").mkdir(parents=True)
+            code = root / "proj"; code.mkdir()
+            summary = self._connect(code, vault)  # coding type
+            self.assertIn("/adjudant board", json.dumps(summary["receipt"]))
+            # knowledge projects have no tasks/ folder, so no board pointer
+            know = root / "know"; know.mkdir()
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(io.StringIO()):
+                rc = connect_cli([
+                    "--project-root", str(know), "--vault-path", str(vault),
+                    "--slug", "know", "--project-type", "knowledge"])
+            assert rc == 0, buf.getvalue()
+            summary2 = json.loads(buf.getvalue())
+            self.assertNotIn("/adjudant board", json.dumps(summary2["receipt"]))
+
     def test_reconnect_receipt_all_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); vault = root / "vault"

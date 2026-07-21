@@ -91,6 +91,52 @@ print(v or "")' "$CLAUDE_PLUGIN_ROOT/scripts" "$project_dir" 2>/dev/null || true
     printf -- '- ⚠️ Neither AGENTS.md nor CLAUDE.md found — run `/adjudant connect` to provision both.\n'
   fi
 
+  # Board status: one deck read, card counts in canonical status order
+  # (todo/doing/review/blocked/done/icebox). backlog and next columns both
+  # feed the todo slot (neither is started work); unknown columns fold into
+  # todo so the totals stay honest. Stale flag when any task note is newer
+  # than the deck file. Advisory: any failure just drops the line.
+  local deck="$vault_path/projects/$slug/board/board-data.json"
+  if [ -f "$deck" ] && command -v python3 >/dev/null 2>&1; then
+    local board_line
+    board_line=$(python3 - "$deck" "$vault_path/projects/$slug/tasks" <<'PY' 2>/dev/null || true
+import json, os, sys
+try:
+    deck_path, tasks_dir = sys.argv[1], sys.argv[2]
+    with open(deck_path, encoding="utf-8") as fh:
+        deck = json.load(fh)
+    order = ("todo", "doing", "review", "blocked", "done", "icebox")
+    counts = dict.fromkeys(order, 0)
+    slot = {"backlog": "todo", "next": "todo", "doing": "doing",
+            "review": "review", "blocked": "blocked", "done": "done",
+            "icebox": "icebox"}
+    for card in deck.get("cards", []):
+        col = str(card.get("column", "") or "").strip().lower()
+        counts[slot.get(col, "todo")] += 1
+    stale = ""
+    deck_mtime = os.path.getmtime(deck_path)
+    if os.path.isdir(tasks_dir):
+        for name in os.listdir(tasks_dir):
+            path = os.path.join(tasks_dir, name)
+            if (name.endswith(".md") and os.path.isfile(path)
+                    and os.path.getmtime(path) > deck_mtime):
+                stale = " · stale"
+                break
+    print("- Board: " + "/".join(str(counts[k]) for k in order) + stale)
+except Exception:
+    pass
+PY
+)
+    [ -n "$board_line" ] && printf '%s\n' "$board_line"
+  fi
+
+  # Suitcase pointer: fresh startups only (never resume/compact/clear), and
+  # only when the suitcase CLI actually resolves on THIS machine's PATH.
+  # One line, never the full suitcase block.
+  if [ "$start_source" = "startup" ] && command -v suitcase-brief >/dev/null 2>&1; then
+    printf -- '- Suitcase detected: run suitcase-brief for orientation (vault is canonical; writes via adjudant)\n'
+  fi
+
   # --- 3. Session note: create or resume ---
   local today ts session_dir session_file
   # Single clock read so date and time can't straddle midnight between calls.

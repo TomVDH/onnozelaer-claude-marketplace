@@ -412,6 +412,11 @@ class TestBucketDClassification(unittest.TestCase):
         self.assertIsNone(is_bucket_b_migration("cabinet/random"))
         self.assertIsNone(is_bucket_b_migration("project"))
 
+    def test_task_type_in_schema(self):
+        # task is a first-class file type; its bare #task tag is Bucket A
+        self.assertIn("task", BUCKET_A_TYPES)
+        self.assertFalse(is_bucket_d_tag("task"))
+
 
 # ============================================================
 # Inline-code wikilink skip (regression: false positive in release notes)

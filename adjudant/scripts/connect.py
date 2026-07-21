@@ -643,7 +643,7 @@ def build_receipt(summary: dict[str, Any]) -> list[dict[str, str]]:
     steps = summary["steps"]
     cf = steps["context_files"]
     scaffold = steps["vault_scaffold"]
-    return [
+    receipt = [
         {"artifact": "AGENTS.md", "state": _RECEIPT_MARK.get(cf.get("AGENTS.md", ""), cf.get("AGENTS.md", "missing"))},
         {"artifact": "CLAUDE.md", "state": _RECEIPT_MARK.get(cf.get("CLAUDE.md", ""), cf.get("CLAUDE.md", "missing"))},
         {"artifact": "GEMINI.md", "state": _RECEIPT_MARK.get(cf.get("GEMINI.md", ""), cf.get("GEMINI.md", "missing"))},
@@ -653,6 +653,13 @@ def build_receipt(summary: dict[str, Any]) -> list[dict[str, str]]:
         {"artifact": ".gitignore entries", "state": _RECEIPT_MARK.get(steps["gitignore"], steps["gitignore"])},
         {"artifact": "projects/_index.md row", "state": _RECEIPT_MARK.get(steps["projects_index_row"], steps["projects_index_row"])},
     ]
+    # Board pointer for the project types that get a tasks/ folder by default
+    if summary.get("project_type") in ("coding", "plugin"):
+        receipt.append({
+            "artifact": "board",
+            "state": "tasks/ seeds the kanban: /adjudant board, born automatically on the first task note",
+        })
+    return receipt
 
 
 def run_connect(

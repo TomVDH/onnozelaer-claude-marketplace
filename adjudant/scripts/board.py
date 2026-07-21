@@ -23,6 +23,11 @@ CLI:
                               [--data board-data.json] [--title STR] [--force]
     python3 board.py serve --dir DIR [--port 8787] [--open]
     python3 board.py status [--project-dir PATH | --project SLUG | --all]
+    python3 board.py --ensure [--project-dir PATH]
+
+`--ensure` is the ambient form (hooks, session-end bridge): birth the board
+when the first real task note exists, reseed when tasks changed, write nothing
+otherwise. Verdict (created/reseeded/no-tasks/no-change) is the last stdout line.
 
 `scaffold` is idempotent and *refresh-without-clobber*: re-running with
 `--from-tasks` against an existing board merges the current task state into the
@@ -361,6 +366,66 @@ def scaffold_one(
     return 0
 
 
+def _same_deck(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Deck equality with the `updated` date stamp ignored."""
+    return ({k: v for k, v in a.items() if k != "updated"}
+            == {k: v for k, v in b.items() if k != "updated"})
+
+
+def ensure_board(project_dir: Path, vault_dir: Optional[Path] = None) -> str:
+    """Board birth + reseed for ambient callers (hooks, session-end bridge).
+
+    A thin composition of the existing scaffold machinery, no new write path:
+
+      - no real task notes (only ``_index.md`` / ``type: tasks`` roadmaps):
+        ``"no-tasks"``, nothing written. Projects that never grow tasks never
+        grow board files.
+      - task notes exist, no ``board/board-data.json`` yet: scaffold via
+        ``scaffold_one`` and return ``"created"``.
+      - board exists: the clobber-safe ``--from-tasks`` merge (dragged columns
+        always survive), ``"reseeded"`` when the deck actually changed,
+        ``"no-change"`` otherwise. On no-change the deck file is left
+        untouched, mtime included, so frequent ambient calls never churn a
+        synced vault.
+
+    ``vault_dir`` is accepted for callers that already resolved the vault; the
+    composition itself only needs the resolved project dir. Raises on a failed
+    write (RuntimeError wrapping scaffold_one's exit code), so no caller can
+    claim an effect that did not happen.
+    """
+    if not cards_from_tasks(project_dir):
+        return "no-tasks"
+    dest = project_dir / "board"
+    data_path = dest / "board-data.json"
+    if not data_path.is_file():
+        rc = scaffold_one(project_dir, dest, from_tasks=True, data=None,
+                          force=False, title=None, board_id=None)
+        if rc != 0:
+            raise RuntimeError(f"board scaffold failed for {project_dir} (rc {rc})")
+        return "created"
+    # Reseed path: compute the would-be merge first and skip the write when it
+    # changes nothing. An unreadable deck falls through to scaffold_one, whose
+    # friendly error becomes the raised RuntimeError.
+    try:
+        existing = json.loads(data_path.read_text())
+        if not isinstance(existing, dict):
+            existing = None
+    except (OSError, json.JSONDecodeError):
+        existing = None
+    if existing is not None:
+        # Mirror scaffold_one's title/board_id defaults exactly.
+        fresh = build_deck(project_dir, from_tasks=True,
+                           title=project_dir.name.replace("-", " ").title(),
+                           board_id=project_dir.name)
+        if _same_deck(merge_deck(existing, fresh), existing):
+            return "no-change"
+    rc = scaffold_one(project_dir, dest, from_tasks=True, data=None,
+                      force=False, title=None, board_id=None)
+    if rc != 0:
+        raise RuntimeError(f"board reseed failed for {project_dir} (rc {rc})")
+    return "reseeded"
+
+
 def _serve_hint(dest: Path) -> None:
     print(f"[board] serve: python3 {Path(__file__).name} serve --dir \"{dest}\"  → http://localhost:8787/board.html", file=sys.stderr)
 
@@ -530,7 +595,34 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_ensure(argv: list[str]) -> int:
+    """The `--ensure` flag form (no subcommand), one line for hook callers:
+    `python3 board.py --ensure --project-dir X`. Verdict on the last stdout
+    line; exit 0 on every verdict, 1 on a failed resolve or write."""
+    p = argparse.ArgumentParser(
+        prog="board.py --ensure",
+        description="Birth/reseed the project board from tasks/ (verdict on the last stdout line).")
+    p.add_argument("--ensure", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--project-dir", default=".", help="project root (breadcrumb-resolved; default cwd)")
+    args = p.parse_args(argv)
+    try:
+        project_dir, vault_hint = smart_project_dir(args.project_dir)
+    except VaultUnresolvableError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    try:
+        verdict = ensure_board(project_dir, vault_hint)
+    except Exception as e:  # a broken template/deck must not traceback at hook time
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(verdict)
+    return 0
+
+
 def cli_main(argv: Optional[list[str]] = None) -> int:
+    args_in = sys.argv[1:] if argv is None else argv
+    if "--ensure" in args_in:
+        return cmd_ensure(args_in)
     parser = argparse.ArgumentParser(prog="board.py", description="Adjudant board — scaffold/serve a work-order kanban board.")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -562,7 +654,7 @@ def cli_main(argv: Optional[list[str]] = None) -> int:
     st.add_argument("--dest", help="board dir (default: {project}/board)")
     st.set_defaults(func=cmd_status)
 
-    args = parser.parse_args(argv)
+    args = parser.parse_args(args_in)
     return args.func(args)
 
 
