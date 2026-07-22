@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from sitrep import cli_main as sitrep_cli, run_sitrep, _next_step
+from sitrep import cli_main as sitrep_cli, run_sitrep, _next_step, _suitcase_brief
 
 
 def _write(path: Path, content: str) -> None:
@@ -209,6 +209,34 @@ class TestSitrepCost(unittest.TestCase):
                 rc = sitrep_cli(["--project-dir", str(root)])
             self.assertEqual(rc, 0)
             self.assertIn("cost", _json.loads(buf.getvalue()))
+
+
+class TestSuitcaseBrief(unittest.TestCase):
+    """Suitcase line rendered only when the CLI is on PATH; probe only."""
+
+    def test_line_when_present(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "suitcase-brief"
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            fake.chmod(0o755)
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{tmp}:{old_path}"
+            try:
+                sc = _suitcase_brief()
+                self.assertTrue(sc["present"])
+                self.assertIn("suitcase-brief", sc["line"])
+            finally:
+                os.environ["PATH"] = old_path
+
+    def test_no_line_when_absent(self):
+        old_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = "/usr/bin:/bin"
+        try:
+            sc = _suitcase_brief()
+            self.assertFalse(sc["present"])
+            self.assertIsNone(sc["line"])
+        finally:
+            os.environ["PATH"] = old_path
 
 
 if __name__ == "__main__":

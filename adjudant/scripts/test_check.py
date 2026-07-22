@@ -9,7 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from check import cli_main as check_cli, run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal, _board_status
+from check import cli_main as check_cli, run_check, _read_brief, _folder_counts, _most_recent_dated, _handoff_info, _latest_dream_signal, _board_status, _suitcase_status
 
 
 def _write(path: Path, content: str) -> None:
@@ -270,6 +270,30 @@ class TestCheckCost(unittest.TestCase):
             payload = _json.loads(buf.getvalue())
             self.assertIn("cost", payload)
             self.assertIn("project", payload)
+
+
+class TestSuitcaseStatus(unittest.TestCase):
+    """PATH-probe awareness of the suitcase environment; never executes it."""
+
+    def test_present_when_cli_on_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "suitcase-brief"
+            fake.write_text("#!/bin/sh\nexit 0\n")
+            fake.chmod(0o755)
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{tmp}:{old_path}"
+            try:
+                self.assertTrue(_suitcase_status()["present"])
+            finally:
+                os.environ["PATH"] = old_path
+
+    def test_absent_when_cli_missing(self):
+        old_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = "/usr/bin:/bin"
+        try:
+            self.assertFalse(_suitcase_status()["present"])
+        finally:
+            os.environ["PATH"] = old_path
 
 
 if __name__ == "__main__":

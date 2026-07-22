@@ -1,7 +1,7 @@
 ---
 name: adjudant
 description: Operate an Obsidian vault from a code project. `/adjudant {connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf}` — project init and migration, schema-enforced writes, three-tier cleanup (tidy/ramasse/dream), read-only status (check) and orientation (sitrep), diagrams and canvases (draw), a self-hosted kanban board, and lifecycle transitions (shelf). Also fires whenever decisions, sessions, or notes are written into a linked vault.
-version: 0.15.0
+version: 0.15.1
 user-invocable: true
 argument-hint: "[connect|port|sync|check|sitrep|tidy|ramasse|dream|draw|board|shelf] [args]"
 license: MIT
@@ -57,6 +57,15 @@ load-only-the-matching-reference; it is small). It defines the banned lexicon, t
 glazing ban, the pushback contract, the ELI5/ELI12/ELICTO explanation modes with
 per-verb defaults, and typography (no em dashes in rendered output or vault writes).
 The `voice-lexicon` validator enforces the machine-checkable subset.
+
+## Environment awareness
+
+`reference/suitcase.md` holds the standing summary of Tom's suitcase/cockpit
+terminal environment and the ground rules for sessions that touch it (vault
+writes via adjudant, `snap` before suitcase edits, `agent-bus protocol` for the
+contract). Detection is a PATH probe for `suitcase-brief`; the SessionStart
+hook points to it on fresh starts, `check` reports presence, `sitrep` renders
+one line. Load the reference only when suitcase territory comes up.
 
 ## Python helper layer
 

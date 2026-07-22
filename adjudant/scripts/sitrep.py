@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -41,6 +42,18 @@ from check import (
     _most_recent_dated,
     _read_brief,
 )
+
+
+def _suitcase_brief() -> dict[str, Any]:
+    """One orientation line when the suitcase environment is on PATH.
+
+    Presence probe only, never executed. Rendered as an environment note in
+    the briefing; ground rules live in reference/suitcase.md.
+    """
+    present = shutil.which("suitcase-brief") is not None
+    line = ("Suitcase environment on this machine: run suitcase-brief "
+            "for orientation") if present else None
+    return {"present": present, "line": line}
 
 
 def _board_brief(project_dir: Path) -> dict[str, Any]:
@@ -121,6 +134,7 @@ def run_sitrep(
         "were_doing": freshness["last_activity"],
         "whats_done": whats_done,
         "board": _board_brief(project_dir),
+        "suitcase": _suitcase_brief(),
         "next_step": _next_step(project_dir),
         "open_signals": _latest_dream_signal(project_dir),
         "status": status,

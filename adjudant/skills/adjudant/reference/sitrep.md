@@ -60,6 +60,9 @@ Rules:
   lines): render `board.line` verbatim as its own line right before 👉 Start here, e.g.
   `📋 Board: 4 open (1 in motion)`. Start here stays the final line: the single next
   action, always last.
+- OPTIONAL suitcase line, only when `suitcase.present` (doesn't count against the four
+  labeled lines): render `suitcase.line` verbatim, above the board line. Skip when
+  absent; details in reference/suitcase.md.
 - OPTIONAL fifth line, only when a status mismatch or nudge exists (this doesn't count against the four labeled lines above): if `status.suggested` is set, "brief says {status.declared}, looks {status.suggested}: {status.reason} → run /adjudant shelf"; else if `status.nudge` is set, render the nudge; else if `status.zone_matches` is false, flag the zone mismatch. Skip the line entirely when none apply.
 
 Adapt phrasing to be conversational; the shape above is the data layout, not a rigid

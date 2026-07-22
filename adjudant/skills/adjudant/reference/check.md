@@ -46,6 +46,9 @@ JSON output shape (top-level keys):
   (custom lanes included, empty lanes shown as 0), never a hardcoded status list;
   `stale` is true when any `tasks/*.md` mtime is newer than the deck file. No board
   or unreadable deck: just `{present: false}`
+- `suitcase`: `{present}` from a PATH probe for `suitcase-brief` (never executed).
+  Render one line only when true: `Suitcase: present (suitcase-brief for orientation)`;
+  skip entirely when false. Ground rules in reference/suitcase.md
 - `status` — declared vs. machine-suggested lifecycle status: `declared`, `declared_valid`,
   `last_session`, `days_quiet`, `suggested`, `reason`, `nudge`, `zone`, `zone_matches`
 

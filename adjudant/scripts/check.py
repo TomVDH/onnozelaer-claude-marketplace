@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -135,6 +136,15 @@ def _latest_dream_signal(project_dir: Path) -> dict[str, Any]:
     return info
 
 
+def _suitcase_status() -> dict[str, Any]:
+    """PATH probe for the suitcase environment (suitcase-brief CLI).
+
+    Presence only: the CLI is never executed here. Ground rules for working
+    alongside the suitcase live in reference/suitcase.md.
+    """
+    return {"present": shutil.which("suitcase-brief") is not None}
+
+
 def _board_status(project_dir: Path) -> dict[str, Any]:
     """Read-only board snapshot from `board/board-data.json`.
 
@@ -210,6 +220,7 @@ def run_check(project_dir: Path, code_root: Optional[Path] = None,
         "handoff": handoff,
         "drift_signal": drift_signal,
         "board": _board_status(project_dir),
+        "suitcase": _suitcase_status(),
         "status": status,
     }
 
